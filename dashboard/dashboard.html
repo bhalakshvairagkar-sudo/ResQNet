@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>ResQNet — Emergency Command Center</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="/css/resqnet.css" />
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+<script src="/js/config.js"></script>
+</head>
+<body>
+
+<header>
+  <div class="brand">
+    <div class="brand-mark" aria-hidden="true"><i class="fa-solid fa-truck-medical"></i></div>
+    <div>
+      <h1>RES<b>Q</b>NET</h1>
+      <small>COMMAND CENTER</small>
+    </div>
+    <div class="tagline">CAMERA <b>OPTIONAL</b>. RESPONSE INTELLIGENCE ALWAYS.</div>
+  </div>
+
+  <div class="header-right">
+    <button class="pill" id="healthBtn" data-testid="system-health-button" aria-haspopup="true" aria-expanded="false">
+      <span class="dot live online" id="dotSystem"></span><span id="systemLabel">SYSTEM OPERATIONAL</span>
+    </button>
+    <button class="pill demo" id="demoBtn" data-testid="demo-mode-button">
+      <i class="fa-solid fa-bolt"></i> <span id="demoBtnLabel">DEMO MODE</span>
+    </button>
+    <span class="pill ghost clock" id="clock" data-testid="clock">--:--:--</span>
+  </div>
+
+  <div class="popover" id="healthPopover" data-testid="system-health-popover" role="dialog" aria-label="System health">
+    <h4>SYSTEM HEALTH</h4>
+    <div class="health-row"><span>Backend API</span><span class="val"><span class="dot online" id="hBackend"></span><i id="tBackend">ONLINE</i></span></div>
+    <div class="health-row"><span>Socket.IO</span><span class="val"><span class="dot online" id="hSocket"></span><i id="tSocket">ONLINE</i></span></div>
+    <div class="health-row"><span>Database</span><span class="val"><span class="dot online" id="hDb"></span><i id="tDb">ONLINE</i></span></div>
+    <div class="health-row"><span>AI Engine</span><span class="val"><span class="dot online" id="hAi"></span><i id="tAi">ONLINE</i></span></div>
+    <div class="health-row"><span>Routing (OSRM)</span><span class="val"><span class="dot online" id="hRouting"></span><i id="tRouting">ONLINE</i></span></div>
+    <p class="note" id="healthNote">Statuses are reported by <span class="mono">GET /api/health</span> and live probes. Components that do not report are shown as UNKNOWN — never assumed online.</p>
+  </div>
+</header>
+
+<section class="kpis" aria-label="Operational key metrics">
+  <div class="kpi"><div><div class="kpi-label">ACTIVE INCIDENTS</div><div class="kpi-value" id="kpiActive" data-testid="kpi-active">0</div><div class="kpi-tag" id="kpiActiveTag">LIVE DATA</div></div><i class="fa-solid fa-triangle-exclamation" style="color:var(--red)"></i></div>
+  <div class="kpi"><div><div class="kpi-label">CRITICAL</div><div class="kpi-value" id="kpiCritical" data-testid="kpi-critical" style="color:var(--red)">0</div><div class="kpi-tag">SEVERITY ≥ 76</div></div><i class="fa-solid fa-radiation" style="color:var(--red)"></i></div>
+  <div class="kpi"><div><div class="kpi-label">AMBULANCES AVAILABLE</div><div class="kpi-value" id="kpiAmbAvail" data-testid="kpi-amb-available" style="color:var(--green)">5</div><div class="kpi-tag">DEMO FLEET</div></div><i class="fa-solid fa-truck-medical" style="color:var(--green)"></i></div>
+  <div class="kpi"><div><div class="kpi-label">AMBULANCES EN ROUTE</div><div class="kpi-value" id="kpiAmbRoute" data-testid="kpi-amb-enroute" style="color:var(--orange)">0</div><div class="kpi-tag">DEMO FLEET</div></div><i class="fa-solid fa-route" style="color:var(--orange)"></i></div>
+  <div class="kpi"><div><div class="kpi-label">HOSPITALS AVAILABLE</div><div class="kpi-value" id="kpiHosp" data-testid="kpi-hospitals" style="color:var(--blue)">4</div><div class="kpi-tag">DEMO REGISTRY</div></div><i class="fa-solid fa-hospital" style="color:var(--blue)"></i></div>
+  <div class="kpi"><div><div class="kpi-label">AVG RESPONSE ETA</div><div class="kpi-value" id="kpiEta" data-testid="kpi-avg-eta">—</div><div class="kpi-tag" id="kpiEtaTag">NO DISPATCHES</div></div><i class="fa-solid fa-stopwatch" style="color:var(--yellow)"></i></div>
+</section>
+
+<div id="main">
+  <div id="mapWrap">
+    <div id="map" data-testid="map"></div>
+
+    <div class="map-topbar">
+      <button class="mbtn on" data-layer="incidents" data-testid="layer-incidents"><i class="fa-solid fa-triangle-exclamation"></i> INCIDENTS</button>
+      <button class="mbtn on" data-layer="ambulances" data-testid="layer-ambulances"><i class="fa-solid fa-truck-medical"></i> AMBULANCES</button>
+      <button class="mbtn on" data-layer="hospitals" data-testid="layer-hospitals"><i class="fa-solid fa-hospital"></i> HOSPITALS</button>
+      <button class="mbtn on" data-layer="routes" data-testid="layer-routes"><i class="fa-solid fa-route"></i> ROUTES</button>
+      <span class="map-spacer"></span>
+      <button class="mbtn" id="fitAllBtn" data-testid="fit-all-button"><i class="fa-solid fa-expand"></i> FIT ALL</button>
+      <button class="mbtn" id="centerIncBtn" data-testid="center-incident-button"><i class="fa-solid fa-location-crosshairs"></i> CENTER INCIDENT</button>
+    </div>
+
+    <div class="legend" aria-hidden="true">
+      <h5>LEGEND</h5>
+      <div><span class="lg" style="background:var(--red)"></span> Critical incident</div>
+      <div><span class="lg" style="background:var(--orange)"></span> High</div>
+      <div><span class="lg" style="background:var(--yellow)"></span> Medium</div>
+      <div><span class="lg" style="background:var(--green)"></span> Low</div>
+      <div><span class="lg sq" style="background:var(--blue)"></span> Ambulance</div>
+      <div><span class="lg sq" style="background:var(--green)"></span> Hospital</div>
+      <div><span class="lg line" style="background:var(--orange)"></span> Emergency route</div>
+    </div>
+  </div>
+
+  <aside id="sidebar">
+    <div class="tabs" role="tablist">
+      <button class="tab active" id="tabIncidents" data-testid="tab-incidents" role="tab">INCIDENTS (<span id="sidebarCount">0</span>)</button>
+      <button class="tab" id="tabFeed" data-testid="tab-feed" role="tab">LIVE ACTIVITY</button>
+    </div>
+
+    <div id="viewIncidents" style="display:flex;flex-direction:column;flex:1;min-height:0">
+      <div class="filters">
+        <div class="search">
+          <i class="fa-solid fa-magnifying-glass"></i>
+          <input id="searchInput" data-testid="search-input" placeholder="Search incident ID, type, source, status…" aria-label="Search incidents" />
+        </div>
+        <div class="chips-label">SEVERITY</div>
+        <div class="chips" id="sevChips">
+          <button class="chip on" data-sev="ALL" data-testid="filter-all">ALL</button>
+          <button class="chip" data-sev="CRITICAL" data-testid="filter-critical">🔴 CRITICAL</button>
+          <button class="chip" data-sev="HIGH" data-testid="filter-high">🟠 HIGH</button>
+          <button class="chip" data-sev="MEDIUM" data-testid="filter-medium">🟡 MEDIUM</button>
+          <button class="chip" data-sev="LOW" data-testid="filter-low">🟢 LOW</button>
+        </div>
+        <div class="chips-label">DETECTION SOURCE</div>
+        <div class="chips" id="srcChips">
+          <button class="chip on" data-src="ALL" data-testid="filter-src-all">ALL</button>
+          <button class="chip" data-src="smartphone" data-testid="filter-src-smartphone">SMARTPHONE</button>
+          <button class="chip" data-src="cctv" data-testid="filter-src-cctv">CCTV</button>
+          <button class="chip" data-src="citizen" data-testid="filter-src-citizen">CITIZEN</button>
+          <button class="chip" data-src="iot" data-testid="filter-src-iot">IOT</button>
+        </div>
+      </div>
+      <div class="list" id="incidentList" data-testid="incident-list"></div>
+    </div>
+
+    <div id="viewFeed" style="display:none;flex:1;min-height:0;flex-direction:column">
+      <div class="feed" id="activityFeed" data-testid="activity-feed"></div>
+    </div>
+  </aside>
+
+  <section id="panel" class="collapsed" data-testid="details-panel" aria-label="Selected incident intelligence">
+    <div class="panel-bar">
+      <div class="panel-title">
+        <i class="fa-solid fa-microchip" style="color:var(--blue)"></i>
+        <span>SELECTED INCIDENT</span>
+        <span class="sub" id="panelSub" data-testid="panel-subtitle">no incident selected</span>
+      </div>
+      <div class="panel-acts">
+        <button class="pbtn" id="btnCenter" data-testid="panel-center-button"><i class="fa-solid fa-crosshairs"></i> CENTER INCIDENT</button>
+        <button class="pbtn" id="btnRoute" data-testid="panel-route-button"><i class="fa-solid fa-route"></i> SHOW ROUTE</button>
+        <button class="pbtn" id="btnCollapse" data-testid="panel-toggle-button" aria-label="Toggle panel"><i class="fa-solid fa-chevron-up" id="collapseIcon"></i></button>
+      </div>
+    </div>
+    <div class="grid" id="panelGrid" data-testid="panel-grid">
+      <div class="panel-empty" id="panelEmpty">
+        <div>
+          <b>RESQNET MONITORING ACTIVE</b>
+          Select an incident to open its full response chain:<br />
+          verification → severity → ambulance optimisation → route → hospital pre-alert.
+        </div>
+      </div>
+      <div class="col" id="colWorkflow" style="display:none">
+        <div class="col-t"><span>RESPONSE PIPELINE</span></div>
+        <div class="stepper" id="stepper"></div>
+        <div class="meter">
+          <div class="row"><span>AI CONFIDENCE <i class="fa-solid fa-circle-question help" id="confHelp" tabindex="0" title="Confidence represents the system's estimated confidence that the detected event represents a genuine emergency. It is not a medically validated probability."></i></span><b id="confVal" data-testid="confidence-value">N/A</b></div>
+          <div class="bar"><i id="confBar" style="background:var(--green)"></i></div>
+        </div>
+        <div class="meter">
+          <div class="row"><span>SEVERITY INDEX</span><b id="sevVal" data-testid="severity-value">NOT ASSESSED</b></div>
+          <div class="bar"><i id="sevBar" style="background:var(--red)"></i></div>
+          <div class="kv" style="margin-top:6px"><span>Classification</span><b id="sevClass">—</b></div>
+        </div>
+        <div class="kv"><span>Patients</span><b id="patVal">—</b></div>
+        <div class="kv"><span>Location</span><b id="locVal">—</b></div>
+        <div class="kv"><span>Status</span><b id="statVal">—</b></div>
+      </div>
+
+      <div class="col" id="colSources" style="display:none">
+        <div class="col-t"><span>DETECTION SOURCES</span></div>
+        <div id="sourcesBox" style="display:flex;flex-direction:column;gap:6px"></div>
+        <div class="fused"><span class="lbl">FUSED CONFIDENCE</span><b id="fusedVal">N/A</b></div>
+        <div class="hint" style="margin-top:auto"><b>Camera optional.</b> Every detection channel enters the identical downstream response pipeline — CCTV strengthens detection when present, it is never required.</div>
+      </div>
+
+      <div class="col" id="colDispatch" style="display:none">
+        <div class="col-t"><span>AMBULANCE OPTIMISATION</span><span class="badge-demo">DEMO FLEET</span></div>
+        <div id="ambBox" style="display:flex;flex-direction:column;gap:6px"></div>
+        <div class="hint" id="ambReason">Selection score = feasible ETA (road distance via OSRM) weighted by demo traffic factor and trauma capability. Not an ML model.</div>
+        <div class="col-t" style="margin-top:4px"><span>EMERGENCY ROUTE</span><span id="routeBadge" class="badge-demo">PENDING</span></div>
+        <div class="kv"><span>Distance</span><b id="routeDist">—</b></div>
+        <div class="kv"><span>ETA</span><b id="routeEta">—</b></div>
+        <div class="kv"><span>Geometry</span><b id="routeGeom">—</b></div>
+      </div>
+
+      <div class="col" id="colHospital" style="display:none">
+        <div class="col-t"><span>HOSPITAL PRE-ALERT</span></div>
+        <div id="hospBox" style="display:flex;flex-direction:column;gap:6px"></div>
+        <div class="col-t" style="margin-top:4px"><span>RESPONSE PERFORMANCE</span></div>
+        <div id="perfBox" style="display:flex;flex-direction:column;gap:4px"></div>
+      </div>
+
+      <div class="col" id="colTimeline" style="display:none">
+        <div class="col-t"><span>INCIDENT TIMELINE</span></div>
+        <div class="timeline" id="timelineBox"></div>
+      </div>
+    </div>
+  </section>
+</div>
+
+<div id="toasts" data-testid="toasts" aria-live="polite"></div>
+
+<div id="demoModal" data-testid="demo-modal">
+  <div class="modal">
+    <div class="modal-h">
+      <div>
+        <h3><i class="fa-solid fa-bolt" style="color:var(--orange)"></i> DEMO SIMULATION SUITE</h3>
+      </div>
+      <button class="x" id="demoClose" data-testid="demo-close" aria-label="Close">✕</button>
+    </div>
+    <p>Every simulated event below is written to the backend flagged <span class="mono">isDemo</span> and is labelled DEMO across the UI. Routes use real OSRM road geometry; ambulance and hospital fleets are demo assets.</p>
+    <button class="dbtn" id="demoSmartphone" data-testid="demo-smartphone">
+      <div><div class="t"><i class="fa-solid fa-mobile-screen" style="color:var(--blue)"></i> SMARTPHONE CRASH</div><div class="s">No CCTV in the area — IMU + acoustic signature</div></div>
+      <i class="fa-solid fa-arrow-right" style="color:var(--text-3)"></i>
+    </button>
+    <button class="dbtn" id="demoCctv" data-testid="demo-cctv">
+      <div><div class="t"><i class="fa-solid fa-video" style="color:var(--violet)"></i> CCTV DETECTION</div><div class="s">YOLO accident event on a monitored junction</div></div>
+      <i class="fa-solid fa-arrow-right" style="color:var(--text-3)"></i>
+    </button>
+    <button class="dbtn" id="demoCitizen" data-testid="demo-citizen">
+      <div><div class="t"><i class="fa-solid fa-user-shield" style="color:var(--orange)"></i> CITIZEN REPORT</div><div class="s">Human SOS with location and patient count</div></div>
+      <i class="fa-solid fa-arrow-right" style="color:var(--text-3)"></i>
+    </button>
+    <div class="flowline"><span class="f"></span> SAME DOWNSTREAM PIPELINE <span class="f"></span></div>
+    <button class="dbtn" id="demoReset" data-testid="demo-reset" style="margin-top:10px">
+      <div><div class="t"><i class="fa-solid fa-rotate-left" style="color:var(--red)"></i> RESET DEMO</div><div class="s">Clears demo incidents, routes, markers, feed and fleet</div></div>
+      <i class="fa-solid fa-arrow-right" style="color:var(--text-3)"></i>
+    </button>
+  </div>
+</div>
+
+<script src="/js/app.js"></script>
+</body>
+</html>
