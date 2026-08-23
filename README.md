@@ -252,16 +252,3 @@ If an assigned ambulance becomes obstructed or delayed, the operator or automate
 * **Hospital Terminal**: Pre-alert JSON payload is rendered on screen rather than sending to proprietary private hospital EHR software.
 
 ---
-
-## 24. Future Roadmap
-* **Horizon 1 (Months 1–3)**: Smart City Green Corridor traffic signal preemption (ITMS/SCATS integration).
-* **Horizon 2 (Months 3–12)**: Autonomous Drone AED air-drop delivery for remote highway stretches.
-* **Horizon 3 (Year 1+)**: Direct National ERSS (112) and MoRTH Highway Safety Grid integration.
-
----
-
-## 25. Hackathon Demo Instructions
-1. Open **`http://localhost:5000/dashboard.html`** in your browser.
-2. In terminal, run `node simulator/test_crash_simulator.js`.
-3. Watch the alarm sound, the critical incident card appear, the OSRM route calculate, and the ambulance animate moving along the road network in real time.
-4. Click **"⚠️ Failover"** or **"✓ Resolve"** to demonstrate system resilience.
