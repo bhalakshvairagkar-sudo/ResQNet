@@ -148,14 +148,16 @@ function updateHospital(h) {
 
 /* ---------- incidents ---------- */
 function normalize(raw) {
-  const id = raw._id || raw.id || "local-" + Math.random().toString(36).slice(2, 10);
+  const id = raw.incidentId || raw.id || raw._id || "local-" + Math.random().toString(36).slice(2, 10);
   const primary = String(raw.source || "unknown").toLowerCase();
-  const conf = num(raw.confidenceScore) ?? (raw.confidence ? Math.round(raw.confidence * 100) : null);
+  const conf = num(raw.confidenceScore) ?? (raw.confidence ? (raw.confidence > 1 ? Math.round(raw.confidence) : Math.round(raw.confidence * 100)) : null);
   let sources = Array.isArray(raw.detectionSources) ? raw.detectionSources : (raw.sources ? raw.sources.map(s => ({ source: s.type || s.source, confidence: s.confidence ? (s.confidence > 1 ? s.confidence : Math.round(s.confidence * 100)) : 90 })) : null);
   if (!sources) sources = [{ source: primary, confidence: conf }];
   return {
     _id: id,
-    displayId: raw.displayId || shortId(id),
+    id: id,
+    incidentId: id,
+    displayId: raw.incidentId || raw.displayId || shortId(id),
     source: primary,
     sources,
     latitude: num(raw.latitude),
@@ -643,16 +645,16 @@ function initSocket() {
   socket.on("connect_error", () => setHealth("Socket", false));
   
   // Dual event listener support
-  socket.on("newEmergency", (p) => { if (!p) return; const id = p._id || p.id; if (id && state.seen.has(id)) return; if (id) state.seen.add(id); upsertIncident(p, true); renderIncidentList(); });
-  socket.on("incident:new", (p) => { if (!p) return; const id = p._id || p.id; if (id && state.seen.has(id)) return; if (id) state.seen.add(id); upsertIncident(p, true); renderIncidentList(); });
-  socket.on("incidentUpdated", (p) => { if (p && (p._id || p.id)) { upsertIncident(p, false); renderIncidentList(); } });
-  socket.on("incident:update", (p) => { if (p && (p._id || p.id)) { upsertIncident(p, false); renderIncidentList(); } });
-  socket.on("incidentStatusChanged", (p) => { if (!p) return; const inc = state.incidents[p.incidentId || p._id]; if (inc) { upsertIncident({ ...inc, status: p.status }, false); pushTimeline(inc._id, "Status: " + p.status); } });
-  socket.on("incidentResolved", (p) => { if (!p) return; const inc = state.incidents[p.incidentId || p._id]; if (inc) upsertIncident({ ...inc, status: "resolved" }, false); });
+  socket.on("newEmergency", (p) => { if (!p) return; const id = p.incidentId || p._id || p.id; if (id && state.seen.has(id)) return; if (id) state.seen.add(id); upsertIncident(p, true); renderIncidentList(); });
+  socket.on("incident:new", (p) => { if (!p) return; const id = p.incidentId || p._id || p.id; if (id && state.seen.has(id)) return; if (id) state.seen.add(id); upsertIncident(p, true); renderIncidentList(); });
+  socket.on("incidentUpdated", (p) => { if (p && (p.incidentId || p._id || p.id)) { upsertIncident(p, false); renderIncidentList(); } });
+  socket.on("incident:update", (p) => { if (p && (p.incidentId || p._id || p.id)) { upsertIncident(p, false); renderIncidentList(); } });
+  socket.on("incidentStatusChanged", (p) => { if (!p) return; const inc = state.incidents[p.incidentId || p._id || p.id]; if (inc) { upsertIncident({ ...inc, status: p.status }, false); pushTimeline(inc._id, "Status: " + p.status); } });
+  socket.on("incidentResolved", (p) => { if (!p) return; const inc = state.incidents[p.incidentId || p._id || p.id]; if (inc) upsertIncident({ ...inc, status: "resolved" }, false); });
   socket.on("incident:resolved", (p) => { if (!p) return; const inc = state.incidents[p.incidentId || p._id || p.id]; if (inc) upsertIncident({ ...inc, status: "resolved" }, false); });
   socket.on("ambulanceAssigned", (p) => { if (!p) return; const inc = state.incidents[p.incidentId]; if (inc) { upsertIncident({ ...inc, assignedAmbulance: p.ambulanceId }, false); state.routes[inc._id] = { ...(state.routes[inc._id] || {}), ambulanceId: p.ambulanceId, etaMin: num(p.eta) }; updateAmbulance({ id: p.ambulanceId, status: "assigned" }); drawRoute(inc._id); } });
-  socket.on("ambulanceLocationUpdated", (p) => { if (p && p.ambulanceId) updateAmbulance({ id: p.ambulanceId, lat: num(p.latitude), lng: num(p.longitude), status: p.status || "en_route", eta: num(p.eta) }); });
-  socket.on("ambulance:telemetry", (p) => { if (p && p.id) updateAmbulance({ id: p.id, lat: num(p.lat), lng: num(p.lng), status: p.status || "en_route", eta: num(p.eta) }); });
+  socket.on("ambulanceLocationUpdated", (p) => { if (p && (p.ambulanceId || p.id)) updateAmbulance({ id: p.ambulanceId || p.id, lat: num(p.latitude || p.lat), lng: num(p.longitude || p.lng), status: p.status || "en_route", eta: num(p.eta) }); });
+  socket.on("ambulance:telemetry", (p) => { if (p && (p.id || p.ambulanceId || p.code)) updateAmbulance({ id: p.id || p.ambulanceId || p.code, lat: num(p.lat || p.latitude), lng: num(p.lng || p.longitude), status: p.status || "en_route", eta: num(p.eta) }); });
   socket.on("hospitalSelected", (p) => { if (!p) return; const inc = state.incidents[p.incidentId]; if (inc) { state.routes[inc._id] = { ...(state.routes[inc._id] || {}), hospitalId: p.hospitalId }; upsertIncident({ ...inc, assignedHospital: p.hospitalName || p.hospitalId }, false); drawRoute(inc._id); } });
   socket.on("hospitalAlerted", (p) => { if (!p) return; const inc = state.incidents[p.incidentId]; if (inc) { upsertIncident({ ...inc, hospitalAlerted: true }, false); pushTimeline(inc._id, "Hospital pre-alert confirmed by backend"); } });
 }
