@@ -102,5 +102,29 @@ module.exports = (io) => {
         }
     });
 
+    // 6. CCTV Junction Cameras Registry
+    router.get('/cctv', async (req, res) => {
+        const cctv = await db.getAllCCTV();
+        return res.json(cctv);
+    });
+
+    router.get('/cctv/:id', async (req, res) => {
+        const cam = await db.getCCTV(req.params.id);
+        if (!cam) return res.status(404).json({ error: 'CCTV Camera not found' });
+        return res.json(cam);
+    });
+
+    // 7. Crash Blackspot Hotspots Registry
+    router.get('/hotspots', async (req, res) => {
+        const hotspots = await db.getAllHotspots();
+        return res.json(hotspots);
+    });
+
+    // 8. Configured Traffic Context (Honest Labeling)
+    router.get('/traffic', async (req, res) => {
+        const traffic = await db.getTrafficContext();
+        return res.json(traffic);
+    });
+
     return router;
 };

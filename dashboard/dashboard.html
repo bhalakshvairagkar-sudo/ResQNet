@@ -58,26 +58,72 @@
 <div id="main">
   <div id="mapWrap">
     <div id="map" data-testid="map"></div>
-
-    <div class="map-topbar">
-      <button class="mbtn on" data-layer="incidents" data-testid="layer-incidents"><i class="fa-solid fa-triangle-exclamation"></i> INCIDENTS</button>
-      <button class="mbtn on" data-layer="ambulances" data-testid="layer-ambulances"><i class="fa-solid fa-truck-medical"></i> AMBULANCES</button>
-      <button class="mbtn on" data-layer="hospitals" data-testid="layer-hospitals"><i class="fa-solid fa-hospital"></i> HOSPITALS</button>
-      <button class="mbtn on" data-layer="routes" data-testid="layer-routes"><i class="fa-solid fa-route"></i> ROUTES</button>
-      <span class="map-spacer"></span>
-      <button class="mbtn" id="fitAllBtn" data-testid="fit-all-button"><i class="fa-solid fa-expand"></i> FIT ALL</button>
-      <button class="mbtn" id="centerIncBtn" data-testid="center-incident-button"><i class="fa-solid fa-location-crosshairs"></i> CENTER INCIDENT</button>
+    <div id="mapTileErrorBanner" class="map-tile-banner" style="display:none">
+      <i class="fa-solid fa-triangle-exclamation"></i> <span>MAP TILES UNAVAILABLE — OPERATING IN ACTIVE OVERLAY MODE</span>
     </div>
 
-    <div class="legend" aria-hidden="true">
-      <h5>LEGEND</h5>
-      <div><span class="lg" style="background:var(--red)"></span> Critical incident</div>
-      <div><span class="lg" style="background:var(--orange)"></span> High</div>
-      <div><span class="lg" style="background:var(--yellow)"></span> Medium</div>
-      <div><span class="lg" style="background:var(--green)"></span> Low</div>
-      <div><span class="lg sq" style="background:var(--blue)"></span> Ambulance</div>
-      <div><span class="lg sq" style="background:var(--green)"></span> Hospital</div>
-      <div><span class="lg line" style="background:var(--orange)"></span> Emergency route</div>
+    <div class="map-topbar">
+      <!-- MAP STYLE SELECTOR -->
+      <div class="map-style-control">
+        <label for="mapStyleSelect" class="sr-only">Map View Style</label>
+        <select id="mapStyleSelect" class="mselect" data-testid="map-style-select" title="Change Map Provider / Style">
+          <option value="dark">🗺️ Dark Matter (Night)</option>
+          <option value="standard">🛣️ Standard Road Map</option>
+          <option value="light">🏙️ Light Positron</option>
+          <option value="satellite">🛰️ Satellite Imagery</option>
+          <option value="hybrid">🛰️ Hybrid (Sat + Roads)</option>
+          <option value="terrain">⛰️ Topo Terrain</option>
+        </select>
+      </div>
+
+      <!-- OPERATIONAL LAYER TOGGLES -->
+      <button class="mbtn on" data-layer="incidents" data-testid="layer-incidents"><i class="fa-solid fa-triangle-exclamation"></i> INCIDENTS</button>
+      <button class="mbtn on" data-layer="ambulances" data-testid="layer-ambulances"><i class="fa-solid fa-truck-medical"></i> FLEET</button>
+      <button class="mbtn on" data-layer="hospitals" data-testid="layer-hospitals"><i class="fa-solid fa-hospital"></i> HOSPITALS</button>
+      <button class="mbtn on" data-layer="routes" data-testid="layer-routes"><i class="fa-solid fa-route"></i> ROUTES</button>
+      <button class="mbtn on" data-layer="cctv" data-testid="layer-cctv"><i class="fa-solid fa-video"></i> CCTV & FOV</button>
+      <button class="mbtn on" data-layer="hotspots" data-testid="layer-hotspots"><i class="fa-solid fa-fire"></i> BLACKSPOTS</button>
+      <button class="mbtn" data-layer="traffic" data-testid="layer-traffic"><i class="fa-solid fa-car"></i> TRAFFIC</button>
+
+      <span class="map-spacer"></span>
+
+      <!-- OPERATIONAL CONTROLS -->
+      <button class="mbtn" id="fitAllBtn" data-testid="fit-all-button" title="Fit all active incidents & fleet"><i class="fa-solid fa-expand"></i> FIT ALL</button>
+      <button class="mbtn" id="focusIncBtn" data-testid="focus-incident-button" title="Focus selected incident response"><i class="fa-solid fa-crosshairs"></i> FOCUS INCIDENT</button>
+      <button class="mbtn" id="fitFleetBtn" data-testid="fit-fleet-button" title="Fit all ambulance units"><i class="fa-solid fa-truck"></i> FIT FLEET</button>
+      <button class="mbtn icon-only" id="fullScreenBtn" data-testid="fullscreen-button" title="Toggle Fullscreen Map"><i class="fa-solid fa-up-right-and-down-left-from-center"></i></button>
+      <button class="mbtn icon-only" id="legendToggleBtn" data-testid="legend-toggle-button" title="Toggle Map Legend"><i class="fa-solid fa-list"></i></button>
+    </div>
+
+    <!-- ENHANCED TACTICAL MAP LEGEND -->
+    <div class="legend" id="mapLegend" aria-label="Map Legend">
+      <div class="legend-header">
+        <h5>TACTICAL MAP LEGEND</h5>
+        <button id="closeLegendBtn" class="close-btn" aria-label="Close Legend">&times;</button>
+      </div>
+      <div class="legend-section">
+        <div class="legend-subtitle">INCIDENTS</div>
+        <div><span class="lg lg-pulse" style="background:var(--red)"></span> Critical (Severity ≥ 75)</div>
+        <div><span class="lg" style="background:var(--orange)"></span> High (Severity 50–74)</div>
+        <div><span class="lg" style="background:var(--yellow)"></span> Medium (Severity 25–49)</div>
+        <div><span class="lg" style="background:var(--green)"></span> Low (Severity &lt; 25)</div>
+      </div>
+      <div class="legend-section">
+        <div class="legend-subtitle">FLEET & INFRASTRUCTURE</div>
+        <div><span class="lg sq" style="background:var(--green)"></span> Ambulance Available</div>
+        <div><span class="lg sq" style="background:var(--orange)"></span> Ambulance En-Route</div>
+        <div><span class="lg sq" style="background:var(--blue)"></span> Selected Trauma Hospital</div>
+        <div><span class="lg sq" style="background:var(--text-3)"></span> Alternative Hospital</div>
+        <div><span class="lg dot-cctv"></span> CCTV Camera (AI Optical)</div>
+        <div><span class="lg zone-cctv"></span> CCTV Field of View (FOV)</div>
+        <div><span class="lg zone-hotspot"></span> Crash Blackspot Hotspot</div>
+      </div>
+      <div class="legend-section">
+        <div class="legend-subtitle">ROUTING</div>
+        <div><span class="lg line" style="background:var(--orange)"></span> Primary OSRM Road Route</div>
+        <div><span class="lg line-dash" style="background:var(--blue)"></span> Alternative Route</div>
+        <div><span class="lg line-dash" style="background:var(--red)"></span> ⚠ Degraded Fallback</div>
+      </div>
     </div>
   </div>
 
@@ -126,8 +172,11 @@
         <span class="sub" id="panelSub" data-testid="panel-subtitle">no incident selected</span>
       </div>
       <div class="panel-acts">
-        <button class="pbtn" id="btnCenter" data-testid="panel-center-button"><i class="fa-solid fa-crosshairs"></i> CENTER INCIDENT</button>
-        <button class="pbtn" id="btnRoute" data-testid="panel-route-button"><i class="fa-solid fa-route"></i> SHOW ROUTE</button>
+        <button class="pbtn" id="btnCenter" data-testid="panel-center-button"><i class="fa-solid fa-crosshairs"></i> FOCUS</button>
+        <button class="pbtn" id="btnRoute" data-testid="panel-route-button"><i class="fa-solid fa-route"></i> ROUTE</button>
+        <button class="pbtn primary" id="btnDispatch" data-testid="panel-dispatch-button" style="color:var(--orange);border-color:var(--orange)"><i class="fa-solid fa-truck-fast"></i> DISPATCH</button>
+        <button class="pbtn" id="btnFailover" data-testid="panel-failover-button" style="color:var(--yellow);border-color:var(--yellow)"><i class="fa-solid fa-arrows-rotate"></i> FAILOVER</button>
+        <button class="pbtn" id="btnResolve" data-testid="panel-resolve-button" style="color:var(--green);border-color:var(--green)"><i class="fa-solid fa-check"></i> RESOLVE</button>
         <button class="pbtn" id="btnCollapse" data-testid="panel-toggle-button" aria-label="Toggle panel"><i class="fa-solid fa-chevron-up" id="collapseIcon"></i></button>
       </div>
     </div>

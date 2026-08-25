@@ -11,8 +11,120 @@ class DataStore {
         this.incidents = new Map();
         this.ambulances = new Map();
         this.hospitals = new Map();
+        this.cctvCameras = new Map();
+        this.hotspots = new Map();
         this.responseHistory = new Map();
         this.seedInitialFleet();
+        this.seedInitialInfrastructure();
+    }
+
+    seedInitialInfrastructure() {
+        const initialCCTV = [
+            {
+                id: 'CCTV-01',
+                cameraId: 'CCTV-PUNE-JUNCTION-01',
+                cameraName: 'Pune University Smart Junction Cam',
+                lat: 18.5308,
+                lng: 73.8290,
+                status: 'ONLINE',
+                sourceType: 'FIXED_OPTICAL_AI',
+                fovAngle: 65,
+                heading: 50,
+                coverageRadiusMeters: 200,
+                lastDetection: {
+                    timestamp: new Date().toISOString(),
+                    detected: false,
+                    confidence: 0.94
+                }
+            },
+            {
+                id: 'CCTV-02',
+                cameraId: 'CCTV-PUNE-SWARGATE-02',
+                cameraName: 'Swargate High-Density Transit Hub',
+                lat: 18.5018,
+                lng: 73.8576,
+                status: 'ONLINE',
+                sourceType: 'FIXED_OPTICAL_AI',
+                fovAngle: 75,
+                heading: 180,
+                coverageRadiusMeters: 220,
+                lastDetection: {
+                    timestamp: new Date().toISOString(),
+                    detected: false,
+                    confidence: 0.91
+                }
+            },
+            {
+                id: 'CCTV-03',
+                cameraId: 'CCTV-PUNE-STATION-03',
+                cameraName: 'Pune Railway Station Flyover Cam',
+                lat: 18.5284,
+                lng: 73.8744,
+                status: 'ONLINE',
+                sourceType: 'FIXED_OPTICAL_AI',
+                fovAngle: 55,
+                heading: 90,
+                coverageRadiusMeters: 175,
+                lastDetection: {
+                    timestamp: new Date().toISOString(),
+                    detected: false,
+                    confidence: 0.96
+                }
+            },
+            {
+                id: 'CCTV-04',
+                cameraId: 'CCTV-PUNE-KATRAJ-04',
+                cameraName: 'Katraj Tunnel Highway Cam',
+                lat: 18.4480,
+                lng: 73.8620,
+                status: 'ONLINE',
+                sourceType: 'FIXED_OPTICAL_AI',
+                fovAngle: 50,
+                heading: 160,
+                coverageRadiusMeters: 260,
+                lastDetection: {
+                    timestamp: new Date().toISOString(),
+                    detected: false,
+                    confidence: 0.89
+                }
+            }
+        ];
+
+        const initialHotspots = [
+            {
+                id: 'HOTSPOT-01',
+                name: 'NH48 Katraj Ghat Multi-Lane Hazard Zone',
+                lat: 18.4380,
+                lng: 73.8540,
+                radiusMeters: 350,
+                riskScore: 88,
+                historicalIncidents: 14,
+                category: 'HIGHWAY_HAZARD'
+            },
+            {
+                id: 'HOTSPOT-02',
+                name: 'Hadapsar Solapur Freight Corridor Blackspot',
+                lat: 18.5020,
+                lng: 73.9280,
+                radiusMeters: 300,
+                riskScore: 78,
+                historicalIncidents: 11,
+                category: 'COMMERCIAL_CONGESTION'
+            },
+            {
+                id: 'HOTSPOT-03',
+                name: 'Hinjewadi IT Expressway Interchange',
+                lat: 18.5910,
+                lng: 73.7380,
+                radiusMeters: 400,
+                riskScore: 84,
+                historicalIncidents: 16,
+                category: 'HIGH_SPEED_MERGE'
+            }
+        ];
+
+        initialCCTV.forEach(c => this.cctvCameras.set(c.id, c));
+        initialHotspots.forEach(h => this.hotspots.set(h.id, h));
     }
 
     seedInitialFleet() {
@@ -285,6 +397,50 @@ class DataStore {
             } catch (e) { }
         }
         return updated;
+    }
+
+    // CCTV Cameras Operations
+    async getAllCCTV() {
+        return Array.from(this.cctvCameras.values());
+    }
+
+    async getCCTV(id) {
+        return this.cctvCameras.get(id) || null;
+    }
+
+    // Historical Blackspot Hotspots Operations
+    async getAllHotspots() {
+        return Array.from(this.hotspots.values());
+    }
+
+    // Configured Traffic Context (honest labeling)
+    async getTrafficContext() {
+        return [
+            {
+                corridorId: 'TRAFFIC-CORRIDOR-01',
+                name: 'JM Road / FC Road Ring Corridor',
+                congestionLevel: 'MODERATE',
+                speedWeightFactor: 0.85,
+                trafficLabel: 'Configured traffic weighting (Moderate)',
+                coordinates: [
+                    [73.8412, 18.5148],
+                    [73.8450, 18.5220],
+                    [73.8510, 18.5310]
+                ]
+            },
+            {
+                corridorId: 'TRAFFIC-CORRIDOR-02',
+                name: 'Pune-Bangalore NH48 Bypass',
+                congestionLevel: 'LOW',
+                speedWeightFactor: 1.0,
+                trafficLabel: 'Configured traffic weighting (Free Flow)',
+                coordinates: [
+                    [73.7850, 18.5620],
+                    [73.8050, 18.5020],
+                    [73.8540, 18.4380]
+                ]
+            }
+        ];
     }
 
     async resetDemoData() {
