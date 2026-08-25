@@ -60,7 +60,7 @@ app.use('/api', fleetRoutes);
 app.use('/api', healthRoutes);
 
 // Generic Route Calculation Proxy
-app.get('/api/route', async (req, res) => {
+app.get(['/api/route', '/api/routes'], async (req, res) => {
     try {
         const { startLng, startLat, endLng, endLat } = req.query;
         if (!startLng || !startLat || !endLng || !endLat) {

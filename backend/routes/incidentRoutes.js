@@ -300,8 +300,24 @@ module.exports = (io) => {
     };
     router.post(['/:id/resolve', '/incidents/:id/resolve', '/emergencies/:id/resolve'], handleResolve);
 
-    // 7. RESET DEMO SUITE
-    router.post(['/demo/reset', '/reset'], async (req, res) => {
+    // 7. PATCH INCIDENT (State / Field Updates)
+    const handlePatch = async (req, res) => {
+        try {
+            const incId = req.params.id;
+            const updated = await db.updateIncident(incId, req.body);
+            if (!updated) return res.status(404).json({ error: 'Incident not found' });
+
+            io.emit('incident:update', updated);
+            io.emit('incidentUpdated', updated);
+            return res.json({ success: true, incident: updated });
+        } catch (err) {
+            return res.status(500).json({ error: err.message });
+        }
+    };
+    router.patch(['/:id', '/incidents/:id', '/emergencies/:id'], handlePatch);
+
+    // 8. RESET DEMO SUITE
+    const handleReset = async (req, res) => {
         try {
             await db.resetDemoData();
             io.emit('demo:reset', { timestamp: new Date() });
@@ -309,7 +325,9 @@ module.exports = (io) => {
         } catch (err) {
             return res.status(500).json({ error: err.message });
         }
-    });
+    };
+    router.post(['/demo/reset', '/reset', '/emergencies/demo/reset'], handleReset);
+    router.delete(['/demo', '/emergencies/demo', '/incidents/demo'], handleReset);
 
     return router;
 };
