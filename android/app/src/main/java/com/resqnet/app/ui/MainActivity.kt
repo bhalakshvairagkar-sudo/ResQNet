@@ -32,13 +32,10 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.lifecycleScope
 import com.resqnet.app.data.api.ApiClient
-import com.resqnet.app.data.local.LocalIncidentRecord
 import com.resqnet.app.data.repository.IncidentRepository
 import com.resqnet.app.domain.model.CrashDetectionResult
-import com.resqnet.app.domain.model.LocationQuality
 import com.resqnet.app.domain.model.SubmissionStatus
 import com.resqnet.app.location.AppLocationManager
-import com.resqnet.app.location.LocationData
 import com.resqnet.app.network.NetworkMonitor
 import com.resqnet.app.service.CrashDetectionService
 import kotlinx.coroutines.launch
@@ -48,7 +45,23 @@ class MainActivity : ComponentActivity(), SensorEventListener {
 
     private lateinit var sensorManager: SensorManager
     private var accelerometer: Sensor? = null
+    private var gyroscope: Sensor? = null
+
+    // Live raw sensor telemetry states for UI Test Mode
+    private var rawAx by mutableFloatStateOf(0.0f)
+    private var rawAy by mutableFloatStateOf(0.0f)
+    private var rawAz by mutableFloatStateOf(9.81f)
+    private var rawMagnitude by mutableFloatStateOf(9.81f)
     private var currentGForce by mutableFloatStateOf(1.0f)
+
+    private var rawGx by mutableFloatStateOf(0.0f)
+    private var rawGy by mutableFloatStateOf(0.0f)
+    private var rawGz by mutableFloatStateOf(0.0f)
+    private var rawAngularVelocity by mutableFloatStateOf(0.0f)
+
+    private var isGyroAvailable by mutableStateOf(false)
+    private var isAccelAvailable by mutableStateOf(false)
+
     private var isShieldActive by mutableStateOf(true)
     private var pendingCountState by mutableIntStateOf(0)
 
@@ -74,11 +87,14 @@ class MainActivity : ComponentActivity(), SensorEventListener {
 
         sensorManager = getSystemService(Context.SENSOR_SERVICE) as SensorManager
         accelerometer = sensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER)
+        gyroscope = sensorManager.getDefaultSensor(Sensor.TYPE_GYROSCOPE)
+
+        isAccelAvailable = (accelerometer != null)
+        isGyroAvailable = (gyroscope != null)
 
         requestRequiredPermissions()
         startCrashShieldService()
 
-        // MODULE K: Process Restart Recovery — resume unconfirmed incidents
         refreshPendingCount()
         lifecycleScope.launch {
             repository.flushPendingRetries()
@@ -96,7 +112,17 @@ class MainActivity : ComponentActivity(), SensorEventListener {
                 val isOnline by networkMonitor.isOnline.collectAsState()
 
                 ResQNetAppUI(
+                    rawAx = rawAx,
+                    rawAy = rawAy,
+                    rawAz = rawAz,
+                    rawMagnitude = rawMagnitude,
                     currentGForce = currentGForce,
+                    rawGx = rawGx,
+                    rawGy = rawGy,
+                    rawGz = rawGz,
+                    rawAngularVelocity = rawAngularVelocity,
+                    isAccelAvailable = isAccelAvailable,
+                    isGyroAvailable = isGyroAvailable,
                     isShieldActive = isShieldActive,
                     isOnline = isOnline,
                     pendingIncidentCount = pendingCountState,
@@ -144,6 +170,9 @@ class MainActivity : ComponentActivity(), SensorEventListener {
         accelerometer?.let {
             sensorManager.registerListener(this, it, SensorManager.SENSOR_DELAY_UI)
         }
+        gyroscope?.let {
+            sensorManager.registerListener(this, it, SensorManager.SENSOR_DELAY_UI)
+        }
         refreshPendingCount()
         lifecycleScope.launch {
             repository.flushPendingRetries()
@@ -157,12 +186,21 @@ class MainActivity : ComponentActivity(), SensorEventListener {
     }
 
     override fun onSensorChanged(event: SensorEvent?) {
-        if (event?.sensor?.type == Sensor.TYPE_ACCELEROMETER) {
-            val ax = event.values[0]
-            val ay = event.values[1]
-            val az = event.values[2]
-            val total = sqrt((ax * ax + ay * ay + az * az).toDouble()).toFloat()
-            currentGForce = total / 9.80665f
+        if (event == null) return
+        when (event.sensor.type) {
+            Sensor.TYPE_ACCELEROMETER -> {
+                rawAx = event.values[0]
+                rawAy = event.values[1]
+                rawAz = event.values[2]
+                rawMagnitude = sqrt((rawAx * rawAx + rawAy * rawAy + rawAz * rawAz).toDouble()).toFloat()
+                currentGForce = rawMagnitude / 9.80665f
+            }
+            Sensor.TYPE_GYROSCOPE -> {
+                rawGx = event.values[0]
+                rawGy = event.values[1]
+                rawGz = event.values[2]
+                rawAngularVelocity = sqrt((rawGx * rawGx + rawGy * rawGy + rawGz * rawGz).toDouble()).toFloat()
+            }
         }
     }
 
@@ -232,7 +270,17 @@ class MainActivity : ComponentActivity(), SensorEventListener {
 
 @Composable
 fun ResQNetAppUI(
+    rawAx: Float,
+    rawAy: Float,
+    rawAz: Float,
+    rawMagnitude: Float,
     currentGForce: Float,
+    rawGx: Float,
+    rawGy: Float,
+    rawGz: Float,
+    rawAngularVelocity: Float,
+    isAccelAvailable: Boolean,
+    isGyroAvailable: Boolean,
     isShieldActive: Boolean,
     isOnline: Boolean,
     pendingIncidentCount: Int,
@@ -248,11 +296,11 @@ fun ResQNetAppUI(
         modifier = Modifier
             .fillMaxSize()
             .background(Color(0xFF060911))
-            .padding(18.dp)
+            .padding(16.dp)
             .verticalScroll(rememberScrollState()),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        // App Header with Shield Status & Network Status
+        // App Header
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
@@ -267,7 +315,7 @@ fun ResQNetAppUI(
                     fontFamily = FontFamily.Monospace
                 )
                 Text(
-                    text = "RELIABILITY & SENSOR SHIELD V2",
+                    text = "SENSOR DIAGNOSTICS & SHIELD",
                     fontSize = 10.sp,
                     fontWeight = FontWeight.Bold,
                     color = Color(0xFF38BDF8)
@@ -275,7 +323,7 @@ fun ResQNetAppUI(
             }
 
             Row {
-                // Network Badge
+                // Online Badge
                 Surface(
                     shape = RoundedCornerShape(20.dp),
                     color = if (isOnline) Color(0xFF10B981).copy(alpha = 0.2f) else Color(0xFFF59E0B).copy(alpha = 0.2f)
@@ -311,7 +359,7 @@ fun ResQNetAppUI(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Text(
-                            text = if (isShieldActive) "ARMED" else "DISARMED",
+                            text = if (isShieldActive) "ARMED (50Hz)" else "DISARMED",
                             color = if (isShieldActive) Color(0xFF38BDF8) else Color(0xFFEF4444),
                             fontSize = 10.sp,
                             fontWeight = FontWeight.Bold
@@ -321,38 +369,86 @@ fun ResQNetAppUI(
             }
         }
 
-        Spacer(modifier = Modifier.height(16.dp))
+        Spacer(modifier = Modifier.height(14.dp))
 
-        // Pending Offline Incidents Alert Banner (If Any)
-        if (pendingIncidentCount > 0) {
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                colors = CardDefaults.cardColors(containerColor = Color(0xFFF59E0B).copy(alpha = 0.15f)),
-                shape = RoundedCornerShape(12.dp)
-            ) {
+        // MODULE 4: SENSOR TEST MODE (Live Real-Time Telemetry HUD)
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(containerColor = Color(0xFF0C1220)),
+            shape = RoundedCornerShape(14.dp)
+        ) {
+            Column(modifier = Modifier.padding(14.dp)) {
                 Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(12.dp),
+                    modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
+                    Text(
+                        text = "RESQNET SENSOR TEST MODE",
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Black,
+                        color = Color(0xFF38BDF8),
+                        fontFamily = FontFamily.Monospace
+                    )
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Default.CloudSync, contentDescription = null, tint = Color(0xFFF59E0B))
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Column {
-                            Text("$pendingIncidentCount Local Incident(s) Pending", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 12.sp)
-                            Text("Safe in local storage. Auto-retrying.", color = Color(0xFFCBD5E1), fontSize = 10.sp)
-                        }
-                    }
-
-                    TextButton(onClick = onFlushRetries) {
-                        Text("RETRY NOW", color = Color(0xFFF59E0B), fontWeight = FontWeight.Bold, fontSize = 11.sp)
+                        Box(
+                            modifier = Modifier
+                                .size(8.dp)
+                                .background(Color(0xFF10B981), CircleShape)
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text(
+                            text = "LIVE SENSORS",
+                            color = Color(0xFF10B981),
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Bold
+                        )
                     }
                 }
+
+                Spacer(modifier = Modifier.height(10.dp))
+
+                // Accelerometer Diagnostics
+                Text(
+                    text = "ACCELEROMETER ${if (isAccelAvailable) "(ACTIVE)" else "(UNAVAILABLE)"}",
+                    fontSize = 10.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Color(0xFF94A3B8)
+                )
+                Spacer(modifier = Modifier.height(2.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Text("X: ${"%.2f".format(rawAx)}", color = Color.White, fontSize = 11.sp, fontFamily = FontFamily.Monospace)
+                    Text("Y: ${"%.2f".format(rawAy)}", color = Color.White, fontSize = 11.sp, fontFamily = FontFamily.Monospace)
+                    Text("Z: ${"%.2f".format(rawAz)}", color = Color.White, fontSize = 11.sp, fontFamily = FontFamily.Monospace)
+                    Text("Mag: ${"%.2f".format(rawMagnitude)} m/s²", color = Color(0xFF38BDF8), fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                }
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                // Gyroscope Diagnostics
+                Text(
+                    text = "GYROSCOPE ${if (isGyroAvailable) "(ACTIVE)" else "(NOT DETECTED / ACCEL FALLBACK)"}",
+                    fontSize = 10.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Color(0xFF94A3B8)
+                )
+                Spacer(modifier = Modifier.height(2.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Text("Gx: ${"%.2f".format(rawGx)}", color = Color.White, fontSize = 11.sp, fontFamily = FontFamily.Monospace)
+                    Text("Gy: ${"%.2f".format(rawGy)}", color = Color.White, fontSize = 11.sp, fontFamily = FontFamily.Monospace)
+                    Text("Gz: ${"%.2f".format(rawGz)}", color = Color.White, fontSize = 11.sp, fontFamily = FontFamily.Monospace)
+                    Text("Rot: ${"%.2f".format(rawAngularVelocity)} rad/s", color = Color(0xFFF59E0B), fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                }
             }
-            Spacer(modifier = Modifier.height(12.dp))
         }
+
+        Spacer(modifier = Modifier.height(14.dp))
 
         // Live G-Force Meter Card
         Card(
@@ -363,20 +459,20 @@ fun ResQNetAppUI(
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(18.dp),
+                    .padding(16.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
                 Text(
-                    text = "LIVE TELEMETRY G-FORCE",
+                    text = "LIVE TOTAL G-FORCE",
                     fontSize = 11.sp,
                     fontWeight = FontWeight.Bold,
                     color = Color(0xFF94A3B8),
                     fontFamily = FontFamily.Monospace
                 )
-                Spacer(modifier = Modifier.height(6.dp))
+                Spacer(modifier = Modifier.height(4.dp))
                 Text(
                     text = "${"%.2f".format(currentGForce)} G",
-                    fontSize = 40.sp,
+                    fontSize = 42.sp,
                     fontWeight = FontWeight.Black,
                     color = if (currentGForce >= 3.2f) Color(0xFFEF4444) else Color(0xFF38BDF8),
                     fontFamily = FontFamily.Monospace
@@ -390,12 +486,18 @@ fun ResQNetAppUI(
                     color = if (currentGForce >= 3.2f) Color(0xFFEF4444) else Color(0xFF3B82F6),
                     trackColor = Color(0xFF1E293B)
                 )
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = "Crash Threshold: ≥ 3.20 G (Shake hard or tap to test)",
+                    fontSize = 10.sp,
+                    color = Color(0xFF64748B)
+                )
             }
         }
 
         Spacer(modifier = Modifier.height(14.dp))
 
-        // Crash Shield Toggle Row
+        // Shield Toggle Row
         Card(
             modifier = Modifier.fillMaxWidth(),
             colors = CardDefaults.cardColors(containerColor = Color(0xFF0C1220)),
@@ -409,8 +511,8 @@ fun ResQNetAppUI(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Column {
-                    Text("Continuous Crash Shield", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 13.sp)
-                    Text("50Hz background accelerometer monitor", color = Color(0xFF64748B), fontSize = 11.sp)
+                    Text("50Hz Crash Shield Service", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                    Text("Continuous background sensor monitoring", color = Color(0xFF64748B), fontSize = 11.sp)
                 }
                 Switch(
                     checked = isShieldActive,
@@ -427,7 +529,7 @@ fun ResQNetAppUI(
             onClick = onTriggerSOS,
             modifier = Modifier
                 .fillMaxWidth()
-                .height(58.dp),
+                .height(56.dp),
             colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFEF4444)),
             shape = RoundedCornerShape(14.dp)
         ) {
@@ -452,7 +554,7 @@ fun ResQNetAppUI(
             Text("SIMULATE 5.2G CRASH SPIKE (DEMO)", fontWeight = FontWeight.Bold, fontSize = 11.sp)
         }
 
-        Spacer(modifier = Modifier.height(16.dp))
+        Spacer(modifier = Modifier.height(14.dp))
 
         // Backend URL Config Card
         Card(
