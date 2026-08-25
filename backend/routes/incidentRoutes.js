@@ -1,313 +1,292 @@
 const express = require('express');
 const router = express.Router();
-const store = require('../database/db');
+const db = require('../database/db');
 const AIEngine = require('../services/aiEngine');
-const { v4: uuidv4 } = require('uuid');
+const OSRMService = require('../services/osrmService');
 
 module.exports = (io) => {
-    // 1. Ingest Emergency / Crash Event (from Android App, CCTV, or Citizen SOS)
-    router.post(['/detect', '/emergencies'], async (req, res) => {
+    // 1. INGEST INCIDENT (Smartphone, CCTV, Citizen SOS, IoT)
+    const handleDetection = async (req, res) => {
         try {
-            const raw = req.body;
-            const incidentId = raw.id || raw._id || `RNQ-${Math.floor(1000 + Math.random() * 9000)}`;
-            
-            const latitude = parseFloat(raw.latitude) || (18.5204 + (Math.random() - 0.5) * 0.04);
-            const longitude = parseFloat(raw.longitude) || (73.8567 + (Math.random() - 0.5) * 0.04);
+            const body = req.body;
+            const incId = body.id || body.incidentId || `RNQ-${Math.floor(1000 + Math.random() * 9000)}`;
 
-            const sources = raw.sources && raw.sources.length > 0 
-                ? raw.sources 
-                : (raw.detectionSources && raw.detectionSources.length > 0 
-                    ? raw.detectionSources.map(s => ({ type: s.source || s.type, confidence: (s.confidence > 1 ? s.confidence / 100 : s.confidence) || 0.88 }))
-                    : [{ type: raw.sourceType || raw.source || 'smartphone', confidence: (parseFloat(raw.confidenceScore) > 1 ? parseFloat(raw.confidenceScore) / 100 : parseFloat(raw.confidence)) || 0.88 }]);
+            const lat = Number(body.latitude || body.lat || 18.5204);
+            const lng = Number(body.longitude || body.lng || 73.8567);
+            const src = body.source || body.sourceType || 'smartphone';
+            const title = body.title || body.incidentType || 'Highway 48 Multi-Vehicle Collision';
 
-            const confidence = AIEngine.computeConfidence(sources);
-            const severity = raw.severity !== null && raw.severity !== undefined ? raw.severity : AIEngine.estimateSeverity(raw);
+            // Multi-source confidence fusion & severity estimation
+            const sources = body.sources || body.detectionSources || [{ source: src, confidence: body.confidence !== undefined ? body.confidence : (body.confidenceScore || 0.95) }];
+            const fusedConfidence = AIEngine.fuseConfidence(sources);
+            const severityScore = AIEngine.calculateSeverity(body);
 
-            const ambulances = await store.getAmbulances();
-            const hospitals = await store.getHospitals();
+            // Fetch available fleet & hospitals from authoritative store
+            const ambulances = await db.getAllAmbulances();
+            const hospitals = await db.getAllHospitals();
 
-            const newIncident = {
-                _id: incidentId,
-                id: incidentId,
-                displayId: incidentId,
-                title: raw.title || raw.incidentType || (raw.source === 'smartphone' || raw.sourceType === 'smartphone' ? 'Road collision (no CCTV coverage)' : 'Vehicle Collision Detected'),
-                incidentType: raw.incidentType || raw.title || 'Road collision (no CCTV coverage)',
-                severity: severity,
-                confidence: confidence,
-                confidenceScore: Math.round(confidence * 100),
-                latitude: latitude,
-                longitude: longitude,
-                sources: sources,
-                detectionSources: sources.map(s => ({ source: s.type || s.source, confidence: Math.round((s.confidence <= 1 ? s.confidence * 100 : s.confidence)) })),
-                source: sources[0]?.type || 'smartphone',
-                state: raw.status || 'VERIFIED',
-                status: raw.status || 'verified',
-                patients: raw.patients || 1,
-                isDemo: raw.isDemo !== undefined ? !!raw.isDemo : true,
-                timeline: [
-                    { state: 'DETECTED', time: new Date().toLocaleTimeString(), text: 'Multi-Sensor Impact Telemetry Ingested' },
-                    { state: 'VERIFIED', time: new Date().toLocaleTimeString(), text: `AI Verification Confirmed (${Math.round(confidence * 100)}% confidence, ${severity}/100 severity)` }
-                ],
-                ambulanceId: null,
-                assignedAmbulance: null,
-                ambulanceReason: '',
-                hospitalId: null,
-                assignedHospital: null,
-                hospitalAlerted: false,
-                hospitalReason: '',
-                timestamp: new Date().toISOString(),
-                sensorData: {
-                    gForce: raw.gForce || null,
-                    speedKmh: raw.speedKmh || null,
-                    speedDeltaKmh: raw.speedDeltaKmh || null,
-                    rollover: !!raw.rollover,
-                    deviceModel: raw.deviceModel || 'Android Device',
-                    userMedicalInfo: raw.userMedicalInfo || null
-                }
+            const incidentTemp = {
+                id: incId,
+                incidentId: incId,
+                latitude: lat,
+                longitude: lng,
+                severity: severityScore
             };
 
-            // Dynamic Resource Optimization
-            const ambResult = AIEngine.selectBestAmbulance(newIncident, ambulances);
-            if (ambResult.ambulance) {
-                newIncident.ambulanceId = ambResult.ambulance.id;
-                newIncident.assignedAmbulance = ambResult.ambulance.id;
-                newIncident.ambulanceReason = ambResult.reason;
-                newIncident.timeline.push({
-                    state: 'AMBULANCE_ASSIGNED',
-                    time: new Date().toLocaleTimeString(),
-                    text: ambResult.reason
+            // Optimization engines
+            const ambOptimization = await AIEngine.optimizeAmbulance(incidentTemp, ambulances);
+            const hospOptimization = await AIEngine.optimizeHospital(incidentTemp, hospitals);
+
+            const selectedAmb = ambOptimization.selected;
+            const selectedHosp = hospOptimization.selected;
+
+            // Compute 2-leg OSRM route: Ambulance -> Crash Scene -> Hospital
+            let combinedRoute = ambOptimization.route;
+            if (selectedAmb && selectedHosp) {
+                combinedRoute = await OSRMService.getTwoLegRoute(
+                    selectedAmb.lng, selectedAmb.lat,
+                    lng, lat,
+                    selectedHosp.lng, selectedHosp.lat
+                );
+            }
+
+            // Build clinical pre-alert
+            const preAlert = (selectedAmb && selectedHosp) ? 
+                AIEngine.buildHospitalPreAlert(incidentTemp, selectedAmb, selectedHosp) : null;
+
+            // Construct state-machine compliant Incident record
+            const incidentRecord = {
+                id: incId,
+                incidentId: incId,
+                source: src,
+                type: body.incidentType || 'Road collision',
+                title: title,
+                latitude: lat,
+                longitude: lng,
+                gpsAccuracy: body.gpsAccuracy || 5.0,
+                location: { type: 'Point', coordinates: [lng, lat] },
+                confidence: fusedConfidence,
+                confidenceScore: fusedConfidence,
+                severity: severityScore,
+                status: 'VERIFIED',
+                ambulanceId: selectedAmb ? selectedAmb.id : null,
+                ambulanceCode: selectedAmb ? selectedAmb.code : null,
+                assignedAmbulance: selectedAmb ? selectedAmb.id : null,
+                ambulanceReason: ambOptimization.reason,
+                hospitalId: selectedHosp ? selectedHosp.id : null,
+                assignedHospital: selectedHosp ? selectedHosp.name : null,
+                hospitalReason: hospOptimization.reason,
+                route: combinedRoute,
+                hospitalRoute: hospOptimization.route,
+                hospitalPreAlert: preAlert,
+                patientCount: body.patients || body.patientCount || 1,
+                userMedicalInfo: body.userMedicalInfo || null,
+                isDemo: body.isDemo || false,
+                sources: sources,
+                timeline: [
+                    { status: 'DETECTED', timestamp: new Date(), description: `Incident ingested via ${src} channel`, actor: 'SYSTEM' },
+                    { status: 'VERIFIED', timestamp: new Date(), description: `Bayesian multi-source confidence verified at ${fusedConfidence}%`, actor: 'AI_CORE' },
+                    { status: 'SEVERITY_ASSESSED', timestamp: new Date(), description: `Polytrauma severity assessed: ${severityScore}/100`, actor: 'AI_CORE' },
+                    { status: 'AMBULANCE_ASSIGNED', timestamp: new Date(), description: `Allocated ${selectedAmb ? selectedAmb.code : 'None'}: ${ambOptimization.reason}`, actor: 'OPTIMIZER' },
+                    { status: 'HOSPITAL_SELECTED', timestamp: new Date(), description: `Matched ${selectedHosp ? selectedHosp.name : 'None'}: ${hospOptimization.reason}`, actor: 'OPTIMIZER' },
+                    { status: 'HOSPITAL_PRE_ALERTED', timestamp: new Date(), description: `Zero-Minute Trauma Pre-Alert sent to ${selectedHosp ? selectedHosp.name : 'ER'}`, actor: 'DISPATCH' }
+                ],
+                createdAt: new Date().toISOString()
+            };
+
+            const saved = await db.saveIncident(incidentRecord);
+
+            // Temporarily assign the ambulance in fleet
+            if (selectedAmb) {
+                await db.updateAmbulance(selectedAmb.id, {
+                    currentIncidentId: incId
                 });
             }
 
-            const hospResult = AIEngine.selectBestHospital(newIncident, hospitals);
-            if (hospResult.hospital) {
-                newIncident.hospitalId = hospResult.hospital.id;
-                newIncident.assignedHospital = hospResult.hospital.name;
-                newIncident.hospitalAlerted = true;
-                newIncident.hospitalReason = hospResult.reason;
-                newIncident.timeline.push({
-                    state: 'HOSPITAL_SELECTED',
-                    time: new Date().toLocaleTimeString(),
-                    text: hospResult.reason
-                });
-                newIncident.timeline.push({
-                    state: 'HOSPITAL_PRE_ALERTED',
-                    time: new Date().toLocaleTimeString(),
-                    text: `Trauma Pre-Alert Transmitted to ${hospResult.hospital.name}`
-                });
-            }
+            // Real-time WebSocket emissions across canonical & legacy event channels
+            io.emit('incident:new', saved);
+            io.emit('newEmergency', saved);
+            if (selectedAmb) io.emit('ambulance:assigned', { incidentId: incId, ambulance: selectedAmb, route: combinedRoute });
+            if (selectedHosp) io.emit('hospital:selected', { incidentId: incId, hospital: selectedHosp });
+            if (preAlert) io.emit('hospital:prealert', preAlert);
 
-            await store.saveIncident(newIncident);
-
-            // Broadcast dual real-time events to all connected dashboards and mobile apps
-            if (io) {
-                io.emit('incident:new', newIncident);
-                io.emit('newEmergency', newIncident);
-                if (newIncident.assignedAmbulance) {
-                    io.emit('ambulanceAssigned', { incidentId: newIncident.id, ambulanceId: newIncident.assignedAmbulance, eta: 4 });
-                }
-                if (newIncident.assignedHospital) {
-                    io.emit('hospitalSelected', { incidentId: newIncident.id, hospitalId: newIncident.hospitalId, hospitalName: newIncident.assignedHospital });
-                    io.emit('hospitalAlerted', { incidentId: newIncident.id });
-                }
-            }
-
-            return res.status(201).json(newIncident);
-
-        } catch (error) {
-            console.error('[Incident Detect Error]:', error);
-            return res.status(500).json({ success: false, error: error.message });
-        }
-    });
-
-    // 2. Get All Incidents (supports direct JSON array for /api/emergencies)
-    router.get(['/', '/emergencies'], async (req, res) => {
-        try {
-            const incidents = await store.getAllIncidents();
-            // If requested via /emergencies, return direct array
-            if (req.baseUrl.includes('emergencies') || req.path.includes('emergencies')) {
-                return res.json(incidents);
-            }
-            return res.json({ success: true, count: incidents.length, incidents });
-        } catch (error) {
-            return res.status(500).json({ success: false, error: error.message });
-        }
-    });
-
-    // 3. Patch Emergency (/api/emergencies/:id)
-    router.patch(['/:id', '/emergencies/:id'], async (req, res) => {
-        try {
-            const { id } = req.params;
-            const inc = await store.getIncident(id);
-            if (!inc) return res.status(404).json({ success: false, message: 'Incident not found' });
-
-            const updated = Object.assign(inc, req.body);
-            await store.updateIncident(id, updated);
-
-            if (io) {
-                io.emit('incident:update', updated);
-                io.emit('incidentUpdated', updated);
-                if (req.body.status) {
-                    io.emit('incidentStatusChanged', { incidentId: id, status: req.body.status });
-                }
-            }
-
-            return res.json(updated);
-        } catch (error) {
-            return res.status(500).json({ success: false, error: error.message });
-        }
-    });
-
-    // 4. Delete Demo Emergencies
-    router.delete('/emergencies/demo', async (req, res) => {
-        try {
-            const all = await store.getAllIncidents();
-            for (const inc of all) {
-                if (inc.isDemo) {
-                    await store.deleteIncident(inc.id || inc._id);
-                    if (io) io.emit('incidentResolved', { incidentId: inc.id || inc._id });
-                }
-            }
-            return res.json({ success: true, message: 'Demo incidents cleared' });
-        } catch (error) {
-            return res.status(500).json({ success: false, error: error.message });
-        }
-    });
-
-    // 5. Get Single Incident
-    router.get('/:id', async (req, res) => {
-        try {
-            const inc = await store.getIncident(req.params.id);
-            if (!inc) return res.status(404).json({ success: false, message: 'Incident not found' });
-            return res.json(inc);
-        } catch (error) {
-            return res.status(500).json({ success: false, error: error.message });
-        }
-    });
-
-    // 6. Dispatch Ambulance
-    router.post('/:id/dispatch', async (req, res) => {
-        try {
-            const { id } = req.params;
-            const inc = await store.getIncident(id);
-            if (!inc) return res.status(404).json({ success: false, message: 'Incident not found' });
-
-            const ambulanceId = req.body.ambulanceId || inc.ambulanceId || inc.assignedAmbulance;
-            if (!ambulanceId) {
-                return res.status(400).json({ success: false, message: 'No ambulance assigned for dispatch' });
-            }
-
-            const amb = await store.getAmbulance(ambulanceId);
-            if (amb) {
-                await store.updateAmbulance(ambulanceId, { status: 'EN_ROUTE' });
-            }
-
-            inc.state = 'EN_ROUTE';
-            inc.status = 'ambulance_en_route';
-            inc.timeline.push({
-                state: 'DISPATCHING',
-                time: new Date().toLocaleTimeString(),
-                text: 'Operator Dispatch Confirmation Issued'
+            return res.status(201).json({
+                success: true,
+                incidentId: incId,
+                id: incId,
+                incident: saved,
+                status: saved.status,
+                confidence: fusedConfidence,
+                severity: severityScore,
+                assignedAmbulance: selectedAmb ? selectedAmb.id : null,
+                assignedHospital: selectedHosp ? selectedHosp.name : null,
+                ambulanceReason: ambOptimization.reason,
+                hospitalReason: hospOptimization.reason,
+                route: combinedRoute,
+                hospitalPreAlert: preAlert
             });
-            inc.timeline.push({
-                state: 'EN_ROUTE',
-                time: new Date().toLocaleTimeString(),
-                text: `Unit ${amb ? amb.code : ambulanceId} En Route with Priority Siren`
+        } catch (err) {
+            console.error('Detection Error:', err);
+            return res.status(500).json({ error: 'Internal Server Error during Incident Ingestion', details: err.message });
+        }
+    };
+
+    router.post(['/', '/detect', '/incidents', '/emergencies', '/incidents/detect'], handleDetection);
+
+    // 2. RETRIEVE ALL INCIDENTS
+    const getIncidents = async (req, res) => {
+        const incidents = await db.getAllIncidents();
+        return res.json(incidents);
+    };
+    router.get(['/', '/incidents', '/emergencies'], getIncidents);
+
+    // 3. RETRIEVE SINGLE INCIDENT
+    const getSingleIncident = async (req, res) => {
+        const incident = await db.getIncident(req.params.id);
+        if (!incident) return res.status(404).json({ error: 'Incident not found' });
+        return res.json(incident);
+    };
+    router.get(['/:id', '/incidents/:id', '/emergencies/:id'], getSingleIncident);
+
+    // 4. DISPATCH OPERATOR CONFIRMATION
+    const handleDispatch = async (req, res) => {
+        try {
+            const incId = req.params.id;
+            const incident = await db.getIncident(incId);
+            if (!incident) return res.status(404).json({ error: 'Incident not found' });
+
+            const ambId = req.body.ambulanceId || incident.ambulanceId || 'AMB-01';
+
+            await db.updateAmbulance(ambId, {
+                status: 'EN_ROUTE',
+                currentIncidentId: incId
             });
 
-            const updated = await store.updateIncident(id, inc);
-
-            if (io) {
-                io.emit('incident:update', updated);
-                io.emit('incidentUpdated', updated);
-                io.emit('incidentStatusChanged', { incidentId: id, status: 'ambulance_en_route' });
-                io.emit('fleet:update', { ambulanceId, status: 'EN_ROUTE' });
-            }
-
-            return res.json({ success: true, message: 'Ambulance dispatched', incident: updated });
-        } catch (error) {
-            return res.status(500).json({ success: false, error: error.message });
-        }
-    });
-
-    // 7. Failover Ambulance
-    router.post('/:id/failover', async (req, res) => {
-        try {
-            const { id } = req.params;
-            const inc = await store.getIncident(id);
-            if (!inc) return res.status(404).json({ success: false, message: 'Incident not found' });
-
-            const oldAmbId = inc.ambulanceId || inc.assignedAmbulance;
-            if (oldAmbId) {
-                await store.updateAmbulance(oldAmbId, { status: 'UNAVAILABLE' });
-            }
-
-            const ambulances = await store.getAmbulances();
-            const ambResult = AIEngine.selectBestAmbulance(inc, ambulances);
-
-            if (ambResult.ambulance) {
-                inc.ambulanceId = ambResult.ambulance.id;
-                inc.assignedAmbulance = ambResult.ambulance.id;
-                inc.ambulanceReason = `FAILOVER: ${ambResult.reason}`;
-                inc.timeline.push({
-                    state: 'AMBULANCE_ASSIGNED',
-                    time: new Date().toLocaleTimeString(),
-                    text: `Failover re-assigned to ${ambResult.ambulance.code}`
-                });
-            } else {
-                inc.ambulanceId = null;
-                inc.assignedAmbulance = null;
-                inc.ambulanceReason = 'FAILOVER FAILED: No available units';
-            }
-
-            const updated = await store.updateIncident(id, inc);
-
-            if (io) {
-                io.emit('incident:update', updated);
-                io.emit('incidentUpdated', updated);
-                if (inc.assignedAmbulance) {
-                    io.emit('ambulanceAssigned', { incidentId: id, ambulanceId: inc.assignedAmbulance, eta: 5 });
-                }
-                io.emit('fleet:reload', { ambulances: await store.getAmbulances() });
-            }
-
-            return res.json({ success: true, message: 'Failover processed', incident: updated });
-        } catch (error) {
-            return res.status(500).json({ success: false, error: error.message });
-        }
-    });
-
-    // 8. Resolve Incident
-    router.post('/:id/resolve', async (req, res) => {
-        try {
-            const { id } = req.params;
-            const inc = await store.getIncident(id);
-            if (!inc) return res.status(404).json({ success: false, message: 'Incident not found' });
-
-            const ambId = inc.ambulanceId || inc.assignedAmbulance;
-            if (ambId) {
-                await store.updateAmbulance(ambId, { status: 'AVAILABLE' });
-            }
-
-            inc.state = 'RESOLVED';
-            inc.status = 'resolved';
-            inc.timeline.push({
-                state: 'RESOLVED',
-                time: new Date().toLocaleTimeString(),
-                text: 'Incident successfully resolved and closed'
+            const updated = await db.updateIncident(incId, {
+                status: 'EN_ROUTE',
+                ambulanceId: ambId,
+                statusDescription: `Operator authorized dispatch for Unit ${ambId}`,
+                actor: 'OPERATOR'
             });
 
-            await store.deleteIncident(id);
+            io.emit('incident:update', updated);
+            io.emit('incidentUpdated', updated);
+            io.emit('ambulance:status', { ambulanceId: ambId, status: 'EN_ROUTE', incidentId: incId });
 
-            if (io) {
-                io.emit('incident:resolved', { id, incidentId: id });
-                io.emit('incidentResolved', { id, incidentId: id });
-                io.emit('fleet:reload', { ambulances: await store.getAmbulances() });
+            return res.json({ success: true, incident: updated });
+        } catch (err) {
+            return res.status(500).json({ error: err.message });
+        }
+    };
+    router.post(['/:id/dispatch', '/incidents/:id/dispatch', '/emergencies/:id/dispatch'], handleDispatch);
+
+    // 5. TRUE DYNAMIC AMBULANCE FAILOVER
+    const handleFailover = async (req, res) => {
+        try {
+            const incId = req.params.id;
+            const incident = await db.getIncident(incId);
+            if (!incident) return res.status(404).json({ error: 'Incident not found' });
+
+            const failedAmbId = incident.ambulanceId;
+            console.log(`[Failover Engine] Triggered for Incident ${incId}. Marking ${failedAmbId} as UNAVAILABLE.`);
+
+            // 1. Mark failed unit unavailable
+            if (failedAmbId) {
+                await db.updateAmbulance(failedAmbId, {
+                    status: 'UNAVAILABLE',
+                    currentIncidentId: null
+                });
             }
 
-            return res.json({ success: true, message: 'Incident resolved', id });
-        } catch (error) {
-            return res.status(500).json({ success: false, error: error.message });
+            // 2. Re-evaluate remaining candidates
+            const ambulances = await db.getAllAmbulances();
+            const hospitals = await db.getAllHospitals();
+            const ambOptimization = await AIEngine.optimizeAmbulance(incident, ambulances);
+
+            if (!ambOptimization.selected) {
+                return res.status(503).json({
+                    error: 'No secondary ambulance available for failover',
+                    details: ambOptimization.rejections
+                });
+            }
+
+            const newAmb = ambOptimization.selected;
+            const hosp = incident.hospitalId ? await db.getHospital(incident.hospitalId) : hospitals[0];
+
+            // 3. Re-calculate 2-leg OSRM route for new ambulance
+            const newRoute = await OSRMService.getTwoLegRoute(
+                newAmb.lng, newAmb.lat,
+                incident.longitude, incident.latitude,
+                hosp.lng, hosp.lat
+            );
+
+            // 4. Update new ambulance to EN_ROUTE
+            await db.updateAmbulance(newAmb.id, {
+                status: 'EN_ROUTE',
+                currentIncidentId: incId
+            });
+
+            // 5. Update incident state
+            const updated = await db.updateIncident(incId, {
+                ambulanceId: newAmb.id,
+                ambulanceCode: newAmb.code,
+                assignedAmbulance: newAmb.id,
+                ambulanceReason: `[FAILOVER REASSIGNED] ${ambOptimization.reason}`,
+                route: newRoute,
+                status: 'EN_ROUTE',
+                statusDescription: `Automated failover from ${failedAmbId || 'Primary'} to ${newAmb.code}`,
+                actor: 'FAILOVER_ENGINE'
+            });
+
+            // 6. Broadcast updates
+            io.emit('incident:update', updated);
+            io.emit('incidentUpdated', updated);
+            io.emit('ambulance:assigned', { incidentId: incId, ambulance: newAmb, route: newRoute, isFailover: true });
+            io.emit('ambulance:status', { ambulanceId: failedAmbId, status: 'UNAVAILABLE' });
+            io.emit('ambulance:status', { ambulanceId: newAmb.id, status: 'EN_ROUTE', incidentId: incId });
+
+            return res.json({
+                success: true,
+                message: `Failover successful. Unit ${newAmb.code} dispatched.`,
+                incident: updated,
+                newAmbulance: newAmb,
+                ranking: ambOptimization.ranking
+            });
+        } catch (err) {
+            console.error('Failover Error:', err);
+            return res.status(500).json({ error: err.message });
+        }
+    };
+    router.post(['/:id/failover', '/incidents/:id/failover', '/emergencies/:id/failover'], handleFailover);
+
+    // 6. RESOLVE INCIDENT
+    const handleResolve = async (req, res) => {
+        try {
+            const incId = req.params.id;
+            const resolved = await db.resolveIncident(incId, req.body.reason || 'Incident resolved and patient admitted');
+            if (!resolved) return res.status(404).json({ error: 'Incident not found' });
+
+            io.emit('incident:resolved', { incidentId: incId, resolvedAt: resolved.resolvedAt });
+            io.emit('incidentResolved', { id: incId, incidentId: incId });
+            if (resolved.ambulanceId) {
+                io.emit('ambulance:status', { ambulanceId: resolved.ambulanceId, status: 'AVAILABLE' });
+            }
+
+            return res.json({ success: true, incident: resolved });
+        } catch (err) {
+            return res.status(500).json({ error: err.message });
+        }
+    };
+    router.post(['/:id/resolve', '/incidents/:id/resolve', '/emergencies/:id/resolve'], handleResolve);
+
+    // 7. RESET DEMO SUITE
+    router.post(['/demo/reset', '/reset'], async (req, res) => {
+        try {
+            await db.resetDemoData();
+            io.emit('demo:reset', { timestamp: new Date() });
+            return res.json({ success: true, message: 'Demo incidents cleared and fleet restored' });
+        } catch (err) {
+            return res.status(500).json({ error: err.message });
         }
     });
 

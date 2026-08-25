@@ -5,17 +5,18 @@ const cors = require('cors');
 const { Server } = require('socket.io');
 const config = require('./config/config');
 const store = require('./database/db');
+const OSRMService = require('./services/osrmService');
 
 const app = express();
 const server = http.createServer(app);
 
-// Permissive CORS for all origins
+// Permissive CORS for local & production deployment
 app.use(cors({
     origin: '*',
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With']
 }));
-app.use(express.json());
+app.use(express.json({ limit: '10mb' }));
 
 // Setup Socket.IO with permissive CORS
 const io = new Server(server, {
@@ -35,8 +36,8 @@ io.on('connection', (socket) => {
 
     // Broadcast live health status
     io.emit('health:status', {
-        backend: 'CONNECTED',
-        mongodb: store.isMongoConnected ? 'CONNECTED' : 'IN_MEMORY_FALLBACK',
+        backend: 'ONLINE',
+        database: store.isMongoConnected ? 'MONGODB' : 'IN_MEMORY_FALLBACK',
         connectedClients: socketStats.clientCount
     });
 
@@ -49,24 +50,30 @@ io.on('connection', (socket) => {
 // Attach Routes
 const incidentRoutes = require('./routes/incidentRoutes')(io);
 const fleetRoutes = require('./routes/fleetRoutes')(io);
+const healthRoutes = require('./routes/healthRoutes')(io);
 
 // Emergency & Incident API routes
 app.use('/api/emergencies', incidentRoutes);
 app.use('/api/incidents', incidentRoutes);
 app.use('/api/fleet', fleetRoutes);
 app.use('/api', fleetRoutes);
+app.use('/api', healthRoutes);
 
-// Health API matching both formats
-app.get('/api/health', (req, res) => {
-    res.json({
-        status: "ok",
-        database: true,
-        ai: true,
-        routing: true,
-        service: "ResQNet Central AI Emergency Operations Engine",
-        version: "3.4.0",
-        connectedClients: socketStats.clientCount
-    });
+// Generic Route Calculation Proxy
+app.get('/api/route', async (req, res) => {
+    try {
+        const { startLng, startLat, endLng, endLat } = req.query;
+        if (!startLng || !startLat || !endLng || !endLat) {
+            return res.status(400).json({ error: 'Missing start or end coordinates' });
+        }
+        const route = await OSRMService.getRouteBetween(
+            Number(startLng), Number(startLat),
+            Number(endLng), Number(endLat)
+        );
+        return res.json(route);
+    } catch (e) {
+        return res.status(500).json({ error: e.message });
+    }
 });
 
 // Serve Dashboard Static Files directly on port 5000
@@ -74,12 +81,17 @@ const dashboardPath = path.join(__dirname, '../dashboard');
 app.use(express.static(dashboardPath));
 
 // Dashboard route aliases
-app.get(['/', '/dashboard', '/dashboard.html'], (req, res) => {
+app.get(['/', '/dashboard', '/dashboard.html', '/index.html'], (req, res) => {
     res.sendFile(path.join(dashboardPath, 'dashboard.html'));
 });
 
-// Initialize database non-blocking & start server
-store.connect();
+// Global Error Handler
+app.use((err, req, res, next) => {
+    console.error('[Server Error]', err);
+    res.status(500).json({ error: 'Internal Server Error', message: err.message });
+});
+
+// Start server
 server.listen(config.PORT, () => {
     console.log(`\n======================================================`);
     console.log(`🚀 ResQNet Central AI Backend Live on Port ${config.PORT}`);
@@ -87,3 +99,5 @@ server.listen(config.PORT, () => {
     console.log(`🖥️  Live Dashboard Served at: http://localhost:${config.PORT}/dashboard.html`);
     console.log(`======================================================\n`);
 });
+
+module.exports = { app, server };
