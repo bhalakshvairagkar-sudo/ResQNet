@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>ResQNet — System Analytics & Response Audits</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" />
+<link rel="preconnect" href="https://fonts.gstatic.com" />
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700;800;900&family=IBM+Plex+Mono:wght@400;500;600;700&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="/css/resqnet.css" />
+<style>
+  body { background: #030508; color: #EAF0F7; height: 100vh; overflow-y: auto; font-family: var(--font-ui); }
+  .analytics-header {
+    height: 60px; background: linear-gradient(180deg, #111827, #070B12);
+    border-bottom: 2px solid #1E293B; display: flex; align-items: center; justify-content: space-between; padding: 0 24px;
+  }
+  .nav-tabs { display: flex; gap: 8px; }
+  .nav-tab {
+    padding: 6px 14px; border-radius: 20px; font-size: 11px; font-weight: 800; letter-spacing: 0.08em;
+    color: #94A3B8; text-decoration: none; border: 1px solid #334155; transition: all 0.2s;
+  }
+  .nav-tab:hover { color: #fff; border-color: #64748B; }
+  .nav-tab.active { background: #38BDF8; color: #000; border-color: #38BDF8; }
+
+  .analytics-main { padding: 24px; max-width: 1400px; margin: 0 auto; display: flex; flex-direction: column; gap: 24px; }
+  .kpi-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; }
+  .kpi-box {
+    background: #0B111E; border: 1px solid #1E293B; border-radius: 12px; padding: 18px;
+    display: flex; flex-direction: column; gap: 6px;
+  }
+  .kpi-box .t { font-size: 11px; letter-spacing: 0.12em; color: #64748B; font-weight: 800; }
+  .kpi-box .v { font-size: 28px; font-family: var(--font-mono); font-weight: 700; }
+  .kpi-box .s { font-size: 11px; color: #10B981; font-weight: 600; }
+
+  .charts-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+  .chart-card {
+    background: #0B111E; border: 1px solid #1E293B; border-radius: 12px; padding: 20px;
+    display: flex; flex-direction: column; gap: 14px;
+  }
+  .chart-card h4 { font-size: 12px; letter-spacing: 0.12em; color: #38BDF8; display: flex; align-items: center; gap: 8px; }
+  .bar-row { display: flex; flex-direction: column; gap: 4px; font-size: 12px; }
+  .bar-meta { display: flex; justify-content: space-between; color: #94A3B8; }
+  .bar-bg { height: 8px; background: #060911; border-radius: 4px; overflow: hidden; }
+  .bar-fill { height: 100%; border-radius: 4px; }
+
+  .audit-table { width: 100%; border-collapse: collapse; font-size: 12px; margin-top: 10px; }
+  .audit-table th { background: #060911; padding: 10px 12px; text-align: left; color: #64748B; font-weight: 700; border-bottom: 1px solid #1E293B; }
+  .audit-table td { padding: 10px 12px; border-bottom: 1px solid #141E30; color: #CBD5E1; }
+  .btn-export {
+    background: #1E293B; color: #38BDF8; border: 1px solid #334155; padding: 8px 16px;
+    border-radius: 8px; font-weight: 700; font-size: 12px; cursor: pointer; display: inline-flex; align-items: center; gap: 8px;
+  }
+  .btn-export:hover { background: #334155; color: #fff; }
+</style>
+</head>
+<body>
+
+<header class="analytics-header">
+  <div class="brand">
+    <div class="brand-mark" style="background:linear-gradient(135deg, #38BDF8, #0284C7)">
+      <i class="fa-solid fa-chart-line"></i>
+    </div>
+    <div>
+      <h1 style="font-size:18px">RES<b>Q</b>NET <span style="color:#38BDF8;font-weight:400">| ANALYTICS & AUDIT HUB</span></h1>
+      <small style="color:#64748B">GOLDEN HOUR SURVIVAL & RESPONSE PERFORMANCE METRICS</small>
+    </div>
+  </div>
+
+  <div class="nav-tabs">
+    <a href="/dashboard.html" class="nav-tab"><i class="fa-solid fa-map-location-dot"></i> COMMAND CENTER</a>
+    <a href="/hospital.html" class="nav-tab"><i class="fa-solid fa-hospital"></i> TRAUMA PORTAL</a>
+    <a href="/sos.html" class="nav-tab"><i class="fa-solid fa-hand-holding-medical"></i> CITIZEN SOS</a>
+    <a href="/analytics.html" class="nav-tab active"><i class="fa-solid fa-chart-pie"></i> ANALYTICS</a>
+  </div>
+</header>
+
+<main class="analytics-main">
+  <!-- TOP KEY PERFORMANCE INDICATORS -->
+  <section class="kpi-grid">
+    <div class="kpi-box">
+      <div class="t">AVERAGE RESPONSE TIME</div>
+      <div class="v" style="color:#10B981">6.2 MIN</div>
+      <div class="s"><i class="fa-solid fa-arrow-trend-down"></i> 38% faster than conventional 108</div>
+    </div>
+    <div class="kpi-box">
+      <div class="t">GOLDEN HOUR ADHERENCE</div>
+      <div class="v" style="color:#38BDF8">98.4%</div>
+      <div class="s"><i class="fa-solid fa-shield-check"></i> Patient at Trauma Bay &lt; 25 min</div>
+    </div>
+    <div class="kpi-box">
+      <div class="t">CAMERA-INDEPENDENT RATIO</div>
+      <div class="v" style="color:#F59E0B">74.2%</div>
+      <div class="s">Crashes detected without highway CCTV</div>
+    </div>
+    <div class="kpi-box">
+      <div class="t">AVERAGE AI PIPELINE LATENCY</div>
+      <div class="v" style="color:#A855F7">48 MS</div>
+      <div class="s">End-to-End Fusion + OSRM Routing</div>
+    </div>
+  </section>
+
+  <!-- CHARTS BREAKDOWN -->
+  <section class="charts-grid">
+    <!-- INGESTION SOURCE DISTRIBUTION -->
+    <div class="chart-card">
+      <h4><i class="fa-solid fa-tower-broadcast"></i> MULTI-SOURCE INGESTION BREAKDOWN</h4>
+      <div class="bar-row">
+        <div class="bar-meta"><span>Smartphone 50Hz IMU Kinematics</span><b class="mono">58%</b></div>
+        <div class="bar-bg"><div class="bar-fill" style="width:58%;background:#38BDF8"></div></div>
+      </div>
+      <div class="bar-row">
+        <div class="bar-meta"><span>AI Junction CCTV (YOLO Optical)</span><b class="mono">24%</b></div>
+        <div class="bar-bg"><div class="bar-fill" style="width:24%;background:#A855F7"></div></div>
+      </div>
+      <div class="bar-row">
+        <div class="bar-meta"><span>Citizen 1-Tap Mobile SOS</span><b class="mono">12%</b></div>
+        <div class="bar-bg"><div class="bar-fill" style="width:12%;background:#F59E0B"></div></div>
+      </div>
+      <div class="bar-row">
+        <div class="bar-meta"><span>Connected Vehicle Telematics (IoT)</span><b class="mono">6%</b></div>
+        <div class="bar-bg"><div class="bar-fill" style="width:6%;background:#10B981"></div></div>
+      </div>
+    </div>
+
+    <!-- SEVERITY VS RESPONSE TIME -->
+    <div class="chart-card">
+      <h4><i class="fa-solid fa-gauge-high"></i> SEVERITY-WEIGHTED RESPONSE PROFILE</h4>
+      <div class="bar-row">
+        <div class="bar-meta"><span>Critical Polytrauma (Severity ≥ 75) — ALS Unit</span><b class="mono">4.8 min avg</b></div>
+        <div class="bar-bg"><div class="bar-fill" style="width:92%;background:#EF4444"></div></div>
+      </div>
+      <div class="bar-row">
+        <div class="bar-meta"><span>High Severity (Severity 50–74)</span><b class="mono">6.4 min avg</b></div>
+        <div class="bar-bg"><div class="bar-fill" style="width:78%;background:#F59E0B"></div></div>
+      </div>
+      <div class="bar-row">
+        <div class="bar-meta"><span>Medium Hazard (Severity 25–49)</span><b class="mono">8.1 min avg</b></div>
+        <div class="bar-bg"><div class="bar-fill" style="width:60%;background:#EAB308"></div></div>
+      </div>
+      <div class="bar-row">
+        <div class="bar-meta"><span>Low Impact (Severity &lt; 25)</span><b class="mono">11.0 min avg</b></div>
+        <div class="bar-bg"><div class="bar-fill" style="width:40%;background:#10B981"></div></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- AUDIT TRAIL LOG -->
+  <section class="chart-card">
+    <div style="display:flex;align-items:center;justify-content:space-between">
+      <h4><i class="fa-solid fa-clipboard-check"></i> OPERATIONAL DISPATCH & AUDIT TRAIL</h4>
+      <button class="btn-export" onclick="exportAuditData()"><i class="fa-solid fa-file-arrow-down"></i> EXPORT AUDIT LOG (JSON)</button>
+    </div>
+    <table class="audit-table">
+      <thead>
+        <tr>
+          <th>INCIDENT ID</th>
+          <th>CHANNEL</th>
+          <th>SEVERITY</th>
+          <th>PEAK G-FORCE</th>
+          <th>ASSIGNED FLEET</th>
+          <th>TRAUMA CENTER</th>
+          <th>STATUS</th>
+        </tr>
+      </thead>
+      <tbody id="auditTableBody">
+        <tr>
+          <td class="mono" style="color:#38BDF8">RNQ-MAP-4012</td>
+          <td>Smartphone</td>
+          <td><b style="color:#EF4444">92 (Critical)</b></td>
+          <td>5.2 G</td>
+          <td class="mono">AMB-01 (ALS)</td>
+          <td>Pune Trauma Center</td>
+          <td><span style="color:#10B981">✓ RESOLVED</span></td>
+        </tr>
+        <tr>
+          <td class="mono" style="color:#38BDF8">RNQ-MAP-3891</td>
+          <td>CCTV (YOLO)</td>
+          <td><b style="color:#F59E0B">68 (High)</b></td>
+          <td>3.8 G</td>
+          <td class="mono">AMB-02 (BLS)</td>
+          <td>Ruby Emergency Institute</td>
+          <td><span style="color:#10B981">✓ RESOLVED</span></td>
+        </tr>
+        <tr>
+          <td class="mono" style="color:#38BDF8">RNQ-MAP-3765</td>
+          <td>Citizen SOS</td>
+          <td><b style="color:#EF4444">85 (Critical)</b></td>
+          <td>4.6 G</td>
+          <td class="mono">AMB-03 (ALS)</td>
+          <td>Sahyadri Speciality Base</td>
+          <td><span style="color:#10B981">✓ RESOLVED</span></td>
+        </tr>
+      </tbody>
+    </table>
+  </section>
+</main>
+
+<script>
+  async function exportAuditData() {
+    try {
+      const res = await fetch('/api/incidents');
+      const data = await res.json();
+      const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `resqnet-audit-${Date.now()}.json`;
+      a.click();
+    } catch (e) {
+      alert('Failed to export audit log: ' + e.message);
+    }
+  }
+</script>
+</body>
+</html>
