@@ -84,7 +84,7 @@ interface ResQNetApi {
 }
 
 object ApiClient {
-    private var baseUrl: String = "http://10.0.2.2:5000/" // Default for Android Emulator
+    private var baseUrl: String = "http://192.168.1.11:5000/" // Host LAN IP (or 10.0.2.2 for Emulator)
 
     fun setBaseUrl(url: String) {
         baseUrl = if (url.endsWith("/")) url else "$url/"

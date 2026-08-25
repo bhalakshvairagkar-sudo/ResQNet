@@ -30,7 +30,6 @@ import androidx.lifecycle.lifecycleScope
 import com.resqnet.app.data.local.LocalIncidentRecord
 import com.resqnet.app.data.repository.IncidentRepository
 import com.resqnet.app.domain.model.CrashDetectionResult
-import com.resqnet.app.domain.model.LocationQuality
 import com.resqnet.app.domain.model.SubmissionStatus
 import com.resqnet.app.location.AppLocationManager
 import com.resqnet.app.location.LocationData
@@ -137,9 +136,6 @@ class CrashCountdownActivity : ComponentActivity() {
         }
     }
 
-    /**
-     * MODULE B, D, E, G: RELIABILITY & CONTINUITY EXECUTION
-     */
     private fun executeReliableEmergencyTrigger(crashResult: CrashDetectionResult) {
         lifecycleScope.launch {
             Log.d(TAG, "[ResQNet] Emergency triggered. Step 1: Acquiring GPS with bounded timeout...")
@@ -195,6 +191,150 @@ class CrashCountdownActivity : ComponentActivity() {
 }
 
 @Composable
+fun CountdownScreen(
+    initialSeconds: Int,
+    result: CrashDetectionResult,
+    onCancel: () -> Unit,
+    onSendNow: () -> Unit,
+    onTimeout: () -> Unit
+) {
+    var secondsLeft by remember { mutableIntStateOf(initialSeconds) }
+
+    LaunchedEffect(Unit) {
+        while (secondsLeft > 0) {
+            delay(1000L)
+            secondsLeft--
+        }
+        onTimeout()
+    }
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color(0xFF080C16))
+            .padding(20.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.SpaceBetween
+    ) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Spacer(modifier = Modifier.height(20.dp))
+            Text(
+                text = "CRASH DETECTED",
+                fontSize = 24.sp,
+                fontWeight = FontWeight.Black,
+                color = Color(0xFFEF4444),
+                letterSpacing = 1.5.sp
+            )
+            Spacer(modifier = Modifier.height(6.dp))
+            Text(
+                text = "ARE YOU OKAY?",
+                fontSize = 18.sp,
+                fontWeight = FontWeight.Bold,
+                color = Color.White
+            )
+
+            Spacer(modifier = Modifier.height(24.dp))
+
+            // Animated Countdown Circle
+            Box(
+                contentAlignment = Alignment.Center,
+                modifier = Modifier.size(160.dp)
+            ) {
+                CircularProgressIndicator(
+                    progress = { secondsLeft.toFloat() / initialSeconds.toFloat() },
+                    modifier = Modifier.fillMaxSize(),
+                    color = Color(0xFFEF4444),
+                    strokeWidth = 10.dp,
+                    trackColor = Color(0xFF1E293B)
+                )
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text(
+                        text = "$secondsLeft",
+                        fontSize = 54.sp,
+                        fontWeight = FontWeight.Black,
+                        color = Color.White,
+                        fontFamily = FontFamily.Monospace
+                    )
+                    Text(
+                        text = "SECONDS",
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color(0xFF94A3B8)
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(24.dp))
+
+            // Detection Metrics Card
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(containerColor = Color(0xFF0F172A)),
+                shape = RoundedCornerShape(12.dp)
+            ) {
+                Column(modifier = Modifier.padding(14.dp)) {
+                    Text(
+                        text = "IMPACT TELEMETRY",
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color(0xFF38BDF8),
+                        fontFamily = FontFamily.Monospace
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text("Peak G-Force: ${"%.2f".format(result.peakGForce)}G", color = Color.White, fontSize = 12.sp)
+                        Text("Rollover: ${if (result.isRollover) "YES" else "NO"}", color = Color.White, fontSize = 12.sp)
+                    }
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text("Confidence: ${(result.confidence * 100).toInt()}%", color = Color(0xFF10B981), fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                        Text("Severity: ${result.severity} (${result.severityScore}/100)", color = Color(0xFFEF4444), fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                    }
+                }
+            }
+        }
+
+        // Action Buttons
+        Column(modifier = Modifier.fillMaxWidth()) {
+            Button(
+                onClick = onCancel,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(56.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF10B981)),
+                shape = RoundedCornerShape(14.dp)
+            ) {
+                Icon(Icons.Default.Check, contentDescription = null, tint = Color.White)
+                Spacer(modifier = Modifier.width(8.dp))
+                Text("I'M OK — CANCEL ALERT", fontSize = 15.sp, fontWeight = FontWeight.Black, color = Color.White)
+            }
+
+            Spacer(modifier = Modifier.height(10.dp))
+
+            OutlinedButton(
+                onClick = onSendNow,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(48.dp),
+                shape = RoundedCornerShape(12.dp),
+                colors = ButtonDefaults.outlinedButtonColors(contentColor = Color(0xFFEF4444))
+            ) {
+                Icon(Icons.Default.Send, contentDescription = null)
+                Spacer(modifier = Modifier.width(6.dp))
+                Text("SEND EMERGENCY SOS NOW", fontWeight = FontWeight.Bold, fontSize = 13.sp)
+            }
+            Spacer(modifier = Modifier.height(12.dp))
+        }
+    }
+}
+
+@Composable
 fun ReliableEmergencyStatusView(
     record: LocalIncidentRecord?,
     status: SubmissionStatus,
@@ -213,7 +353,6 @@ fun ReliableEmergencyStatusView(
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
             Spacer(modifier = Modifier.height(16.dp))
 
-            // Status Icon & Main Title
             val (icon, tint, title, subtitle) = when (status) {
                 SubmissionStatus.CONFIRMED -> Quadruple(
                     Icons.Default.CheckCircle,
@@ -272,7 +411,6 @@ fun ReliableEmergencyStatusView(
 
             Spacer(modifier = Modifier.height(16.dp))
 
-            // Progress bar if submitting
             if (status == SubmissionStatus.SUBMITTING || status == SubmissionStatus.PENDING_SUBMISSION) {
                 LinearProgressIndicator(
                     modifier = Modifier.fillMaxWidth().height(4.dp),
@@ -282,7 +420,6 @@ fun ReliableEmergencyStatusView(
                 Spacer(modifier = Modifier.height(16.dp))
             }
 
-            // Local Incident Card
             Card(
                 modifier = Modifier.fillMaxWidth(),
                 colors = CardDefaults.cardColors(containerColor = Color(0xFF131B2E)),
@@ -346,7 +483,6 @@ fun ReliableEmergencyStatusView(
 
             Spacer(modifier = Modifier.height(12.dp))
 
-            // Raw Emergency Payload Message
             Card(
                 modifier = Modifier.fillMaxWidth(),
                 colors = CardDefaults.cardColors(containerColor = Color(0xFF0C1220)),
