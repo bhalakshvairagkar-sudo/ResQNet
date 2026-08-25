@@ -32,12 +32,14 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.lifecycleScope
 import com.resqnet.app.data.api.ApiClient
+import com.resqnet.app.data.api.AppEnvironment
 import com.resqnet.app.data.repository.IncidentRepository
 import com.resqnet.app.domain.model.CrashDetectionResult
 import com.resqnet.app.domain.model.SubmissionStatus
 import com.resqnet.app.location.AppLocationManager
 import com.resqnet.app.network.NetworkMonitor
 import com.resqnet.app.service.CrashDetectionService
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlin.math.sqrt
 
@@ -58,6 +60,11 @@ class MainActivity : ComponentActivity(), SensorEventListener {
     private var rawGy by mutableFloatStateOf(0.0f)
     private var rawGz by mutableFloatStateOf(0.0f)
     private var rawAngularVelocity by mutableFloatStateOf(0.0f)
+
+    // Measured sensor frequency
+    private var accelHz by mutableFloatStateOf(0.0f)
+    private var gyroHz by mutableFloatStateOf(0.0f)
+    private var procHz by mutableFloatStateOf(0.0f)
 
     private var isGyroAvailable by mutableStateOf(false)
     private var isAccelAvailable by mutableStateOf(false)
@@ -101,6 +108,16 @@ class MainActivity : ComponentActivity(), SensorEventListener {
             refreshPendingCount()
         }
 
+        // Periodic UI frequency updater
+        lifecycleScope.launch {
+            while (true) {
+                delay(500L)
+                accelHz = CrashDetectionService.measuredAccelHz
+                gyroHz = CrashDetectionService.measuredGyroHz
+                procHz = CrashDetectionService.measuredProcessingHz
+            }
+        }
+
         setContent {
             MaterialTheme(
                 colorScheme = darkColorScheme(
@@ -121,6 +138,9 @@ class MainActivity : ComponentActivity(), SensorEventListener {
                     rawGy = rawGy,
                     rawGz = rawGz,
                     rawAngularVelocity = rawAngularVelocity,
+                    accelHz = accelHz,
+                    gyroHz = gyroHz,
+                    procHz = procHz,
                     isAccelAvailable = isAccelAvailable,
                     isGyroAvailable = isGyroAvailable,
                     isShieldActive = isShieldActive,
@@ -132,9 +152,13 @@ class MainActivity : ComponentActivity(), SensorEventListener {
                         isShieldActive = enabled
                         if (enabled) startCrashShieldService() else stopCrashShieldService()
                     },
+                    onSelectEnvironment = { env ->
+                        ApiClient.setEnvironment(env)
+                        Toast.makeText(this, "Environment Set: ${env.name} (${ApiClient.getBaseUrl()})", Toast.LENGTH_SHORT).show()
+                    },
                     onUpdateBackendUrl = { url ->
                         ApiClient.setBaseUrl(url)
-                        Toast.makeText(this, "Backend URL Updated: $url", Toast.LENGTH_SHORT).show()
+                        Toast.makeText(this, "Custom URL Updated: $url", Toast.LENGTH_SHORT).show()
                     },
                     onFlushRetries = {
                         lifecycleScope.launch {
@@ -279,6 +303,9 @@ fun ResQNetAppUI(
     rawGy: Float,
     rawGz: Float,
     rawAngularVelocity: Float,
+    accelHz: Float,
+    gyroHz: Float,
+    procHz: Float,
     isAccelAvailable: Boolean,
     isGyroAvailable: Boolean,
     isShieldActive: Boolean,
@@ -287,6 +314,7 @@ fun ResQNetAppUI(
     onTriggerSOS: () -> Unit,
     onSimulateCrashSpike: () -> Unit,
     onToggleShield: (Boolean) -> Unit,
+    onSelectEnvironment: (AppEnvironment) -> Unit,
     onUpdateBackendUrl: (String) -> Unit,
     onFlushRetries: () -> Unit
 ) {
@@ -315,7 +343,7 @@ fun ResQNetAppUI(
                     fontFamily = FontFamily.Monospace
                 )
                 Text(
-                    text = "SENSOR DIAGNOSTICS & SHIELD",
+                    text = "MEASURED SENSOR CADENCE & SHIELD",
                     fontSize = 10.sp,
                     fontWeight = FontWeight.Bold,
                     color = Color(0xFF38BDF8)
@@ -323,7 +351,6 @@ fun ResQNetAppUI(
             }
 
             Row {
-                // Online Badge
                 Surface(
                     shape = RoundedCornerShape(20.dp),
                     color = if (isOnline) Color(0xFF10B981).copy(alpha = 0.2f) else Color(0xFFF59E0B).copy(alpha = 0.2f)
@@ -349,7 +376,6 @@ fun ResQNetAppUI(
 
                 Spacer(modifier = Modifier.width(6.dp))
 
-                // Shield Badge
                 Surface(
                     shape = RoundedCornerShape(20.dp),
                     color = if (isShieldActive) Color(0xFF3B82F6).copy(alpha = 0.2f) else Color(0xFFEF4444).copy(alpha = 0.2f)
@@ -359,7 +385,7 @@ fun ResQNetAppUI(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Text(
-                            text = if (isShieldActive) "ARMED (50Hz)" else "DISARMED",
+                            text = if (isShieldActive) "ARMED" else "DISARMED",
                             color = if (isShieldActive) Color(0xFF38BDF8) else Color(0xFFEF4444),
                             fontSize = 10.sp,
                             fontWeight = FontWeight.Bold
@@ -371,7 +397,7 @@ fun ResQNetAppUI(
 
         Spacer(modifier = Modifier.height(14.dp))
 
-        // MODULE 4: SENSOR TEST MODE (Live Real-Time Telemetry HUD)
+        // SENSOR TEST MODE & MEASURED FREQUENCY HUD
         Card(
             modifier = Modifier.fillMaxWidth(),
             colors = CardDefaults.cardColors(containerColor = Color(0xFF0C1220)),
@@ -403,6 +429,24 @@ fun ResQNetAppUI(
                             fontSize = 10.sp,
                             fontWeight = FontWeight.Bold
                         )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(6.dp))
+
+                // Measured Real Frequencies
+                Surface(
+                    color = Color(0xFF060911),
+                    shape = RoundedCornerShape(8.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text("Accel: ${"%.1f".format(accelHz)} Hz", color = Color(0xFF38BDF8), fontSize = 10.sp, fontFamily = FontFamily.Monospace)
+                        Text("Gyro: ${"%.1f".format(gyroHz)} Hz", color = Color(0xFFF59E0B), fontSize = 10.sp, fontFamily = FontFamily.Monospace)
+                        Text("Proc: ${"%.1f".format(procHz)} Hz", color = Color(0xFF10B981), fontSize = 10.sp, fontFamily = FontFamily.Monospace)
                     }
                 }
 
@@ -511,8 +555,8 @@ fun ResQNetAppUI(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Column {
-                    Text("50Hz Crash Shield Service", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 13.sp)
-                    Text("Continuous background sensor monitoring", color = Color(0xFF64748B), fontSize = 11.sp)
+                    Text("Continuous Crash Shield Service", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                    Text("Multi-sensor background kinematic evaluation", color = Color(0xFF64748B), fontSize = 11.sp)
                 }
                 Switch(
                     checked = isShieldActive,
@@ -556,20 +600,50 @@ fun ResQNetAppUI(
 
         Spacer(modifier = Modifier.height(14.dp))
 
-        // Backend URL Config Card
+        // Environment & Backend URL Config Card
         Card(
             modifier = Modifier.fillMaxWidth(),
             colors = CardDefaults.cardColors(containerColor = Color(0xFF0C1220)),
             shape = RoundedCornerShape(12.dp)
         ) {
             Column(modifier = Modifier.padding(12.dp)) {
-                Text("Backend Server Bridge", color = Color(0xFF94A3B8), fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                Text("Environment & Backend Bridge", color = Color(0xFF94A3B8), fontSize = 11.sp, fontWeight = FontWeight.Bold)
                 Spacer(modifier = Modifier.height(6.dp))
+
+                // Environment selector buttons
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Button(
+                        onClick = { onSelectEnvironment(AppEnvironment.LOCAL_LAN); backendUrlInput = ApiClient.getBaseUrl() },
+                        modifier = Modifier.weight(1f),
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1E293B)),
+                        contentPadding = PaddingValues(2.dp)
+                    ) {
+                        Text("LAN IP", fontSize = 9.sp, color = Color(0xFF38BDF8))
+                    }
+                    Button(
+                        onClick = { onSelectEnvironment(AppEnvironment.EMULATOR); backendUrlInput = ApiClient.getBaseUrl() },
+                        modifier = Modifier.weight(1f),
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1E293B)),
+                        contentPadding = PaddingValues(2.dp)
+                    ) {
+                        Text("EMULATOR", fontSize = 9.sp, color = Color(0xFF38BDF8))
+                    }
+                    Button(
+                        onClick = { onSelectEnvironment(AppEnvironment.PRODUCTION); backendUrlInput = ApiClient.getBaseUrl() },
+                        modifier = Modifier.weight(1f),
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1E293B)),
+                        contentPadding = PaddingValues(2.dp)
+                    ) {
+                        Text("PROD", fontSize = 9.sp, color = Color(0xFF38BDF8))
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(8.dp))
                 OutlinedTextField(
                     value = backendUrlInput,
                     onValueChange = { backendUrlInput = it },
                     modifier = Modifier.fillMaxWidth(),
-                    label = { Text("Server URL", fontSize = 10.sp) },
+                    label = { Text("Custom Server URL", fontSize = 10.sp) },
                     singleLine = true,
                     colors = OutlinedTextFieldDefaults.colors(
                         focusedTextColor = Color.White,

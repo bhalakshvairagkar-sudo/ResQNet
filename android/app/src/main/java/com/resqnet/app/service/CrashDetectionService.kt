@@ -15,13 +15,16 @@ import com.resqnet.app.domain.detector.CrashDetector
 import com.resqnet.app.domain.model.CrashDetectionResult
 import com.resqnet.app.domain.model.CrashSensorConfig
 import com.resqnet.app.domain.model.EmergencyState
+import com.resqnet.app.domain.model.LocationQuality
 import com.resqnet.app.location.AppLocationManager
+import com.resqnet.app.location.LocationData
 import com.resqnet.app.ui.CrashCountdownActivity
+import kotlin.math.max
 import kotlin.math.sqrt
 
 /**
  * ResQNet Background Continuous G-Sensor & Accelerometer Crash Detection Service.
- * Implements 50Hz kinematic evaluation, sliding window shock filtering, and duplicate cooldown.
+ * Implements measured-frequency kinematic evaluation, sliding window shock filtering, and duplicate cooldown.
  */
 class CrashDetectionService : Service(), SensorEventListener {
 
@@ -35,8 +38,12 @@ class CrashDetectionService : Service(), SensorEventListener {
     private var currentState = EmergencyState.MONITORING
     private var lastCrashTimestamp = 0L
 
-    private var sampleCounter = 0
-    private var lastLoggedMagnitude = 0f
+    // Sampling frequency tracking variables
+    private var lastAccelTimestampNanos = 0L
+    private var lastGyroTimestampNanos = 0L
+    private var accelSampleCount = 0
+    private var gyroSampleCount = 0
+    private var lastRateCalcTimestamp = System.currentTimeMillis()
 
     companion object {
         private const val TAG = "ResQNet-SENSOR"
@@ -46,7 +53,7 @@ class CrashDetectionService : Service(), SensorEventListener {
         var isRunning = false
             private set
 
-        // Shared live telemetry for UI Test Mode
+        // Shared live telemetry & measured frequencies for UI Test Mode
         var liveAx = 0f
             private set
         var liveAy = 0f
@@ -69,6 +76,14 @@ class CrashDetectionService : Service(), SensorEventListener {
             private set
         var isGyroAvailable = false
             private set
+
+        // Measured Real Sampling Frequencies (Hz)
+        var measuredAccelHz = 0.0f
+            private set
+        var measuredGyroHz = 0.0f
+            private set
+        var measuredProcessingHz = 0.0f
+            private set
     }
 
     override fun onCreate() {
@@ -80,9 +95,9 @@ class CrashDetectionService : Service(), SensorEventListener {
         isAccelAvailable = (accelerometer != null)
         isGyroAvailable = (gyroscope != null)
 
-        Log.d(TAG, "[ResQNet-SENSOR] Sensor initialized")
-        Log.d(TAG, "[ResQNet-SENSOR] Accelerometer: ${if (isAccelAvailable) "AVAILABLE (${accelerometer?.name})" else "UNAVAILABLE"}")
-        Log.d(TAG, "[ResQNet-SENSOR] Gyroscope: ${if (isGyroAvailable) "AVAILABLE (${gyroscope?.name})" else "UNAVAILABLE (Fallback to Accel)"}")
+        Log.d(TAG, "[SENSOR] Sensor initialized")
+        Log.d(TAG, "[SENSOR] Accelerometer: ${if (isAccelAvailable) "AVAILABLE (${accelerometer?.name})" else "UNAVAILABLE"}")
+        Log.d(TAG, "[SENSOR] Gyroscope: ${if (isGyroAvailable) "AVAILABLE (${gyroscope?.name})" else "UNAVAILABLE (Fallback to Accel)"}")
 
         crashDetector = CrashDetector()
         locationManager = AppLocationManager(this)
@@ -91,7 +106,20 @@ class CrashDetectionService : Service(), SensorEventListener {
         registerSensors()
         isRunning = true
         currentState = EmergencyState.MONITORING
-        Log.d(TAG, "[ResQNet-SENSOR] Crash detection state: MONITORING")
+        Log.d(TAG, "[SENSOR] Crash detection state: MONITORING")
+
+        // Start periodic GPS speed feed to crash detector
+        pollGpsSpeed()
+    }
+
+    private fun pollGpsSpeed() {
+        locationManager.acquireLatestLocation { loc: LocationData ->
+            val isAvailable = (loc.quality != LocationQuality.UNAVAILABLE && !loc.isDegraded)
+            crashDetector.updateSpeed(
+                speedKmh = if (isAvailable) loc.speedKmh else null,
+                speedAvailable = isAvailable
+            )
+        }
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -110,7 +138,7 @@ class CrashDetectionService : Service(), SensorEventListener {
             gyroRegistered = sensorManager.registerListener(this, it, SensorManager.SENSOR_DELAY_GAME)
         }
 
-        Log.d(TAG, "[ResQNet-SENSOR] Sensor listener registered: Accel=$accelRegistered, Gyro=$gyroRegistered (50Hz nominal)")
+        Log.d(TAG, "[SENSOR] Sensor listener registered: Accel=$accelRegistered, Gyro=$gyroRegistered")
     }
 
     private var latestGx = 0f
@@ -120,9 +148,11 @@ class CrashDetectionService : Service(), SensorEventListener {
     override fun onSensorChanged(event: SensorEvent?) {
         if (event == null) return
         val now = System.currentTimeMillis()
+        val eventNanos = event.timestamp
 
         when (event.sensor.type) {
             Sensor.TYPE_GYROSCOPE -> {
+                gyroSampleCount++
                 latestGx = event.values[0]
                 latestGy = event.values[1]
                 latestGz = event.values[2]
@@ -132,14 +162,11 @@ class CrashDetectionService : Service(), SensorEventListener {
                 liveGz = latestGz
                 val gyroMag = sqrt((latestGx * latestGx + latestGy * latestGy + latestGz * latestGz).toDouble()).toFloat()
                 liveAngularVelocity = gyroMag
-
-                // Diagnostic log for significant rotation
-                if (gyroMag > 1.0f) {
-                    Log.d(TAG, "[ResQNet-SENSOR] Gyroscope: x=${"%.2f".format(latestGx)}, y=${"%.2f".format(latestGy)}, z=${"%.2f".format(latestGz)} | Angular velocity=${"%.2f".format(gyroMag)} rad/s")
-                }
+                lastGyroTimestampNanos = eventNanos
             }
 
             Sensor.TYPE_ACCELEROMETER -> {
+                accelSampleCount++
                 val ax = event.values[0]
                 val ay = event.values[1]
                 val az = event.values[2]
@@ -151,12 +178,21 @@ class CrashDetectionService : Service(), SensorEventListener {
                 val g = mag / 9.80665f
                 liveMagnitude = mag
                 liveGForce = g
+                lastAccelTimestampNanos = eventNanos
 
-                sampleCounter++
-                // Log every 50 samples (~1s) or on notable dynamic motion (>1.5G)
-                if (sampleCounter % 50 == 0 || kotlin.math.abs(g - lastLoggedMagnitude) > 0.5f) {
-                    lastLoggedMagnitude = g
-                    Log.d(TAG, "[ResQNet-SENSOR] Accelerometer: x=${"%.2f".format(ax)}, y=${"%.2f".format(ay)}, z=${"%.2f".format(az)} | Magnitude=${"%.2f".format(mag)} m/s² (${"%.2f".format(g)} G)")
+                // Calculate measured sampling frequencies every 1000ms
+                val elapsedSinceRateCalc = now - lastRateCalcTimestamp
+                if (elapsedSinceRateCalc >= 1000L) {
+                    val seconds = elapsedSinceRateCalc / 1000.0f
+                    measuredAccelHz = accelSampleCount / seconds
+                    measuredGyroHz = gyroSampleCount / seconds
+                    measuredProcessingHz = (accelSampleCount + gyroSampleCount) / (2.0f * seconds)
+
+                    Log.d(TAG, "[SENSOR] Measured Cadence -> Accel: ${"%.1f".format(measuredAccelHz)} Hz | Gyro: ${"%.1f".format(measuredGyroHz)} Hz | Processing: ${"%.1f".format(measuredProcessingHz)} Hz")
+
+                    accelSampleCount = 0
+                    gyroSampleCount = 0
+                    lastRateCalcTimestamp = now
                 }
 
                 // Duplicate Crash Prevention: Ignore triggers during cooldown window
@@ -181,13 +217,13 @@ class CrashDetectionService : Service(), SensorEventListener {
         lastCrashTimestamp = result.timestamp
         currentState = EmergencyState.POSSIBLE_CRASH
 
-        Log.w(TAG, "[ResQNet-SENSOR] ======================================================")
-        Log.w(TAG, "[ResQNet-SENSOR] 🚨 POSSIBLE CRASH DETECTED!")
-        Log.w(TAG, "[ResQNet-SENSOR] Acceleration magnitude: ${"%.2f".format(result.accelerationMagnitude)} m/s² (${"%.2f".format(result.peakGForce)}G)")
-        Log.w(TAG, "[ResQNet-SENSOR] Angular velocity: ${"%.2f".format(result.gyroMagnitude)} rad/s | Rollover: ${result.isRollover}")
-        Log.w(TAG, "[ResQNet-SENSOR] Confidence: ${"%.2f".format(result.confidence)} | Severity: ${result.severity} (${result.severityScore}/100)")
-        Log.w(TAG, "[ResQNet-SENSOR] Crash detection state -> VERIFICATION_PENDING (15s)")
-        Log.w(TAG, "[ResQNet-SENSOR] ======================================================")
+        Log.w(TAG, "[SENSOR] ======================================================")
+        Log.w(TAG, "[SENSOR] 🚨 POSSIBLE CRASH DETECTED!")
+        Log.w(TAG, "[SENSOR] Acceleration magnitude: ${"%.2f".format(result.accelerationMagnitude)} m/s² (${"%.2f".format(result.peakGForce)}G)")
+        Log.w(TAG, "[SENSOR] Angular velocity: ${"%.2f".format(result.gyroMagnitude)} rad/s | Rollover: ${result.isRollover}")
+        Log.w(TAG, "[SENSOR] Confidence: ${"%.2f".format(result.confidence)} | Severity: ${result.severity} (${result.severityScore}/100)")
+        Log.w(TAG, "[SENSOR] State -> VERIFICATION_PENDING (15s)")
+        Log.w(TAG, "[SENSOR] ======================================================")
 
         currentState = EmergencyState.VERIFICATION_PENDING
 
@@ -213,7 +249,7 @@ class CrashDetectionService : Service(), SensorEventListener {
                 "ResQNet Crash Shield Active",
                 NotificationManager.IMPORTANCE_LOW
             ).apply {
-                description = "Continuous 50Hz multi-sensor impact protection"
+                description = "Continuous multi-sensor impact protection"
             }
             val manager = getSystemService(NotificationManager::class.java)
             manager?.createNotificationChannel(channel)
@@ -221,7 +257,7 @@ class CrashDetectionService : Service(), SensorEventListener {
 
         val notification: Notification = NotificationCompat.Builder(this, NOTIFICATION_CHANNEL_ID)
             .setContentTitle("ResQNet Crash Shield Active")
-            .setContentText("Continuous 50Hz sensor protection armed")
+            .setContentText("Continuous sensor protection armed")
             .setSmallIcon(android.R.drawable.ic_lock_idle_alarm)
             .setOngoing(true)
             .build()
@@ -234,7 +270,7 @@ class CrashDetectionService : Service(), SensorEventListener {
         sensorManager.unregisterListener(this)
         isRunning = false
         currentState = EmergencyState.MONITORING
-        Log.d(TAG, "[ResQNet-SENSOR] Sensor monitoring stopped")
+        Log.d(TAG, "[SENSOR] Sensor monitoring stopped")
     }
 
     override fun onBind(intent: Intent?): IBinder? = null

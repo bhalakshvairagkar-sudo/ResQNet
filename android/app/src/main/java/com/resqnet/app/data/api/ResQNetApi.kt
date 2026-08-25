@@ -83,8 +83,24 @@ interface ResQNetApi {
     suspend fun checkHealth(): Response<HealthResponse>
 }
 
+enum class AppEnvironment(val defaultUrl: String) {
+    LOCAL_LAN("http://192.168.1.11:5000/"),
+    EMULATOR("http://10.0.2.2:5000/"),
+    STAGING("https://staging-api.resqnet.io/"),
+    PRODUCTION("https://api.resqnet.io/")
+}
+
 object ApiClient {
-    private var baseUrl: String = "http://192.168.1.11:5000/" // Host LAN IP (or 10.0.2.2 for Emulator)
+    private var currentEnvironment: AppEnvironment = AppEnvironment.LOCAL_LAN
+    private var baseUrl: String = currentEnvironment.defaultUrl
+
+    fun setEnvironment(env: AppEnvironment) {
+        currentEnvironment = env
+        baseUrl = env.defaultUrl
+        retrofitInstance = null
+    }
+
+    fun getEnvironment(): AppEnvironment = currentEnvironment
 
     fun setBaseUrl(url: String) {
         baseUrl = if (url.endsWith("/")) url else "$url/"

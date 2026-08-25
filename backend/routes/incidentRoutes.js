@@ -9,22 +9,22 @@ module.exports = (io) => {
     const handleDetection = async (req, res) => {
         try {
             const body = req.body;
-            const incId = body.id || body.incidentId || `RNQ-${Math.floor(1000 + Math.random() * 9000)}`;
+            const incId = body.id ?? body.incidentId ?? `RNQ-${Date.now().toString().slice(-6)}`;
 
             // MODULE F: IDEMPOTENCY / DUPLICATE PREVENTION
             const existing = await db.getIncident(incId);
             if (existing) {
-                console.log(`[Idempotency] Incident ${incId} already exists. Returning confirmed record.`);
+                console.log(`[BACKEND] [IDEMPOTENCY] Incident ${incId} already exists. Returning confirmed record.`);
                 return res.status(200).json({
                     success: true,
-                    incidentId: existing.incidentId || existing.id,
-                    id: existing.incidentId || existing.id,
+                    incidentId: existing.incidentId ?? existing.id,
+                    id: existing.incidentId ?? existing.id,
                     incident: existing,
                     status: existing.status,
                     confidence: existing.confidence,
                     severity: existing.severity,
-                    assignedAmbulance: existing.assignedAmbulance || existing.ambulanceId,
-                    assignedHospital: existing.assignedHospital || existing.hospitalId,
+                    assignedAmbulance: existing.assignedAmbulance ?? existing.ambulanceId,
+                    assignedHospital: existing.assignedHospital ?? existing.hospitalId,
                     ambulanceReason: existing.ambulanceReason,
                     hospitalReason: existing.hospitalReason,
                     route: existing.route,
@@ -32,15 +32,65 @@ module.exports = (io) => {
                 });
             }
 
-            const lat = Number(body.latitude || body.lat || 18.5204);
-            const lng = Number(body.longitude || body.lng || 73.8567);
-            const src = body.source || body.sourceType || 'smartphone';
-            const title = body.title || body.incidentType || 'Highway 48 Multi-Vehicle Collision';
+            // Real GPS integrity handling (Nullish checking)
+            const rawLat = body.latitude ?? body.lat ?? null;
+            const rawLng = body.longitude ?? body.lng ?? null;
+            const locationQuality = body.locationQuality ?? (rawLat === null || rawLng === null || (rawLat === 0 && rawLng === 0) ? 'UNAVAILABLE' : 'FRESH_GPS');
+            const isLocationAvailable = (locationQuality !== 'UNAVAILABLE' && rawLat !== null && rawLng !== null && !(rawLat === 0 && rawLng === 0));
+
+            const lat = isLocationAvailable ? Number(rawLat) : null;
+            const lng = isLocationAvailable ? Number(rawLng) : null;
+
+            const src = body.source ?? body.sourceType ?? 'smartphone';
+            const title = body.title ?? body.incidentType ?? (src === 'cctv' ? 'CCTV Intersection Collision' : 'Road Collision Event');
+
+            console.log(`[BACKEND] Ingesting incident ${incId} via ${src.toUpperCase()} (GPS: ${isLocationAvailable ? `${lat}, ${lng}` : 'UNAVAILABLE'})`);
+
+            // Spatial-Temporal Correlation Check (Multi-Source Fusion)
+            const allIncidents = await db.getAllIncidents();
+            const correlatedIncident = allIncidents.find(i => {
+                if (i.status === 'RESOLVED' || i.id === incId) return false;
+                if (!isLocationAvailable || i.latitude === null || i.longitude === null) return false;
+                const dist = OSRMService.calculateHaversineDistance(lat, lng, i.latitude, i.longitude);
+                const timeDiffSec = Math.abs(Date.now() - new Date(i.createdAt).getTime()) / 1000;
+                return (dist <= 0.25 && timeDiffSec <= 60); // 250m & 60s correlation window
+            });
+
+            if (correlatedIncident) {
+                console.log(`[FUSION] Correlated ${src.toUpperCase()} report into existing incident ${correlatedIncident.id} (Distance: ~${(OSRMService.calculateHaversineDistance(lat, lng, correlatedIncident.latitude, correlatedIncident.longitude)*1000).toFixed(0)}m)`);
+                
+                const newSourceEntry = {
+                    source: src,
+                    confidence: body.confidence !== undefined ? (body.confidence > 1 ? body.confidence : Math.round(body.confidence * 100)) : 92,
+                    timestamp: new Date().toISOString()
+                };
+                const updatedSources = [...(correlatedIncident.sources || []), newSourceEntry];
+                const updatedConfidence = AIEngine.fuseConfidence(updatedSources);
+
+                const updated = await db.updateIncident(correlatedIncident.id, {
+                    sources: updatedSources,
+                    confidence: updatedConfidence,
+                    confidenceScore: updatedConfidence,
+                    statusDescription: `Fused multi-source confirmation from ${src.toUpperCase()} (Confidence: ${updatedConfidence}%)`
+                });
+
+                io.emit('incident:update', updated);
+                io.emit('incidentUpdated', updated);
+                return res.status(200).json({
+                    success: true,
+                    incidentId: correlatedIncident.id,
+                    id: correlatedIncident.id,
+                    incident: updated,
+                    fused: true
+                });
+            }
 
             // Multi-source confidence fusion & severity estimation
-            const sources = body.sources || body.detectionSources || [{ source: src, confidence: body.confidence !== undefined ? body.confidence : (body.confidenceScore || 0.95) }];
+            const sources = body.sources ?? body.detectionSources ?? [{ source: src, confidence: body.confidence !== undefined ? (body.confidence > 1 ? body.confidence : Math.round(body.confidence * 100)) : 94 }];
             const fusedConfidence = AIEngine.fuseConfidence(sources);
             const severityScore = AIEngine.calculateSeverity(body);
+
+            console.log(`[FUSION] Joint Fused Confidence: ${fusedConfidence}% | [SEVERITY] Calculated Score: ${severityScore}/100`);
 
             // Fetch available fleet & hospitals from authoritative store
             const ambulances = await db.getAllAmbulances();
@@ -49,8 +99,8 @@ module.exports = (io) => {
             const incidentTemp = {
                 id: incId,
                 incidentId: incId,
-                latitude: lat,
-                longitude: lng,
+                latitude: lat ?? 18.5204, // Default center only for fleet distance estimation when GPS unavailable
+                longitude: lng ?? 73.8567,
                 severity: severityScore
             };
 
@@ -63,12 +113,21 @@ module.exports = (io) => {
 
             // Compute 2-leg OSRM route: Ambulance -> Crash Scene -> Hospital
             let combinedRoute = ambOptimization.route;
-            if (selectedAmb && selectedHosp) {
+            if (isLocationAvailable && selectedAmb && selectedHosp) {
                 combinedRoute = await OSRMService.getTwoLegRoute(
                     selectedAmb.lng, selectedAmb.lat,
                     lng, lat,
                     selectedHosp.lng, selectedHosp.lat
                 );
+            } else if (!isLocationAvailable) {
+                combinedRoute = {
+                    success: false,
+                    isFallback: true,
+                    routingStatus: 'DEGRADED_NO_SCENE_GPS',
+                    distanceKm: null,
+                    etaMinutes: null,
+                    geometry: null
+                };
             }
 
             // Build clinical pre-alert
@@ -80,12 +139,13 @@ module.exports = (io) => {
                 id: incId,
                 incidentId: incId,
                 source: src,
-                type: body.incidentType || 'Road collision',
+                type: body.incidentType ?? 'Road collision',
                 title: title,
                 latitude: lat,
                 longitude: lng,
-                gpsAccuracy: body.gpsAccuracy || 5.0,
-                location: { type: 'Point', coordinates: [lng, lat] },
+                locationQuality: locationQuality,
+                gpsAccuracy: isLocationAvailable ? (body.gpsAccuracy ?? 5.0) : null,
+                location: isLocationAvailable ? { type: 'Point', coordinates: [lng, lat] } : null,
                 confidence: fusedConfidence,
                 confidenceScore: fusedConfidence,
                 severity: severityScore,
@@ -100,9 +160,9 @@ module.exports = (io) => {
                 route: combinedRoute,
                 hospitalRoute: hospOptimization.route,
                 hospitalPreAlert: preAlert,
-                patientCount: body.patients || body.patientCount || 1,
-                userMedicalInfo: body.userMedicalInfo || null,
-                isDemo: body.isDemo || false,
+                patientCount: body.patients ?? body.patientCount ?? 1,
+                userMedicalInfo: body.userMedicalInfo ?? null,
+                isDemo: body.isDemo ?? false,
                 sources: sources,
                 timeline: [
                     { status: 'DETECTED', timestamp: new Date(), description: `Incident ingested via ${src} channel`, actor: 'SYSTEM' },
@@ -110,7 +170,7 @@ module.exports = (io) => {
                     { status: 'SEVERITY_ASSESSED', timestamp: new Date(), description: `Polytrauma severity assessed: ${severityScore}/100`, actor: 'AI_CORE' },
                     { status: 'AMBULANCE_ASSIGNED', timestamp: new Date(), description: `Allocated ${selectedAmb ? selectedAmb.code : 'None'}: ${ambOptimization.reason}`, actor: 'OPTIMIZER' },
                     { status: 'HOSPITAL_SELECTED', timestamp: new Date(), description: `Matched ${selectedHosp ? selectedHosp.name : 'None'}: ${hospOptimization.reason}`, actor: 'OPTIMIZER' },
-                    { status: 'HOSPITAL_PRE_ALERTED', timestamp: new Date(), description: `Zero-Minute Trauma Pre-Alert sent to ${selectedHosp ? selectedHosp.name : 'ER'}`, actor: 'DISPATCH' }
+                    { status: 'HOSPITAL_PRE_ALERTED', timestamp: new Date(), description: `Zero-Minute Trauma Pre-Alert prepared for ${selectedHosp ? selectedHosp.name : 'ER'}`, actor: 'DISPATCH' }
                 ],
                 createdAt: new Date().toISOString()
             };
@@ -124,12 +184,14 @@ module.exports = (io) => {
                 });
             }
 
-            // Real-time WebSocket emissions across canonical & legacy event channels
+            // Real-time WebSocket emissions
             io.emit('incident:new', saved);
             io.emit('newEmergency', saved);
             if (selectedAmb) io.emit('ambulance:assigned', { incidentId: incId, ambulance: selectedAmb, route: combinedRoute });
             if (selectedHosp) io.emit('hospital:selected', { incidentId: incId, hospital: selectedHosp });
             if (preAlert) io.emit('hospital:prealert', preAlert);
+
+            console.log(`[DISPATCH] Incident ${incId} assigned to ${selectedAmb ? selectedAmb.code : 'None'} | [HOSPITAL] Pre-alerted ${selectedHosp ? selectedHosp.name : 'None'}`);
 
             return res.status(201).json({
                 success: true,
@@ -147,7 +209,7 @@ module.exports = (io) => {
                 hospitalPreAlert: preAlert
             });
         } catch (err) {
-            console.error('Detection Error:', err);
+            console.error('[BACKEND] Detection Error:', err);
             return res.status(500).json({ error: 'Internal Server Error during Incident Ingestion', details: err.message });
         }
     };
@@ -176,7 +238,7 @@ module.exports = (io) => {
             const incident = await db.getIncident(incId);
             if (!incident) return res.status(404).json({ error: 'Incident not found' });
 
-            const ambId = req.body.ambulanceId || incident.ambulanceId || 'AMB-01';
+            const ambId = req.body.ambulanceId ?? incident.ambulanceId ?? 'AMB-01';
 
             await db.updateAmbulance(ambId, {
                 status: 'EN_ROUTE',
@@ -194,7 +256,13 @@ module.exports = (io) => {
             io.emit('incidentUpdated', updated);
             io.emit('ambulance:status', { ambulanceId: ambId, status: 'EN_ROUTE', incidentId: incId });
 
-            return res.json({ success: true, incident: updated });
+            console.log(`[DISPATCH] Operator confirmed dispatch of unit ${ambId} for incident ${incId}`);
+
+            return res.json({
+                success: true,
+                message: `Ambulance ${ambId} dispatched and en route.`,
+                incident: updated
+            });
         } catch (err) {
             return res.status(500).json({ error: err.message });
         }
@@ -209,7 +277,7 @@ module.exports = (io) => {
             if (!incident) return res.status(404).json({ error: 'Incident not found' });
 
             const failedAmbId = incident.ambulanceId;
-            console.log(`[Failover Engine] Triggered for Incident ${incId}. Marking ${failedAmbId} as UNAVAILABLE.`);
+            console.log(`[FAILOVER] Triggered for Incident ${incId}. Marking ${failedAmbId} as UNAVAILABLE.`);
 
             // 1. Mark failed unit unavailable
             if (failedAmbId) {
@@ -235,11 +303,12 @@ module.exports = (io) => {
             const hosp = incident.hospitalId ? await db.getHospital(incident.hospitalId) : hospitals[0];
 
             // 3. Re-calculate 2-leg OSRM route for new ambulance
-            const newRoute = await OSRMService.getTwoLegRoute(
-                newAmb.lng, newAmb.lat,
-                incident.longitude, incident.latitude,
-                hosp.lng, hosp.lat
-            );
+            const newRoute = (incident.longitude && incident.latitude && hosp) ?
+                await OSRMService.getTwoLegRoute(
+                    newAmb.lng, newAmb.lat,
+                    incident.longitude, incident.latitude,
+                    hosp.lng, hosp.lat
+                ) : { success: false, isFallback: true, distanceKm: null, etaMinutes: null, geometry: null };
 
             // 4. Update new ambulance to EN_ROUTE
             await db.updateAmbulance(newAmb.id, {
@@ -255,7 +324,7 @@ module.exports = (io) => {
                 ambulanceReason: `[FAILOVER REASSIGNED] ${ambOptimization.reason}`,
                 route: newRoute,
                 status: 'EN_ROUTE',
-                statusDescription: `Automated failover from ${failedAmbId || 'Primary'} to ${newAmb.code}`,
+                statusDescription: `Automated failover from ${failedAmbId ?? 'Primary'} to ${newAmb.code}`,
                 actor: 'FAILOVER_ENGINE'
             });
 
@@ -266,6 +335,8 @@ module.exports = (io) => {
             io.emit('ambulance:status', { ambulanceId: failedAmbId, status: 'UNAVAILABLE' });
             io.emit('ambulance:status', { ambulanceId: newAmb.id, status: 'EN_ROUTE', incidentId: incId });
 
+            console.log(`[FAILOVER] Unit ${newAmb.code} re-assigned to incident ${incId}`);
+
             return res.json({
                 success: true,
                 message: `Failover successful. Unit ${newAmb.code} dispatched.`,
@@ -274,7 +345,7 @@ module.exports = (io) => {
                 ranking: ambOptimization.ranking
             });
         } catch (err) {
-            console.error('Failover Error:', err);
+            console.error('[FAILOVER] Error:', err);
             return res.status(500).json({ error: err.message });
         }
     };
@@ -284,7 +355,7 @@ module.exports = (io) => {
     const handleResolve = async (req, res) => {
         try {
             const incId = req.params.id;
-            const resolved = await db.resolveIncident(incId, req.body.reason || 'Incident resolved and patient admitted');
+            const resolved = await db.resolveIncident(incId, req.body.reason ?? 'Incident resolved and patient admitted');
             if (!resolved) return res.status(404).json({ error: 'Incident not found' });
 
             io.emit('incident:resolved', { incidentId: incId, resolvedAt: resolved.resolvedAt });
@@ -292,6 +363,8 @@ module.exports = (io) => {
             if (resolved.ambulanceId) {
                 io.emit('ambulance:status', { ambulanceId: resolved.ambulanceId, status: 'AVAILABLE' });
             }
+
+            console.log(`[BACKEND] Incident ${incId} RESOLVED. Archived in Response History.`);
 
             return res.json({ success: true, incident: resolved });
         } catch (err) {

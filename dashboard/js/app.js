@@ -107,9 +107,28 @@ const HOSP_SEED = [
   { id: "HOSP-04", name: "Deenanath General Hospital", lat: 18.4980, lng: 73.8290, capacity: "AVAILABLE", trauma: false, emergency: "AVAILABLE" }
 ];
 
-function seedFleet() {
-  FLEET_SEED.forEach((a) => updateAmbulance({ ...a }));
-  HOSP_SEED.forEach((h) => updateHospital({ ...h }));
+async function seedFleet() {
+  try {
+    const [ambRes, hospRes] = await Promise.all([
+      fetch(API + "/fleet/ambulances"),
+      fetch(API + "/fleet/hospitals")
+    ]);
+    const ambs = await ambRes.json();
+    const hosps = await hospRes.json();
+    if (Array.isArray(ambs) && ambs.length > 0) {
+      ambs.forEach((a) => updateAmbulance(a));
+    } else {
+      FLEET_SEED.forEach((a) => updateAmbulance({ ...a }));
+    }
+    if (Array.isArray(hosps) && hosps.length > 0) {
+      hosps.forEach((h) => updateHospital(h));
+    } else {
+      HOSP_SEED.forEach((h) => updateHospital({ ...h }));
+    }
+  } catch (e) {
+    FLEET_SEED.forEach((a) => updateAmbulance({ ...a }));
+    HOSP_SEED.forEach((h) => updateHospital({ ...h }));
+  }
   renderKPIs();
 }
 
@@ -514,21 +533,28 @@ async function drawRoute(id) {
   const hosp = state.hospitals[r.hospitalId];
   if (!amb) return;
   let coords = null, distKm = null, etaMin = r.etaMin, geometrySource = "STRAIGHT LINE (OSRM UNAVAILABLE)";
-  try {
-    const t0 = performance.now();
-    const res = await fetch(`${OSRM}/route/v1/driving/${amb.lng},${amb.lat};${inc.longitude},${inc.latitude}?overview=full&geometries=geojson`);
-    const data = await res.json();
-    const route = data && data.routes && data.routes[0];
-    if (route) {
-      coords = route.geometry.coordinates.map((c) => [c[1], c[0]]);
-      distKm = (route.distance / 1000).toFixed(1);
-      etaMin = Math.max(2, Math.round(route.duration / 60));
-      geometrySource = "OSRM ROAD";
-      setHealth("Routing", true);
-      state.perf[id] = { ...(state.perf[id] || {}), "Route computation": Math.round(performance.now() - t0) };
+  if (inc.route && inc.route.geometry && Array.isArray(inc.route.geometry.coordinates) && inc.route.geometry.coordinates.length > 0) {
+    coords = inc.route.geometry.coordinates.map((c) => [c[1], c[0]]);
+    distKm = inc.route.distanceKm ? String(inc.route.distanceKm) : distKm;
+    etaMin = inc.route.etaMinutes ? Number(inc.route.etaMinutes) : etaMin;
+    geometrySource = inc.route.isFallback ? "⚠ ROUTING DEGRADED (APPROXIMATION)" : "OSRM ROAD";
+  } else {
+    try {
+      const t0 = performance.now();
+      const res = await fetch(`${OSRM}/route/v1/driving/${amb.lng},${amb.lat};${inc.longitude},${inc.latitude}?overview=full&geometries=geojson`);
+      const data = await res.json();
+      const route = data && data.routes && data.routes[0];
+      if (route) {
+        coords = route.geometry.coordinates.map((c) => [c[1], c[0]]);
+        distKm = (route.distance / 1000).toFixed(1);
+        etaMin = Math.max(2, Math.round(route.duration / 60));
+        geometrySource = "OSRM ROAD";
+        setHealth("Routing", true);
+        state.perf[id] = { ...(state.perf[id] || {}), "Route computation": Math.round(performance.now() - t0) };
+      }
+    } catch (e) {
+      setHealth("Routing", false);
     }
-  } catch (e) {
-    setHealth("Routing", false);
   }
   if (!coords) {
     coords = [[amb.lat, amb.lng], [inc.latitude, inc.longitude]];
