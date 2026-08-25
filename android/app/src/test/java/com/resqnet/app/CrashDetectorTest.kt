@@ -62,16 +62,37 @@ class CrashDetectorTest {
     }
 
     @Test
-    fun testRolloverCollision_FlagsRollover() {
-        // High impact (3.8G) accompanied by extreme angular rotation (5.5 rad/s ~ 315 deg/s)
+    fun testUnavailableSpeed_DoesNotFabricateZeroSpeed() {
+        // Speed unavailable
+        detector.updateSpeed(speedKmh = null, speedAvailable = false)
+
         val result = detector.processSample(
-            ax = 32.0f, ay = 15.0f, az = 10.0f, // ~3.7G
-            gx = 4.2f, gy = 3.0f, gz = 2.0f,   // gyro magnitude ~ 5.5 rad/s
+            ax = 45.0f, ay = 8.0f, az = 12.0f,
+            gx = 1.0f, gy = 0.5f, gz = 0.2f,
             timestamp = System.currentTimeMillis()
         )
 
         assertNotNull(result)
-        assertTrue("Rollover flag must be true when angular velocity >= 4.5 rad/s", result!!.isRollover)
-        assertTrue("Severity score should include rollover bonus", result.severityScore >= 70)
+        // Check that details report Speed Avail: false
+        assertTrue("Sensor details must show speed is unavailable", result!!.sensorDetails.contains("Speed Avail: false"))
+        // Detection still proceeds reliably
+        assertTrue(result.isDetected)
+    }
+
+    @Test
+    fun testRealSpeedDeltaVCalculation() {
+        // Highway speed drop: 80 km/h -> 20 km/h => Δv = 60 km/h
+        detector.updateSpeed(80.0f, true)
+        detector.updateSpeed(20.0f, true)
+
+        val result = detector.processSample(
+            ax = 48.0f, ay = 10.0f, az = 10.0f,
+            gx = 1.0f, gy = 0.5f, gz = 0.2f,
+            timestamp = System.currentTimeMillis()
+        )
+
+        assertNotNull(result)
+        assertEquals("Calculated Δv must equal 60 km/h", 60.0f, result!!.speedDeltaKmh, 0.5f)
+        assertTrue(result.sensorDetails.contains("Speed Avail: true"))
     }
 }

@@ -82,24 +82,26 @@ class ReliabilityTest {
         assertEquals(LocationQuality.FRESH_GPS, freshRecord.locationQuality)
         assertEquals(18.5204, freshRecord.latitude!!, 0.0001)
 
-        // GPS Unavailable fallback
+        // GPS Unavailable fallback (No coordinate fabrication)
         val unavailableRecord = LocalIncidentRecord(
             incidentId = "RNQ-GPS2",
             deviceId = "PIXEL_8",
             userId = "USER_42",
             title = "No GPS Crash",
             timestamp = System.currentTimeMillis(),
-            latitude = 0.0,
-            longitude = 0.0,
-            locationAccuracy = 999.0f,
+            latitude = null,
+            longitude = null,
+            locationAccuracy = null,
             locationQuality = LocationQuality.UNAVAILABLE,
             confidence = 0.95f,
             severity = 90
         )
         assertEquals(LocationQuality.UNAVAILABLE, unavailableRecord.locationQuality)
+        assertNull(unavailableRecord.latitude)
+        assertNull(unavailableRecord.longitude)
         assertNotNull(unavailableRecord.incidentId)
         // Emergency continues despite missing GPS
-        assertTrue(unavailableRecord.severity > 0)
+        assertTrue((unavailableRecord.severity ?: 0) > 0)
     }
 
     @Test

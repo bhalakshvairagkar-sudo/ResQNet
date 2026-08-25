@@ -28,16 +28,24 @@ const IncidentSchema = new mongoose.Schema({
         },
         coordinates: {
             type: [Number], // [longitude, latitude]
-            required: true
+            required: false,
+            default: null
         }
+    },
+    locationQuality: {
+        type: String,
+        enum: ['FRESH_GPS', 'LAST_KNOWN', 'UNAVAILABLE'],
+        default: 'FRESH_GPS'
     },
     latitude: {
         type: Number,
-        required: true
+        required: false,
+        default: null
     },
     longitude: {
         type: Number,
-        required: true
+        required: false,
+        default: null
     },
     gpsAccuracy: {
         type: Number,

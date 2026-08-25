@@ -21,18 +21,21 @@ data class EmergencyPayload(
     @SerializedName("source") val source: String = "smartphone",
     @SerializedName("sourceType") val sourceType: String = "smartphone",
     @SerializedName("title") val title: String = "Smartphone Crash Triggered",
-    @SerializedName("latitude") val latitude: Double,
-    @SerializedName("longitude") val longitude: Double,
+    @SerializedName("latitude") val latitude: Double? = null,
+    @SerializedName("longitude") val longitude: Double? = null,
     @SerializedName("gpsAccuracy") val gpsAccuracy: Float? = null,
+    @SerializedName("locationQuality") val locationQuality: String? = null,
     @SerializedName("gForce") val gForce: Float? = null,
     @SerializedName("speedKmh") val speedKmh: Float? = null,
     @SerializedName("speedDeltaKmh") val speedDeltaKmh: Float? = null,
+    @SerializedName("speedAvailable") val speedAvailable: Boolean = false,
     @SerializedName("rollover") val rollover: Boolean = false,
-    @SerializedName("confidence") val confidence: Float = 0.94f,
+    @SerializedName("confidence") val confidence: Float? = null,
     @SerializedName("severity") val severity: Int? = null,
     @SerializedName("status") val status: String = "DETECTED",
-    @SerializedName("userMedicalInfo") val userMedicalInfo: String? = "Blood: O+ | No Allergies",
-    @SerializedName("timestamp") val timestamp: String? = null
+    @SerializedName("userMedicalInfo") val userMedicalInfo: String? = null,
+    @SerializedName("timestamp") val timestamp: String? = null,
+    @SerializedName("isDemo") val isDemo: Boolean = false
 )
 
 data class IncidentResponse(

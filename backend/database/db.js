@@ -207,9 +207,10 @@ class DataStore {
 
         if (this.isMongoConnected) {
             try {
+                const hasCoordinates = (normalized.latitude !== null && normalized.longitude !== null);
                 const doc = {
                     ...normalized,
-                    location: normalized.location || { type: 'Point', coordinates: [normalized.longitude, normalized.latitude] }
+                    location: hasCoordinates ? (normalized.location || { type: 'Point', coordinates: [normalized.longitude, normalized.latitude] }) : null
                 };
                 await Incident.findOneAndUpdate({ incidentId: id }, doc, { upsert: true, new: true });
             } catch (err) {
@@ -222,8 +223,12 @@ class DataStore {
     async getIncident(id) {
         if (this.isMongoConnected) {
             try {
-                const found = await Incident.findOne({ incidentId: id });
-                if (found) return found.toObject();
+                const found = await Incident.findOne({ $or: [{ incidentId: id }, { id: id }] });
+                if (found) {
+                    const obj = found.toObject();
+                    obj.id = obj.incidentId || obj.id || id;
+                    return obj;
+                }
             } catch (e) { }
         }
         return this.incidents.get(id) || null;
