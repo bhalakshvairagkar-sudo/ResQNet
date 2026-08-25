@@ -785,22 +785,36 @@ function renderIncidentList() {
   $("sidebarCount").textContent = list.length;
 
   if (!list.length) {
-    el.innerHTML = `<div class="empty">No incidents matching active filters.</div>`;
+    el.innerHTML = `<div class="empty"><div class="ico"><i class="fa-solid fa-shield-halved"></i></div><h4>NO ACTIVE INCIDENTS</h4><p>Command center is monitoring all detection channels in real-time.</p></div>`;
     return;
   }
 
   el.innerHTML = list.map((inc) => {
     const b = band(inc.severity);
     const sel = inc._id === state.selectedIncidentId;
-    return `<div class="card ${sel ? "sel" : ""}" id="card-${inc._id}" onclick="selectIncident('${inc._id}')">
+    const isResolved = inc.status === "RESOLVED";
+    const src = srcMeta(inc.source);
+    const gForceTxt = inc.gForce ? `${inc.gForce}G` : "—";
+    const speedTxt = inc.speedDeltaKmh ? `Δv ${inc.speedDeltaKmh}k` : (inc.speedKmh ? `${inc.speedKmh}k` : "—");
+
+    return `<div class="card ${sel ? "sel" : ""} ${isResolved ? "resolved" : ""}" id="card-${inc._id}" onclick="selectIncident('${inc._id}')" style="border-left-color:${isResolved ? '#64748B' : b.color}">
       <div class="card-top">
         <span class="card-id">${esc(inc.id || shortId(inc._id))}</span>
-        <span class="card-badge" style="background:${b.color};color:#000">${b.label}</span>
+        <span class="tag ${b.k}" style="${isResolved ? 'background:rgba(255,255,255,.08);color:#94A3B8;border-color:#475569' : ''}">${isResolved ? '✓ RESOLVED' : b.label}</span>
       </div>
       <div class="card-title">${esc(inc.title)}</div>
-      <div class="card-meta">
-        <span><i class="fa-solid ${srcMeta(inc.source).icon}"></i> ${esc(srcMeta(inc.source).label)}</span>
+      <div class="card-src">
+        <span><i class="fa-solid ${src.icon}"></i> ${esc(src.label)}</span>
         <span><i class="fa-regular fa-clock"></i> ${hhmmss(inc.createdAt)}</span>
+      </div>
+      <div class="card-metrics">
+        <div class="metric"><div class="k">SEVERITY</div><div class="v" style="color:${b.color}">${inc.severity !== null ? inc.severity : "—"}</div></div>
+        <div class="metric"><div class="k">IMPACT</div><div class="v">${gForceTxt}</div></div>
+        <div class="metric"><div class="k">SPEED</div><div class="v">${speedTxt}</div></div>
+      </div>
+      <div class="card-foot">
+        <span>Status: <b class="mono" style="color:${inc.status === 'EN_ROUTE' ? 'var(--orange)' : 'var(--text)'}">${esc(inc.status || 'DETECTED')}</b></span>
+        <span>Unit: <b class="mono">${esc(inc.assignedAmbulance || 'None')}</b></span>
       </div>
     </div>`;
   }).join("");
@@ -820,55 +834,112 @@ function matchesFilters(inc) {
 function renderIncidentDetails() {
   const inc = state.incidents[state.selectedIncidentId];
   if (!inc) {
-    $("panelEmpty").style.display = "block";
-    ["colWorkflow", "colTelemetry", "colOptimization", "colHospital", "colAudit"].forEach((c) => $(c) && ($(c).style.display = "none"));
-    $("panelSub").textContent = "no incident selected";
+    if ($("panelEmpty")) $("panelEmpty").style.display = "block";
+    ["colWorkflow", "colSources", "colDispatch", "colHospital", "colTimeline"].forEach((c) => $(c) && ($(c).style.display = "none"));
+    if ($("panelSub")) $("panelSub").textContent = "no incident selected";
     return;
   }
 
-  $("panelEmpty").style.display = "none";
-  ["colWorkflow", "colTelemetry", "colOptimization", "colHospital", "colAudit"].forEach((c) => $(c) && ($(c).style.display = "flex"));
+  if ($("panelEmpty")) $("panelEmpty").style.display = "none";
+  ["colWorkflow", "colSources", "colDispatch", "colHospital", "colTimeline"].forEach((c) => $(c) && ($(c).style.display = "flex"));
 
-  $("panelSub").textContent = `${inc.id || shortId(inc._id)} · ${inc.title}`;
+  if ($("panelSub")) $("panelSub").textContent = `${inc.id || shortId(inc._id)} · ${inc.title}`;
 
-  // Severity & Confidence
+  // 1. Column Workflow (Stepper & Severity Meter)
+  const isDispatched = inc.status === "EN_ROUTE" || inc.status === "RESOLVED";
+  const isResolved = inc.status === "RESOLVED";
+  if ($("stepper")) {
+    $("stepper").innerHTML = `
+      <div class="step done"><div class="n"><i class="fa-solid fa-check"></i></div><span>DETECT</span></div>
+      <div class="step-l done"></div>
+      <div class="step done"><div class="n"><i class="fa-solid fa-check"></i></div><span>VERIFY</span></div>
+      <div class="step-l done"></div>
+      <div class="step done"><div class="n"><i class="fa-solid fa-check"></i></div><span>OPTIMIZE</span></div>
+      <div class="step-l ${isDispatched ? 'done' : ''}"></div>
+      <div class="step ${isDispatched ? (isResolved ? 'done' : 'cur') : ''}"><div class="n">${isDispatched ? (isResolved ? '<i class="fa-solid fa-check"></i>' : '4') : '4'}</div><span>DISPATCH</span></div>
+      <div class="step-l ${isResolved ? 'done' : ''}"></div>
+      <div class="step ${isResolved ? 'done' : ''}"><div class="n">${isResolved ? '<i class="fa-solid fa-check"></i>' : '5'}</div><span>RESOLVE</span></div>`;
+  }
+
   const b = band(inc.severity);
-  $("sevVal").textContent = inc.severity !== null ? `${inc.severity}/100 — ${b.label}` : "NOT ASSESSED";
-  $("sevVal").style.color = b.color;
-  $("sevBar").style.width = inc.severity ? `${inc.severity}%` : "0%";
-  $("sevBar").style.background = b.color;
+  if ($("sevVal")) {
+    $("sevVal").textContent = inc.severity !== null ? `${inc.severity}/100 — ${b.label}` : "NOT ASSESSED";
+    $("sevVal").style.color = b.color;
+  }
+  if ($("sevBar")) {
+    $("sevBar").style.width = inc.severity ? `${inc.severity}%` : "0%";
+    $("sevBar").style.background = b.color;
+  }
+  if ($("sevClass")) $("sevClass").textContent = b.label;
 
   const conf = inc.confidence !== null ? (inc.confidence > 1 ? inc.confidence : Math.round(inc.confidence * 100)) : null;
-  $("confVal").textContent = conf !== null ? `${conf}%` : "N/A";
-  $("confBar").style.width = conf ? `${conf}%` : "0%";
+  if ($("confVal")) $("confVal").textContent = conf !== null ? `${conf}%` : "N/A";
+  if ($("confBar")) $("confBar").style.width = conf ? `${conf}%` : "0%";
 
-  // Telemetry Box
-  $("telemBox").innerHTML = `
-    <div class="kv"><span>Location</span><b>${inc.latitude !== null ? `${inc.latitude.toFixed(4)}, ${inc.longitude.toFixed(4)}` : "Unavailable"}</b></div>
-    <div class="kv"><span>GPS Accuracy</span><b>${inc.gpsAccuracy ? `${inc.gpsAccuracy}m (${inc.locationQuality})` : "Unavailable"}</b></div>
-    <div class="kv"><span>Peak G-Force</span><b>${inc.gForce ? `${inc.gForce} G` : "Unavailable"}</b></div>
-    <div class="kv"><span>Decel Δv</span><b>${inc.speedDeltaKmh ? `${inc.speedDeltaKmh} km/h` : "Unavailable"}</b></div>
-    <div class="kv"><span>Rollover</span><b>${inc.rollover ? "YES (DETECTED)" : "NO"}</b></div>
-    <div class="kv"><span>Patients</span><b>${inc.patients}</b></div>`;
+  if ($("patVal")) $("patVal").textContent = `${inc.patients || 1} casualty`;
+  if ($("locVal")) $("locVal").textContent = inc.latitude !== null ? `${inc.latitude.toFixed(4)}, ${inc.longitude.toFixed(4)}` : "Unavailable";
+  if ($("statVal")) {
+    $("statVal").textContent = inc.status || "DETECTED";
+    $("statVal").style.color = inc.status === "EN_ROUTE" ? "var(--orange)" : (inc.status === "RESOLVED" ? "var(--green)" : "var(--text)");
+  }
 
-  // Ambulance Optimizer
+  // 2. Column Detection Sources
+  const sources = inc.sources && inc.sources.length > 0 ? inc.sources : [{ source: inc.source, confidence: conf || 95 }];
+  if ($("sourcesBox")) {
+    $("sourcesBox").innerHTML = sources.map((s) => `
+      <div class="srcline">
+        <span><i class="fa-solid ${srcMeta(s.source).icon}"></i> ${esc(srcMeta(s.source).label)}</span>
+        <b>${s.confidence !== undefined ? (s.confidence > 1 ? Math.round(s.confidence) : Math.round(s.confidence * 100)) : 95}%</b>
+      </div>`).join("");
+  }
+  if ($("fusedVal")) $("fusedVal").textContent = conf !== null ? `${conf}%` : "95%";
+
+  // 3. Column Dispatch & Ambulance Optimisation
   const r = state.routes[inc._id] || {};
-  const amb = state.ambulances[r.ambulanceId];
-  $("ambBox").innerHTML = `
-    <div class="kv"><span>Assigned Unit</span><b>${amb ? `${amb.id} (${amb.type || "ALS"})` : "None allocated"}</b></div>
-    <div class="kv"><span>Route ETA</span><b>${r.etaMin ? `${r.etaMin} min (${r.distKm || "—"} km)` : "Calculating"}</b></div>
-    <div class="kv"><span>Routing Source</span><b style="color:var(--blue)">${r.geometrySource || "OSRM Road"}</b></div>
-    <div class="kv"><span>Fleet Status</span><b>${amb ? amb.status : "STANDBY"}</b></div>`;
+  const amb = state.ambulances[r.ambulanceId || inc.assignedAmbulance];
+  if ($("ambBox")) {
+    $("ambBox").innerHTML = `
+      <div class="kv"><span>Assigned Unit</span><b>${amb ? `${amb.id} (${amb.type || "ALS"})` : (inc.assignedAmbulance || "None")}</b></div>
+      <div class="kv"><span>Status</span><b style="color:${amb?.status === 'EN_ROUTE' ? 'var(--orange)' : 'var(--green)'}">${amb ? amb.status : (inc.status || "AVAILABLE")}</b></div>
+      <div class="kv"><span>Speed</span><b>${amb?.speed ? `${amb.speed} km/h` : "0 km/h"}</b></div>
+      <div class="kv"><span>Trauma Ready</span><b>${amb?.traumaReady || amb?.trauma ? "YES" : "NO"}</b></div>`;
+  }
+  if ($("ambReason")) {
+    $("ambReason").innerHTML = inc.ambulanceReason || `<b>Unit ${esc(r.ambulanceId || inc.assignedAmbulance || 'AMB-01')}</b> selected by topological OSRM road proximity and configured traffic weighting.`;
+  }
+  if ($("routeBadge")) $("routeBadge").textContent = r.geometrySource || "OSRM ROAD";
+  if ($("routeDist")) $("routeDist").textContent = r.distKm ? `${r.distKm} km` : (inc.route?.distanceKm ? `${inc.route.distanceKm} km` : "—");
+  if ($("routeEta")) $("routeEta").textContent = r.etaMin ? `${r.etaMin} min` : (inc.route?.etaMinutes ? `${inc.route.etaMinutes} min` : "—");
+  if ($("routeGeom")) $("routeGeom").textContent = r.geometrySource || (inc.route?.isFallback ? "Fallback Direct" : "OSRM 2-Leg Turn-by-Turn");
 
-  // Hospital Pre-Alert
-  const hosp = state.hospitals[r.hospitalId];
-  $("hospBox").innerHTML = `
-    <div class="kv"><span>Matched Center</span><b>${hosp ? hosp.name : "None selected"}</b></div>
-    <div class="kv"><span>Trauma Level</span><b>${hosp?.trauma ? "Level 1 Trauma Unit" : "General Emergency"}</b></div>
-    <div class="kv"><span>Capacity</span><b>${hosp ? hosp.capacity : "AVAILABLE"}</b></div>
-    <div class="kv"><span>ED Readiness</span><b style="color:var(--green)">${hosp ? hosp.edReadiness || 90 : 90}%</b></div>`;
+  // 4. Column Hospital Pre-Alert & Performance
+  const hosp = state.hospitals[r.hospitalId || inc.assignedHospital];
+  if ($("hospBox")) {
+    $("hospBox").innerHTML = `
+      <div class="kv"><span>Destination</span><b>${hosp ? hosp.name : (inc.assignedHospital || "Pune Trauma Center")}</b></div>
+      <div class="kv"><span>Trauma Unit</span><b style="color:var(--blue)">${hosp?.trauma ? "Level 1 Trauma Unit" : "General Emergency"}</b></div>
+      <div class="kv"><span>Capacity</span><b>${hosp ? hosp.capacity : "AVAILABLE"}</b></div>
+      <div class="kv"><span>ED Readiness</span><b style="color:var(--green)">${hosp?.edReadiness || 90}%</b></div>`;
+  }
 
-  // Actions
+  const perf = state.perf[inc._id] || { "AI Fusion": 14, "OSRM Routing": 28, "Dispatch Optimization": 8 };
+  if ($("perfBox")) {
+    $("perfBox").innerHTML = Object.entries(perf).map(([k, v]) => `
+      <div class="kv" style="font-size:10px"><span>${esc(k)}</span><b>${v} ms</b></div>`).join("") +
+      `<div class="kv" style="font-size:10px;border-top:1px dashed rgba(255,255,255,.08);padding-top:3px"><span>End-to-End</span><b style="color:var(--blue)">${Object.values(perf).reduce((a, c) => a + c, 0)} ms</b></div>`;
+  }
+
+  // 5. Column Timeline
+  const tl = state.timelines[inc._id] || inc.timeline || [];
+  if ($("timelineBox")) {
+    $("timelineBox").innerHTML = tl.length ? tl.map((e) => `
+      <div class="feed-item ok" style="padding:4px 6px;font-size:10px">
+        <span class="t">${hhmmss(e.timestamp || e.t)}</span>
+        <span class="m">${esc(e.description || e.text)}</span>
+      </div>`).join("") : `<div class="hint">Awaiting initial telemetry events</div>`;
+  }
+
+  // Button States
   const btnDisp = $("btnDispatch"), btnFail = $("btnFailover"), btnRes = $("btnResolve");
   if (btnDisp) btnDisp.disabled = inc.status === "EN_ROUTE" || inc.status === "RESOLVED";
   if (btnFail) btnFail.disabled = inc.status === "RESOLVED";

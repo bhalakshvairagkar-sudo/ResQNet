@@ -63,36 +63,40 @@
     </div>
 
     <div class="map-topbar">
-      <!-- MAP STYLE SELECTOR -->
-      <div class="map-style-control">
+      <!-- CLUSTER 1: MAP PROVIDER SELECTOR -->
+      <div class="ctrl-group">
         <label for="mapStyleSelect" class="sr-only">Map View Style</label>
         <select id="mapStyleSelect" class="mselect" data-testid="map-style-select" title="Change Map Provider / Style">
-          <option value="dark">🗺️ Dark Matter (Night)</option>
-          <option value="standard">🛣️ Standard Road Map</option>
+          <option value="dark">🗺️ Dark Matter</option>
+          <option value="standard">🛣️ Standard Roads</option>
           <option value="light">🏙️ Light Positron</option>
           <option value="satellite">🛰️ Satellite Imagery</option>
-          <option value="hybrid">🛰️ Hybrid (Sat + Roads)</option>
+          <option value="hybrid">🛰️ Hybrid (Sat+Roads)</option>
           <option value="terrain">⛰️ Topo Terrain</option>
         </select>
       </div>
 
-      <!-- OPERATIONAL LAYER TOGGLES -->
-      <button class="mbtn on" data-layer="incidents" data-testid="layer-incidents"><i class="fa-solid fa-triangle-exclamation"></i> INCIDENTS</button>
-      <button class="mbtn on" data-layer="ambulances" data-testid="layer-ambulances"><i class="fa-solid fa-truck-medical"></i> FLEET</button>
-      <button class="mbtn on" data-layer="hospitals" data-testid="layer-hospitals"><i class="fa-solid fa-hospital"></i> HOSPITALS</button>
-      <button class="mbtn on" data-layer="routes" data-testid="layer-routes"><i class="fa-solid fa-route"></i> ROUTES</button>
-      <button class="mbtn on" data-layer="cctv" data-testid="layer-cctv"><i class="fa-solid fa-video"></i> CCTV & FOV</button>
-      <button class="mbtn on" data-layer="hotspots" data-testid="layer-hotspots"><i class="fa-solid fa-fire"></i> BLACKSPOTS</button>
-      <button class="mbtn" data-layer="traffic" data-testid="layer-traffic"><i class="fa-solid fa-car"></i> TRAFFIC</button>
+      <!-- CLUSTER 2: OPERATIONAL LAYER TOGGLES -->
+      <div class="ctrl-group">
+        <button class="mbtn on" data-layer="incidents" data-testid="layer-incidents" title="Toggle Emergency Incidents"><i class="fa-solid fa-triangle-exclamation"></i> INCIDENTS</button>
+        <button class="mbtn on" data-layer="ambulances" data-testid="layer-ambulances" title="Toggle Ambulance Fleet"><i class="fa-solid fa-truck-medical"></i> FLEET</button>
+        <button class="mbtn on" data-layer="hospitals" data-testid="layer-hospitals" title="Toggle Trauma Hospitals"><i class="fa-solid fa-hospital"></i> HOSPITALS</button>
+        <button class="mbtn on" data-layer="routes" data-testid="layer-routes" title="Toggle 2-Leg OSRM Routes"><i class="fa-solid fa-route"></i> ROUTES</button>
+        <button class="mbtn on" data-layer="cctv" data-testid="layer-cctv" title="Toggle CCTV Cameras & Detection Cones"><i class="fa-solid fa-video"></i> CCTV</button>
+        <button class="mbtn on" data-layer="hotspots" data-testid="layer-hotspots" title="Toggle Crash Blackspots"><i class="fa-solid fa-fire"></i> BLACKSPOTS</button>
+        <button class="mbtn" data-layer="traffic" data-testid="layer-traffic" title="Toggle Traffic Context"><i class="fa-solid fa-car"></i> TRAFFIC</button>
+      </div>
 
       <span class="map-spacer"></span>
 
-      <!-- OPERATIONAL CONTROLS -->
-      <button class="mbtn" id="fitAllBtn" data-testid="fit-all-button" title="Fit all active incidents & fleet"><i class="fa-solid fa-expand"></i> FIT ALL</button>
-      <button class="mbtn" id="focusIncBtn" data-testid="focus-incident-button" title="Focus selected incident response"><i class="fa-solid fa-crosshairs"></i> FOCUS INCIDENT</button>
-      <button class="mbtn" id="fitFleetBtn" data-testid="fit-fleet-button" title="Fit all ambulance units"><i class="fa-solid fa-truck"></i> FIT FLEET</button>
-      <button class="mbtn icon-only" id="fullScreenBtn" data-testid="fullscreen-button" title="Toggle Fullscreen Map"><i class="fa-solid fa-up-right-and-down-left-from-center"></i></button>
-      <button class="mbtn icon-only" id="legendToggleBtn" data-testid="legend-toggle-button" title="Toggle Map Legend"><i class="fa-solid fa-list"></i></button>
+      <!-- CLUSTER 3: OPERATIONAL CAMERA & VIEW TOOLS -->
+      <div class="ctrl-group">
+        <button class="mbtn" id="fitAllBtn" data-testid="fit-all-button" title="Fit all active map entities"><i class="fa-solid fa-expand"></i> FIT ALL</button>
+        <button class="mbtn" id="focusIncBtn" data-testid="focus-incident-button" title="Focus Selected Incident Response"><i class="fa-solid fa-crosshairs"></i> FOCUS</button>
+        <button class="mbtn" id="fitFleetBtn" data-testid="fit-fleet-button" title="Fit Ambulance Fleet"><i class="fa-solid fa-truck"></i> FLEET</button>
+        <button class="mbtn icon-only" id="fullScreenBtn" data-testid="fullscreen-button" title="Toggle Fullscreen Map"><i class="fa-solid fa-up-right-and-down-left-from-center"></i></button>
+        <button class="mbtn icon-only" id="legendToggleBtn" data-testid="legend-toggle-button" title="Toggle Tactical Legend"><i class="fa-solid fa-list"></i></button>
+      </div>
     </div>
 
     <!-- ENHANCED TACTICAL MAP LEGEND -->
