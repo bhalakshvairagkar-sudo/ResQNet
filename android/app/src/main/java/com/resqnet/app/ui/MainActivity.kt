@@ -3,7 +3,6 @@ package com.resqnet.app.ui
 import android.Manifest
 import android.content.Context
 import android.content.Intent
-import android.content.pm.PackageManager
 import android.hardware.Sensor
 import android.hardware.SensorEvent
 import android.hardware.SensorEventListener
@@ -29,17 +28,18 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.core.content.ContextCompat
 import androidx.lifecycle.lifecycleScope
 import com.resqnet.app.data.api.ApiClient
-import com.resqnet.app.data.api.EmergencyPayload
-import com.resqnet.app.data.api.IncidentDto
+import com.resqnet.app.data.local.LocalIncidentRecord
 import com.resqnet.app.data.repository.IncidentRepository
 import com.resqnet.app.domain.model.CrashDetectionResult
+import com.resqnet.app.domain.model.LocationQuality
+import com.resqnet.app.domain.model.SubmissionStatus
 import com.resqnet.app.location.AppLocationManager
+import com.resqnet.app.location.LocationData
+import com.resqnet.app.network.NetworkMonitor
 import com.resqnet.app.service.CrashDetectionService
 import kotlinx.coroutines.launch
 import kotlin.math.sqrt
@@ -49,11 +49,12 @@ class MainActivity : ComponentActivity(), SensorEventListener {
     private lateinit var sensorManager: SensorManager
     private var accelerometer: Sensor? = null
     private var currentGForce by mutableFloatStateOf(1.0f)
-    private var activeIncident by mutableStateOf<IncidentDto?>(null)
     private var isShieldActive by mutableStateOf(true)
+    private var pendingCountState by mutableIntStateOf(0)
 
     private lateinit var repository: IncidentRepository
     private lateinit var locationManager: AppLocationManager
+    private lateinit var networkMonitor: NetworkMonitor
 
     private val permissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
@@ -69,6 +70,7 @@ class MainActivity : ComponentActivity(), SensorEventListener {
 
         repository = IncidentRepository(this)
         locationManager = AppLocationManager(this)
+        networkMonitor = NetworkMonitor.getInstance(this)
 
         sensorManager = getSystemService(Context.SENSOR_SERVICE) as SensorManager
         accelerometer = sensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER)
@@ -76,9 +78,11 @@ class MainActivity : ComponentActivity(), SensorEventListener {
         requestRequiredPermissions()
         startCrashShieldService()
 
-        // Flush any offline queued incidents on start
+        // MODULE K: Process Restart Recovery — resume unconfirmed incidents
+        refreshPendingCount()
         lifecycleScope.launch {
-            repository.flushOfflineQueue()
+            repository.flushPendingRetries()
+            refreshPendingCount()
         }
 
         setContent {
@@ -89,11 +93,14 @@ class MainActivity : ComponentActivity(), SensorEventListener {
                     primary = Color(0xFF3B82F6)
                 )
             ) {
+                val isOnline by networkMonitor.isOnline.collectAsState()
+
                 ResQNetAppUI(
                     currentGForce = currentGForce,
                     isShieldActive = isShieldActive,
-                    activeIncident = activeIncident,
-                    onTriggerSOS = { triggerManualSOS() },
+                    isOnline = isOnline,
+                    pendingIncidentCount = pendingCountState,
+                    onTriggerSOS = { triggerReliableSOS() },
                     onSimulateCrashSpike = { simulateCrashSpike() },
                     onToggleShield = { enabled ->
                         isShieldActive = enabled
@@ -102,9 +109,22 @@ class MainActivity : ComponentActivity(), SensorEventListener {
                     onUpdateBackendUrl = { url ->
                         ApiClient.setBaseUrl(url)
                         Toast.makeText(this, "Backend URL Updated: $url", Toast.LENGTH_SHORT).show()
+                    },
+                    onFlushRetries = {
+                        lifecycleScope.launch {
+                            val flushed = repository.flushPendingRetries()
+                            refreshPendingCount()
+                            Toast.makeText(this@MainActivity, "Flushed $flushed pending incidents", Toast.LENGTH_SHORT).show()
+                        }
                     }
                 )
             }
+        }
+    }
+
+    private fun refreshPendingCount() {
+        pendingCountState = repository.getAllLocalIncidents().count {
+            it.submissionStatus != SubmissionStatus.CONFIRMED
         }
     }
 
@@ -124,8 +144,10 @@ class MainActivity : ComponentActivity(), SensorEventListener {
         accelerometer?.let {
             sensorManager.registerListener(this, it, SensorManager.SENSOR_DELAY_UI)
         }
+        refreshPendingCount()
         lifecycleScope.launch {
-            repository.flushOfflineQueue()
+            repository.flushPendingRetries()
+            refreshPendingCount()
         }
     }
 
@@ -174,7 +196,7 @@ class MainActivity : ComponentActivity(), SensorEventListener {
         startActivity(intent)
     }
 
-    private fun triggerManualSOS() {
+    private fun triggerReliableSOS() {
         lifecycleScope.launch {
             locationManager.acquireLatestLocation { loc ->
                 lifecycleScope.launch {
@@ -190,18 +212,17 @@ class MainActivity : ComponentActivity(), SensorEventListener {
                         isRollover = false,
                         gyroMagnitude = 0f
                     )
-                    val payload = repository.createPayload(fakeCrash, loc).copy(
-                        eventType = "SOS",
-                        source = "citizen",
-                        title = "1-Tap Driver Emergency SOS"
-                    )
 
-                    val result = repository.submitIncident(payload)
+                    val record = repository.createAndSaveLocalIncident(fakeCrash, loc)
+                    refreshPendingCount()
+
+                    val result = repository.submitIncidentReliably(record)
+                    refreshPendingCount()
+
                     if (result.isSuccess) {
-                        activeIncident = result.getOrNull()
-                        Toast.makeText(this@MainActivity, "SOS Dispatched! Unit Assigned: ${activeIncident?.ambulanceId ?: "AMB-01"}", Toast.LENGTH_LONG).show()
+                        Toast.makeText(this@MainActivity, "SOS Dispatched & Confirmed! (ID: ${record.incidentId})", Toast.LENGTH_LONG).show()
                     } else {
-                        Toast.makeText(this@MainActivity, "SOS saved offline (Network unreachable)", Toast.LENGTH_LONG).show()
+                        Toast.makeText(this@MainActivity, "SOS saved locally on device. Will auto-retry.", Toast.LENGTH_LONG).show()
                     }
                 }
             }
@@ -213,11 +234,13 @@ class MainActivity : ComponentActivity(), SensorEventListener {
 fun ResQNetAppUI(
     currentGForce: Float,
     isShieldActive: Boolean,
-    activeIncident: IncidentDto?,
+    isOnline: Boolean,
+    pendingIncidentCount: Int,
     onTriggerSOS: () -> Unit,
     onSimulateCrashSpike: () -> Unit,
     onToggleShield: (Boolean) -> Unit,
-    onUpdateBackendUrl: (String) -> Unit
+    onUpdateBackendUrl: (String) -> Unit,
+    onFlushRetries: () -> Unit
 ) {
     var backendUrlInput by remember { mutableStateOf(ApiClient.getBaseUrl()) }
 
@@ -229,7 +252,7 @@ fun ResQNetAppUI(
             .verticalScroll(rememberScrollState()),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        // App Header
+        // App Header with Shield Status & Network Status
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
@@ -244,38 +267,92 @@ fun ResQNetAppUI(
                     fontFamily = FontFamily.Monospace
                 )
                 Text(
-                    text = "AUTONOMOUS EMERGENCY SENSOR SHIELD",
+                    text = "RELIABILITY & SENSOR SHIELD V2",
                     fontSize = 10.sp,
                     fontWeight = FontWeight.Bold,
                     color = Color(0xFF38BDF8)
                 )
             }
 
-            Surface(
-                shape = RoundedCornerShape(20.dp),
-                color = if (isShieldActive) Color(0xFF10B981).copy(alpha = 0.2f) else Color(0xFFEF4444).copy(alpha = 0.2f)
-            ) {
-                Row(
-                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
-                    verticalAlignment = Alignment.CenterVertically
+            Row {
+                // Network Badge
+                Surface(
+                    shape = RoundedCornerShape(20.dp),
+                    color = if (isOnline) Color(0xFF10B981).copy(alpha = 0.2f) else Color(0xFFF59E0B).copy(alpha = 0.2f)
                 ) {
-                    Box(
-                        modifier = Modifier
-                            .size(8.dp)
-                            .background(if (isShieldActive) Color(0xFF10B981) else Color(0xFFEF4444), CircleShape)
-                    )
-                    Spacer(modifier = Modifier.width(6.dp))
-                    Text(
-                        text = if (isShieldActive) "ARMED" else "DISARMED",
-                        color = if (isShieldActive) Color(0xFF10B981) else Color(0xFFEF4444),
-                        fontSize = 11.sp,
-                        fontWeight = FontWeight.Bold
-                    )
+                    Row(
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(6.dp)
+                                .background(if (isOnline) Color(0xFF10B981) else Color(0xFFF59E0B), CircleShape)
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text(
+                            text = if (isOnline) "ONLINE" else "OFFLINE",
+                            color = if (isOnline) Color(0xFF10B981) else Color(0xFFF59E0B),
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.width(6.dp))
+
+                // Shield Badge
+                Surface(
+                    shape = RoundedCornerShape(20.dp),
+                    color = if (isShieldActive) Color(0xFF3B82F6).copy(alpha = 0.2f) else Color(0xFFEF4444).copy(alpha = 0.2f)
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = if (isShieldActive) "ARMED" else "DISARMED",
+                            color = if (isShieldActive) Color(0xFF38BDF8) else Color(0xFFEF4444),
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
                 }
             }
         }
 
-        Spacer(modifier = Modifier.height(20.dp))
+        Spacer(modifier = Modifier.height(16.dp))
+
+        // Pending Offline Incidents Alert Banner (If Any)
+        if (pendingIncidentCount > 0) {
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(containerColor = Color(0xFFF59E0B).copy(alpha = 0.15f)),
+                shape = RoundedCornerShape(12.dp)
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(12.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Default.CloudSync, contentDescription = null, tint = Color(0xFFF59E0B))
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Column {
+                            Text("$pendingIncidentCount Local Incident(s) Pending", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                            Text("Safe in local storage. Auto-retrying.", color = Color(0xFFCBD5E1), fontSize = 10.sp)
+                        }
+                    }
+
+                    TextButton(onClick = onFlushRetries) {
+                        Text("RETRY NOW", color = Color(0xFFF59E0B), fontWeight = FontWeight.Bold, fontSize = 11.sp)
+                    }
+                }
+            }
+            Spacer(modifier = Modifier.height(12.dp))
+        }
 
         // Live G-Force Meter Card
         Card(
@@ -286,7 +363,7 @@ fun ResQNetAppUI(
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(20.dp),
+                    .padding(18.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
                 Text(
@@ -296,10 +373,10 @@ fun ResQNetAppUI(
                     color = Color(0xFF94A3B8),
                     fontFamily = FontFamily.Monospace
                 )
-                Spacer(modifier = Modifier.height(8.dp))
+                Spacer(modifier = Modifier.height(6.dp))
                 Text(
                     text = "${"%.2f".format(currentGForce)} G",
-                    fontSize = 44.sp,
+                    fontSize = 40.sp,
                     fontWeight = FontWeight.Black,
                     color = if (currentGForce >= 3.2f) Color(0xFFEF4444) else Color(0xFF38BDF8),
                     fontFamily = FontFamily.Monospace
@@ -309,36 +386,30 @@ fun ResQNetAppUI(
                     progress = { (currentGForce / 6.0f).coerceIn(0f, 1f) },
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(8.dp),
+                        .height(6.dp),
                     color = if (currentGForce >= 3.2f) Color(0xFFEF4444) else Color(0xFF3B82F6),
                     trackColor = Color(0xFF1E293B)
-                )
-                Spacer(modifier = Modifier.height(6.dp))
-                Text(
-                    text = "Impact Trigger Threshold: 3.20 G (50Hz IMU)",
-                    fontSize = 10.sp,
-                    color = Color(0xFF64748B)
                 )
             }
         }
 
-        Spacer(modifier = Modifier.height(16.dp))
+        Spacer(modifier = Modifier.height(14.dp))
 
         // Crash Shield Toggle Row
         Card(
             modifier = Modifier.fillMaxWidth(),
             colors = CardDefaults.cardColors(containerColor = Color(0xFF0C1220)),
-            shape = RoundedCornerShape(14.dp)
+            shape = RoundedCornerShape(12.dp)
         ) {
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(16.dp),
+                    .padding(14.dp),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Column {
-                    Text("Continuous Crash Shield", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                    Text("Continuous Crash Shield", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 13.sp)
                     Text("50Hz background accelerometer monitor", color = Color(0xFF64748B), fontSize = 11.sp)
                 }
                 Switch(
@@ -349,68 +420,68 @@ fun ResQNetAppUI(
             }
         }
 
-        Spacer(modifier = Modifier.height(16.dp))
+        Spacer(modifier = Modifier.height(14.dp))
 
         // 1-Tap SOS Button
         Button(
             onClick = onTriggerSOS,
             modifier = Modifier
                 .fillMaxWidth()
-                .height(64.dp),
+                .height(58.dp),
             colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFEF4444)),
-            shape = RoundedCornerShape(16.dp)
+            shape = RoundedCornerShape(14.dp)
         ) {
-            Icon(Icons.Default.Sos, contentDescription = null, modifier = Modifier.size(32.dp))
-            Spacer(modifier = Modifier.width(10.dp))
-            Text("1-TAP EMERGENCY SOS", fontSize = 16.sp, fontWeight = FontWeight.Black)
+            Icon(Icons.Default.Sos, contentDescription = null, modifier = Modifier.size(28.dp))
+            Spacer(modifier = Modifier.width(8.dp))
+            Text("1-TAP EMERGENCY SOS", fontSize = 15.sp, fontWeight = FontWeight.Black)
         }
 
-        Spacer(modifier = Modifier.height(12.dp))
+        Spacer(modifier = Modifier.height(10.dp))
 
-        // Simulate Crash Spike Button (For Hackathon Demo)
+        // Simulate Crash Spike Button
         OutlinedButton(
             onClick = onSimulateCrashSpike,
             modifier = Modifier
                 .fillMaxWidth()
-                .height(50.dp),
-            shape = RoundedCornerShape(14.dp),
+                .height(46.dp),
+            shape = RoundedCornerShape(12.dp),
             colors = ButtonDefaults.outlinedButtonColors(contentColor = Color(0xFFF59E0B))
         ) {
             Icon(Icons.Default.Bolt, contentDescription = null)
-            Spacer(modifier = Modifier.width(8.dp))
-            Text("SIMULATE 5.2G CRASH SPIKE (DEMO)", fontWeight = FontWeight.Bold, fontSize = 12.sp)
+            Spacer(modifier = Modifier.width(6.dp))
+            Text("SIMULATE 5.2G CRASH SPIKE (DEMO)", fontWeight = FontWeight.Bold, fontSize = 11.sp)
         }
 
-        Spacer(modifier = Modifier.height(20.dp))
+        Spacer(modifier = Modifier.height(16.dp))
 
         // Backend URL Config Card
         Card(
             modifier = Modifier.fillMaxWidth(),
             colors = CardDefaults.cardColors(containerColor = Color(0xFF0C1220)),
-            shape = RoundedCornerShape(14.dp)
+            shape = RoundedCornerShape(12.dp)
         ) {
-            Column(modifier = Modifier.padding(14.dp)) {
+            Column(modifier = Modifier.padding(12.dp)) {
                 Text("Backend Server Bridge", color = Color(0xFF94A3B8), fontSize = 11.sp, fontWeight = FontWeight.Bold)
-                Spacer(modifier = Modifier.height(8.dp))
+                Spacer(modifier = Modifier.height(6.dp))
                 OutlinedTextField(
                     value = backendUrlInput,
                     onValueChange = { backendUrlInput = it },
                     modifier = Modifier.fillMaxWidth(),
-                    label = { Text("Server URL", fontSize = 11.sp) },
+                    label = { Text("Server URL", fontSize = 10.sp) },
                     singleLine = true,
                     colors = OutlinedTextFieldDefaults.colors(
                         focusedTextColor = Color.White,
                         unfocusedTextColor = Color(0xFFCBD5E1)
                     )
                 )
-                Spacer(modifier = Modifier.height(8.dp))
+                Spacer(modifier = Modifier.height(6.dp))
                 Button(
                     onClick = { onUpdateBackendUrl(backendUrlInput) },
                     modifier = Modifier.fillMaxWidth(),
                     colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1E293B)),
                     shape = RoundedCornerShape(8.dp)
                 ) {
-                    Text("SAVE SERVER URL", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Color(0xFF38BDF8))
+                    Text("SAVE SERVER URL", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = Color(0xFF38BDF8))
                 }
             }
         }

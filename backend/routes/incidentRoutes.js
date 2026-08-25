@@ -11,6 +11,27 @@ module.exports = (io) => {
             const body = req.body;
             const incId = body.id || body.incidentId || `RNQ-${Math.floor(1000 + Math.random() * 9000)}`;
 
+            // MODULE F: IDEMPOTENCY / DUPLICATE PREVENTION
+            const existing = await db.getIncident(incId);
+            if (existing) {
+                console.log(`[Idempotency] Incident ${incId} already exists. Returning confirmed record.`);
+                return res.status(200).json({
+                    success: true,
+                    incidentId: existing.incidentId || existing.id,
+                    id: existing.incidentId || existing.id,
+                    incident: existing,
+                    status: existing.status,
+                    confidence: existing.confidence,
+                    severity: existing.severity,
+                    assignedAmbulance: existing.assignedAmbulance || existing.ambulanceId,
+                    assignedHospital: existing.assignedHospital || existing.hospitalId,
+                    ambulanceReason: existing.ambulanceReason,
+                    hospitalReason: existing.hospitalReason,
+                    route: existing.route,
+                    hospitalPreAlert: existing.hospitalPreAlert
+                });
+            }
+
             const lat = Number(body.latitude || body.lat || 18.5204);
             const lng = Number(body.longitude || body.lng || 73.8567);
             const src = body.source || body.sourceType || 'smartphone';
