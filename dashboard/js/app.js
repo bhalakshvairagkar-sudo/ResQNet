@@ -192,6 +192,7 @@ function upsertIncident(raw, live) {
     const b = band(inc.severity);
     addActivity(`${b.label} incident ${inc.displayId} detected via ${srcMeta(inc.source).label}`, b.k === "critical" ? "crit" : "");
     if (b.k === "critical" || b.k === "high") notify(inc);
+    selectIncident(inc._id);
   }
   if (state.selectedIncidentId === inc._id) renderIncidentDetails();
   return inc;
@@ -621,7 +622,7 @@ async function syncIncidents(initial) {
     setHealth("Backend", true);
     state.lastSync = new Date();
     data.slice().reverse().forEach((raw) => {
-      const id = raw._id || raw.id;
+      const id = raw.incidentId || raw.id || raw._id;
       const live = !initial && !state.seen.has(id);
       state.seen.add(id);
       upsertIncident(raw, live);
