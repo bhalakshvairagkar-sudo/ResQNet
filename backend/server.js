@@ -85,6 +85,14 @@ app.get(['/', '/dashboard', '/dashboard.html', '/index.html'], (req, res) => {
     res.sendFile(path.join(dashboardPath, 'dashboard.html'));
 });
 
+app.get(['/hospital', '/hospital.html', '/trauma', '/er'], (req, res) => {
+    res.sendFile(path.join(dashboardPath, 'hospital.html'));
+});
+
+app.get(['/sos', '/sos.html', '/beacon', '/citizen'], (req, res) => {
+    res.sendFile(path.join(dashboardPath, 'sos.html'));
+});
+
 // Global Error Handler
 app.use((err, req, res, next) => {
     console.error('[Server Error]', err);

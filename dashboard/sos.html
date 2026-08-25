@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<title>ResQNet — Citizen Emergency SOS Beacon</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" />
+<link rel="preconnect" href="https://fonts.gstatic.com" />
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700;800;900&family=IBM+Plex+Mono:wght@500;600;700&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="/css/resqnet.css" />
+<script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+<style>
+  body {
+    background: #060911; color: #fff; min-height: 100vh; display: flex; flex-direction: column;
+    font-family: var(--font-ui); margin: 0; padding: 16px; box-sizing: border-box;
+  }
+  .sos-header { text-align: center; margin-bottom: 20px; }
+  .sos-btn-wrap {
+    display: flex; justify-content: center; align-items: center; margin: 20px 0;
+  }
+  .sos-big-btn {
+    width: 220px; height: 220px; border-radius: 50%; background: radial-gradient(circle, #EF4444, #991B1B);
+    border: 8px solid rgba(239, 68, 68, 0.4); color: #fff; font-size: 28px; font-weight: 900;
+    letter-spacing: 0.1em; cursor: pointer; display: flex; flex-direction: column; align-items: center; justify-content: center;
+    box-shadow: 0 0 50px rgba(239, 68, 68, 0.5); transition: transform 0.15s, box-shadow 0.15s;
+    animation: sosPulse 2s infinite ease-in-out;
+  }
+  .sos-big-btn:active { transform: scale(0.95); }
+  @keyframes sosPulse {
+    0%, 100% { box-shadow: 0 0 30px rgba(239, 68, 68, 0.4); transform: scale(1); }
+    50% { box-shadow: 0 0 60px rgba(239, 68, 68, 0.8); transform: scale(1.04); }
+  }
+  .card-box {
+    background: #0C1220; border: 1px solid #1E293B; border-radius: 14px; padding: 16px; margin-bottom: 14px;
+  }
+  .card-box h4 { font-size: 11px; letter-spacing: 0.12em; color: #38BDF8; margin-bottom: 10px; }
+  .input-field {
+    width: 100%; background: #060911; border: 1px solid #334155; border-radius: 8px;
+    padding: 10px; color: #fff; font-size: 13px; box-sizing: border-box; margin-bottom: 8px; outline: none;
+  }
+  .status-badge {
+    padding: 8px 14px; border-radius: 20px; background: rgba(16, 185, 129, 0.15); color: #10B981;
+    font-weight: 800; font-size: 12px; border: 1px solid rgba(16, 185, 129, 0.3); text-align: center;
+  }
+</style>
+</head>
+<body>
+
+<div class="sos-header">
+  <h1 style="font-size:24px;font-weight:900;letter-spacing:0.12em;margin:0">RES<span style="color:#EF4444">Q</span>NET</h1>
+  <small style="color:#94A3B8;letter-spacing:0.14em;font-weight:700">CITIZEN 1-TAP EMERGENCY SOS</small>
+</div>
+
+<!-- GPS POSITION STATUS -->
+<div class="card-box">
+  <h4><i class="fa-solid fa-location-crosshairs"></i> CURRENT SATELLITE FIX</h4>
+  <div style="font-size:13px;color:#CBD5E1" id="gpsStatus">
+    <i class="fa-solid fa-spinner fa-spin"></i> Acquiring high-precision GPS coordinates...
+  </div>
+</div>
+
+<!-- BIG SOS TRIGGER -->
+<div class="sos-btn-wrap">
+  <button class="sos-big-btn" id="btnTriggerSos" onclick="triggerCitizenSos()">
+    <i class="fa-solid fa-hand-holding-medical" style="font-size:44px;margin-bottom:8px"></i>
+    <span>TAP FOR SOS</span>
+  </button>
+</div>
+
+<!-- LIVE TRACKER AFTER DISPATCH -->
+<div id="trackerBox" class="card-box" style="display:none;border-color:#10B981">
+  <h4><i class="fa-solid fa-shield-halved" style="color:#10B981"></i> EMERGENCY RESPONSE ACTIVE</h4>
+  <div id="trackerDetails" style="font-size:13px;line-height:1.8;color:#CBD5E1">
+    Incident ID: <b class="mono" id="trackId" style="color:#38BDF8">—</b><br/>
+    Assigned Unit: <b id="trackAmb">AMB-01 (Advanced Life Support)</b><br/>
+    Matched Hospital: <b id="trackHosp">Pune Trauma Center</b><br/>
+    Response ETA: <b id="trackEta" style="color:#F59E0B">4 Minutes</b>
+  </div>
+  <div class="status-badge" style="margin-top:12px" id="trackStatus">
+    <i class="fa-solid fa-route"></i> AMBULANCE DISPATCHED & EN ROUTE
+  </div>
+</div>
+
+<!-- MEDICAL PROFILE VAULT -->
+<div class="card-box">
+  <h4><i class="fa-solid fa-id-card-clip"></i> OPTIONAL EMERGENCY MEDICAL VAULT</h4>
+  <input id="userBlood" class="input-field" placeholder="Blood Group (e.g. O+, O-, A+)" value="O-" />
+  <input id="userContact" class="input-field" placeholder="Emergency Contact Phone" value="+91 98765 43210" />
+  <input id="userAllergies" class="input-field" placeholder="Allergies / Conditions (e.g. Penicillin, Asthma)" value="Penicillin allergy" />
+</div>
+
+<script>
+  const BACKEND_URL = window.location.origin;
+  const socket = io(BACKEND_URL);
+  let currentCoords = { lat: 18.5204, lng: 73.8567, accuracy: 5.0 };
+
+  if (navigator.geolocation) {
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        currentCoords = {
+          lat: pos.coords.latitude,
+          lng: pos.coords.longitude,
+          accuracy: pos.coords.accuracy || 4.2
+        };
+        document.getElementById('gpsStatus').innerHTML = `
+          <b style="color:#10B981">✓ GPS LOCKED:</b> ${currentCoords.lat.toFixed(4)}, ${currentCoords.lng.toFixed(4)} (±${currentCoords.accuracy.toFixed(1)}m)`;
+      },
+      (err) => {
+        document.getElementById('gpsStatus').innerHTML = `
+          <b style="color:#F59E0B">⚠ Defaulting to Central Pune:</b> ${currentCoords.lat.toFixed(4)}, ${currentCoords.lng.toFixed(4)}`;
+      },
+      { enableHighAccuracy: true, timeout: 5000 }
+    );
+  }
+
+  async function triggerCitizenSos() {
+    const btn = document.getElementById('btnTriggerSos');
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin" style="font-size:36px"></i><span>DISPATCHING...</span>';
+
+    const payload = {
+      id: `RNQ-CITIZEN-${Date.now().toString().slice(-4)}`,
+      source: 'citizen',
+      sourceType: 'citizen',
+      title: 'Citizen 1-Tap Emergency SOS Beacon',
+      latitude: currentCoords.lat,
+      longitude: currentCoords.lng,
+      gpsAccuracy: currentCoords.accuracy,
+      confidence: 1.0,
+      severity: 85,
+      patients: 1,
+      userMedicalInfo: `Blood: ${document.getElementById('userBlood').value} | Contact: ${document.getElementById('userContact').value} | Allergies: ${document.getElementById('userAllergies').value}`
+    };
+
+    try {
+      const res = await fetch(`${BACKEND_URL}/api/incidents/detect`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+      const data = await res.json();
+      const inc = data.incident || data;
+
+      document.getElementById('trackerBox').style.display = 'block';
+      document.getElementById('trackId').textContent = inc.id || inc.incidentId;
+      document.getElementById('trackAmb').textContent = `${inc.assignedAmbulance || 'AMB-01'} (ALS Unit)`;
+      document.getElementById('trackHosp').textContent = inc.assignedHospital || 'Pune Trauma Center';
+      document.getElementById('trackEta').textContent = `${inc.route?.etaMinutes || 4} Minutes`;
+
+      btn.style.background = 'radial-gradient(circle, #10B981, #047857)';
+      btn.style.borderColor = 'rgba(16, 185, 129, 0.4)';
+      btn.innerHTML = '<i class="fa-solid fa-check" style="font-size:44px;margin-bottom:8px"></i><span>HELP EN ROUTE</span>';
+    } catch (e) {
+      alert('Transmission error: ' + e.message);
+      btn.disabled = false;
+      btn.innerHTML = '<i class="fa-solid fa-triangle-exclamation"></i><span>RETRY SOS</span>';
+    }
+  }
+
+  socket.on('ambulance:telemetry', (amb) => {
+    console.log('[SOS Tracker] Live ambulance telemetry:', amb);
+  });
+</script>
+</body>
+</html>

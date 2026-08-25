@@ -1,0 +1,246 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>ResQNet — Trauma Center Emergency Pre-Alert Portal</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" />
+<link rel="preconnect" href="https://fonts.gstatic.com" />
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700;800;900&family=IBM+Plex+Mono:wght@400;500;600;700&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="/css/resqnet.css" />
+<script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+<script src="/js/config.js"></script>
+<style>
+  body { background: #030508; color: #EAF0F7; height: 100vh; overflow-y: auto; font-family: var(--font-ui); }
+  .trauma-header {
+    height: 64px; background: linear-gradient(180deg, #111827, #070B12);
+    border-bottom: 2px solid #1E293B; display: flex; align-items: center; justify-content: space-between; padding: 0 24px;
+  }
+  .hosp-select-box { display: flex; align-items: center; gap: 10px; }
+  .hosp-dropdown {
+    background: #0F172A; color: #38BDF8; border: 1px solid #334155; padding: 6px 12px;
+    border-radius: 8px; font-weight: 700; font-size: 13px; font-family: var(--font-ui); outline: none;
+  }
+  .trauma-main { padding: 24px; max-width: 1400px; margin: 0 auto; display: flex; flex-direction: column; gap: 20px; }
+  .stats-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; }
+  .stat-card {
+    background: #0B111E; border: 1px solid #1E293B; border-radius: 12px; padding: 16px 20px;
+    display: flex; align-items: center; justify-content: space-between;
+  }
+  .stat-card .lbl { font-size: 11px; letter-spacing: 0.1em; color: #64748B; font-weight: 700; }
+  .stat-card .val { font-size: 26px; font-family: var(--font-mono); font-weight: 700; margin-top: 4px; }
+  .alerts-container { display: flex; flex-direction: column; gap: 16px; }
+  .alert-card {
+    background: #0C1322; border: 2px solid #EF4444; border-radius: 14px; padding: 20px;
+    box-shadow: 0 10px 30px rgba(239, 68, 68, 0.15); display: flex; flex-direction: column; gap: 16px;
+    animation: pulseBorder 2s infinite ease-in-out;
+  }
+  @keyframes pulseBorder {
+    0%, 100% { border-color: #EF4444; box-shadow: 0 0 15px rgba(239, 68, 68, 0.2); }
+    50% { border-color: #B91C1C; box-shadow: 0 0 30px rgba(239, 68, 68, 0.4); }
+  }
+  .alert-top { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; }
+  .eta-pill {
+    background: #EF4444; color: #fff; padding: 6px 14px; border-radius: 20px;
+    font-family: var(--font-mono); font-weight: 800; font-size: 16px; display: flex; align-items: center; gap: 8px;
+  }
+  .alert-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px; }
+  .alert-box { background: #070B14; border: 1px solid #1E293B; border-radius: 10px; padding: 14px; }
+  .alert-box h5 { font-size: 11px; letter-spacing: 0.12em; color: #38BDF8; margin-bottom: 10px; }
+  .checklist { display: flex; flex-direction: column; gap: 8px; font-size: 12px; }
+  .checklist label { display: flex; align-items: center; gap: 8px; cursor: pointer; }
+  .checklist input[type="checkbox"] { width: 16px; height: 16px; accent-color: #10B981; }
+  .ack-btn {
+    background: #10B981; color: #000; font-weight: 800; padding: 12px; border-radius: 8px;
+    border: none; cursor: pointer; font-size: 13px; letter-spacing: 0.08em; display: flex; align-items: center; justify-content: center; gap: 8px;
+    transition: background-color 0.2s;
+  }
+  .ack-btn:hover { background: #059669; }
+</style>
+</head>
+<body>
+
+<header class="trauma-header">
+  <div class="brand">
+    <div class="brand-mark" style="background:linear-gradient(135deg, #10B981, #047857)">
+      <i class="fa-solid fa-hospital"></i>
+    </div>
+    <div>
+      <h1 style="font-size:18px">RES<b>Q</b>NET <span style="color:#10B981;font-weight:400">| TRAUMA BAY INCOMING</span></h1>
+      <small style="color:#64748B">ZERO-MINUTE CLINICAL PRE-ALERT VAULT</small>
+    </div>
+  </div>
+
+  <div class="hosp-select-box">
+    <label for="hospitalSelect" style="font-size:11px;color:#94A3B8;font-weight:700">TARGET CENTER:</label>
+    <select id="hospitalSelect" class="hosp-dropdown">
+      <option value="HOSP-01">HOSP-01: Pune Trauma Center (Level 1)</option>
+      <option value="HOSP-02">HOSP-02: Ruby Emergency Institute (Level 2)</option>
+      <option value="HOSP-03">HOSP-03: Sahyadri Speciality Base</option>
+      <option value="HOSP-04">HOSP-04: Deenanath General Hospital</option>
+    </select>
+  </div>
+
+  <div class="header-right">
+    <span class="pill" id="liveDot"><span class="dot online live"></span> REAL-TIME VAULT ARMED</span>
+    <span class="pill ghost clock" id="hospClock">--:--:--</span>
+  </div>
+</header>
+
+<main class="trauma-main">
+  <section class="stats-row">
+    <div class="stat-card">
+      <div>
+        <div class="lbl">INCOMING TRAUMA ALERTS</div>
+        <div class="val" id="countIncoming" style="color:#EF4444">0</div>
+      </div>
+      <i class="fa-solid fa-truck-medical" style="font-size:24px;color:#EF4444;opacity:0.6"></i>
+    </div>
+    <div class="stat-card">
+      <div>
+        <div class="lbl">TRAUMA BAYS READY</div>
+        <div class="val" style="color:#10B981">3 / 4</div>
+      </div>
+      <i class="fa-solid fa-bed-pulse" style="font-size:24px;color:#10B981;opacity:0.6"></i>
+    </div>
+    <div class="stat-card">
+      <div>
+        <div class="lbl">BLOOD BANK RESERVE (O-)</div>
+        <div class="val" style="color:#38BDF8">4 UNITS</div>
+      </div>
+      <i class="fa-solid fa-droplet" style="font-size:24px;color:#38BDF8;opacity:0.6"></i>
+    </div>
+    <div class="stat-card">
+      <div>
+        <div class="lbl">CT SCANNER STATUS</div>
+        <div class="val" style="color:#10B981">STANDBY</div>
+      </div>
+      <i class="fa-solid fa-radiation" style="font-size:24px;color:#10B981;opacity:0.6"></i>
+    </div>
+  </section>
+
+  <section>
+    <h3 style="font-size:14px;letter-spacing:0.12em;color:#94A3B8;margin-bottom:12px">ACTIVE INCOMING CLINICAL PRE-ALERTS</h3>
+    <div class="alerts-container" id="alertsList">
+      <!-- Alerts dynamically injected here -->
+      <div id="noAlertsMessage" style="text-align:center;padding:40px;background:#0A0F1D;border:1px dashed #1E293B;border-radius:12px">
+        <i class="fa-solid fa-shield-heart" style="font-size:32px;color:#10B981;margin-bottom:10px"></i>
+        <h4 style="font-size:15px;font-weight:700">NO INCOMING TRAUMA EN ROUTE</h4>
+        <p style="font-size:12px;color:#64748B;margin-top:4px">Zero-Minute clinical alert listener active on WebSocket channel.</p>
+      </div>
+    </div>
+  </section>
+</main>
+
+<script>
+  const BACKEND_URL = window.location.origin;
+  const socket = io(BACKEND_URL);
+  const alerts = {};
+
+  setInterval(() => {
+    document.getElementById('hospClock').textContent = new Date().toLocaleTimeString('en-GB', { hour12: false }) + ' IST';
+  }, 1000);
+
+  socket.on('connect', () => console.log('[Hospital Bay] Connected to ResQNet'));
+
+  socket.on('hospital:prealert', (data) => {
+    console.log('[Hospital Bay] 🚨 Incoming Clinical Pre-Alert:', data);
+    const selectedHosp = document.getElementById('hospitalSelect').value;
+    if (data.hospitalId && data.hospitalId !== selectedHosp) return;
+
+    alerts[data.incidentId || data.id] = data;
+    renderAlerts();
+  });
+
+  socket.on('incident:new', (inc) => {
+    const selectedHosp = document.getElementById('hospitalSelect').value;
+    if (inc.assignedHospital && inc.assignedHospital === selectedHosp) {
+      alerts[inc.id] = inc.hospitalPreAlert || {
+        incidentId: inc.id,
+        severity: inc.severity,
+        etaMinutes: inc.route?.etaMinutes || 5,
+        userMedicalInfo: inc.userMedicalInfo || 'Blood: O+ | No known allergies',
+        triageNotes: inc.title
+      };
+      renderAlerts();
+    }
+  });
+
+  document.getElementById('hospitalSelect').addEventListener('change', renderAlerts);
+
+  function renderAlerts() {
+    const container = document.getElementById('alertsList');
+    const noMsg = document.getElementById('noAlertsMessage');
+    const selectedHosp = document.getElementById('hospitalSelect').value;
+    const alertList = Object.values(alerts);
+
+    document.getElementById('countIncoming').textContent = alertList.length;
+
+    if (!alertList.length) {
+      container.innerHTML = `
+        <div id="noAlertsMessage" style="text-align:center;padding:40px;background:#0A0F1D;border:1px dashed #1E293B;border-radius:12px">
+          <i class="fa-solid fa-shield-heart" style="font-size:32px;color:#10B981;margin-bottom:10px"></i>
+          <h4 style="font-size:15px;font-weight:700">NO INCOMING TRAUMA EN ROUTE</h4>
+          <p style="font-size:12px;color:#64748B;margin-top:4px">Zero-Minute clinical alert listener active for ${selectedHosp}.</p>
+        </div>`;
+      return;
+    }
+
+    container.innerHTML = alertList.map(a => `
+      <div class="alert-card">
+        <div class="alert-top">
+          <div>
+            <span style="font-size:10px;font-family:var(--font-mono);color:#94A3B8">INCIDENT #${a.incidentId || 'RNQ-EMERGENCY'}</span>
+            <h2 style="font-size:18px;font-weight:800;color:#fff">${a.triageNotes || 'High-Impact Vehicle Polytrauma'}</h2>
+          </div>
+          <div class="eta-pill">
+            <i class="fa-solid fa-stopwatch"></i> ETA: ${a.etaMinutes || 4} MIN
+          </div>
+        </div>
+
+        <div class="alert-grid">
+          <!-- PATIENT CLINICAL VAULT -->
+          <div class="alert-box">
+            <h5><i class="fa-solid fa-notes-medical"></i> CLINICAL PROFILE & VITALS</h5>
+            <div style="font-size:12px;line-height:1.8;color:#CBD5E1">
+              Polytrauma Severity: <b style="color:#EF4444">${a.severity || 88}/100</b><br/>
+              Patient Blood Type: <b style="color:#38BDF8">O- (Universal Donor Reserved)</b><br/>
+              Allergies: <b>${a.userMedicalInfo || 'None reported'}</b><br/>
+              Casualty Count: <b>1 Severe Adult</b>
+            </div>
+          </div>
+
+          <!-- KINEMATIC IMPACT MECHANISM -->
+          <div class="alert-box">
+            <h5><i class="fa-solid fa-gauge-high"></i> KINEMATIC IMPACT MECHANISM</h5>
+            <div style="font-size:12px;line-height:1.8;color:#CBD5E1">
+              Peak Deceleration: <b style="color:#F59E0B">5.2 G Shock Wave</b><br/>
+              Velocity Loss Δv: <b style="color:#F59E0B">54 km/h Instantaneous</b><br/>
+              Vehicle Rollover: <b style="color:#EF4444">YES (Detected via Gyro)</b><br/>
+              Airbag Deployment: <b>CONFIRMED</b>
+            </div>
+          </div>
+
+          <!-- TRAUMA TEAM PREPARATION -->
+          <div class="alert-box">
+            <h5><i class="fa-solid fa-list-check"></i> TRAUMA BAY PREP CHECKLIST</h5>
+            <div class="checklist">
+              <label><input type="checkbox" checked /> Trauma Bay 1 Sanitized</label>
+              <label><input type="checkbox" checked /> On-Call Trauma Surgeon Paged</label>
+              <label><input type="checkbox" checked /> Blood Bank (2 Units O-) Thawed</label>
+              <label><input type="checkbox" checked /> Rapid Infuser & Ventilator Armed</label>
+            </div>
+            <button class="ack-btn" style="margin-top:12px;width:100%" onclick="ackAlert('${a.incidentId}')">
+              <i class="fa-solid fa-check-double"></i> ACKNOWLEDGE & CONFIRM BAY READY
+            </button>
+          </div>
+        </div>
+      </div>`).join('');
+  }
+
+  function ackAlert(id) {
+    alert(`Trauma Bay acknowledged for Incident ${id}. Dispatch & En-Route Ambulance notified!`);
+  }
+</script>
+</body>
+</html>
