@@ -40,11 +40,13 @@ async function runReliabilityTests() {
             deviceId: 'ANDROID_PIXEL_8',
             userId: 'USER_DRIVER_99',
             title: 'Idempotency Collision Verification',
-            latitude: 18.5204,
-            longitude: 73.8567,
+            // Isolate idempotency from the production spatial-correlation window.
+            latitude: 20.0 + (Date.now() % 1000) / 100000,
+            longitude: 75.0 + (Date.now() % 1000) / 100000,
             gForce: 4.5,
             confidence: 0.95,
-            severity: 85
+            severity: 85,
+            isDemo: true
         };
 
         // First attempt (Simulating initial submission)
@@ -81,7 +83,8 @@ async function runReliabilityTests() {
             locationQuality: 'UNAVAILABLE',
             gForce: 5.8,
             confidence: 0.98,
-            severity: 95
+            severity: 95,
+            isDemo: true
         };
 
         const res = await axios.post(`${BACKEND_URL}/api/incidents/detect`, degradedPayload);
@@ -95,6 +98,9 @@ async function runReliabilityTests() {
 
     // 3. Test Fleet Dispatch and State Transition Integrity
     await assertTest('Fleet Dispatch State Transition (VERIFIED -> EN_ROUTE)', async () => {
+        // Earlier test incidents are demo-only. Resetting here makes selection deterministic
+        // without touching non-demo incident records.
+        await axios.post(`${BACKEND_URL}/api/incidents/demo/reset`);
         const incId = `RNQ-DISPATCH-${Date.now()}`;
         const createRes = await axios.post(`${BACKEND_URL}/api/incidents/detect`, {
             id: incId,
@@ -103,7 +109,8 @@ async function runReliabilityTests() {
             title: 'Highway Rapid Dispatch Test',
             latitude: 18.5255,
             longitude: 73.8580,
-            severity: 90
+            severity: 90,
+            isDemo: true
         });
 
         const ambId = createRes.data.assignedAmbulance || 'AMB-01';
@@ -114,6 +121,7 @@ async function runReliabilityTests() {
         if (dispatchRes.status !== 200 || dispatchRes.data.incident.status !== 'EN_ROUTE') {
             throw new Error(`Status transition failed: ${dispatchRes.data.incident?.status}`);
         }
+        await axios.post(`${BACKEND_URL}/api/incidents/${incId}/resolve`, { reason: 'Reliability test cleanup' });
     });
 
     // 4. Test Health & Telemetry System Endpoints

@@ -4,6 +4,9 @@ const BACKEND_URL = CFG.BACKEND_URL || window.location.origin;
 const API = BACKEND_URL + "/api";
 const CENTER = CFG.DEFAULT_CENTER || [18.5204, 73.8567];
 const OSRM = CFG.OSRM_URL || "https://router.project-osrm.org";
+const sessionToken = localStorage.getItem("resqnetToken");
+const sessionUser = (() => { try { return JSON.parse(localStorage.getItem("resqnetUser") || "null"); } catch (_) { return null; } })();
+const authHeaders = () => ({ "Content-Type": "application/json", Authorization: `Bearer ${sessionToken}` });
 
 /* ---------- MAP PROVIDER / TILE ARCHITECTURE (12A.1 & 12A.2) ---------- */
 const MAP_PROVIDERS = {
@@ -119,6 +122,7 @@ let map, currentBaseLayer = null, currentOverlayLayer = null;
 let L_inc, L_resolved, L_amb, L_hosp, L_route, L_cctv, L_cctvFov, L_hotspots, L_traffic;
 const incMarkers = {}, ambMarkers = {}, hospMarkers = {}, cctvMarkers = {}, fovLayers = {};
 let ambAnim = null;
+let testMapTarget = null;
 
 function setMapStyle(styleKey) {
   const provider = MAP_PROVIDERS[styleKey] || MAP_PROVIDERS.dark;
@@ -174,6 +178,13 @@ function initMap() {
   L_amb = L.layerGroup().addTo(map);
   L_resolved = L.layerGroup();
   L_inc = L.layerGroup().addTo(map);
+
+  map.on("click", (event) => {
+    if (!testMapTarget) return;
+    setTestCoordinates(testMapTarget, event.latlng.lat, event.latlng.lng);
+    $("testModeResult").textContent = `${testMapTarget === "inc" ? "Accident" : testMapTarget === "amb" ? "Ambulance" : "Hospital"} coordinates set from map click.`;
+    testMapTarget = null;
+  });
 
   seedFleet();
   loadInfrastructure();
@@ -245,20 +256,6 @@ function createFovPolygon(lat, lng, headingDeg, fovDeg, radiusMeters) {
 }
 
 /* ---------- FLEET & INFRASTRUCTURE DATA INGESTION ---------- */
-const FLEET_SEED = [
-  { id: "AMB-01", code: "AMB-01", lat: 18.5148, lng: 73.8412, status: "AVAILABLE", type: "ALS", traumaReady: true, speed: 0, heading: 0 },
-  { id: "AMB-02", code: "AMB-02", lat: 18.5412, lng: 73.8631, status: "AVAILABLE", type: "ALS", traumaReady: true, speed: 0, heading: 0 },
-  { id: "AMB-03", code: "AMB-03", lat: 18.4921, lng: 73.8228, status: "AVAILABLE", type: "BLS", traumaReady: false, speed: 0, heading: 0 },
-  { id: "AMB-04", code: "AMB-04", lat: 18.5601, lng: 73.9020, status: "UNAVAILABLE", type: "ALS", traumaReady: true, speed: 0, heading: 0 },
-  { id: "AMB-05", code: "AMB-05", lat: 18.4785, lng: 73.8790, status: "AVAILABLE", type: "ALS", traumaReady: true, speed: 0, heading: 0 }
-];
-const HOSP_SEED = [
-  { id: "HOSP-01", name: "Pune Trauma Center", lat: 18.5280, lng: 73.8720, capacity: "PRE-ALERT READY", trauma: true, edReadiness: 95 },
-  { id: "HOSP-02", name: "Ruby Emergency Institute", lat: 18.5360, lng: 73.8780, capacity: "STANDBY", trauma: true, edReadiness: 85 },
-  { id: "HOSP-03", name: "Sahyadri Speciality Base", lat: 18.5080, lng: 73.8340, capacity: "LIMITED", trauma: false, edReadiness: 60 },
-  { id: "HOSP-04", name: "Deenanath General Hospital", lat: 18.4980, lng: 73.8290, capacity: "AVAILABLE", trauma: false, edReadiness: 75 }
-];
-
 async function seedFleet() {
   try {
     const [ambRes, hospRes] = await Promise.all([
@@ -267,16 +264,13 @@ async function seedFleet() {
     ]);
     const ambs = await ambRes.json();
     const hosps = await hospRes.json();
-    if (Array.isArray(ambs) && ambs.length > 0) ambs.forEach((a) => updateAmbulance(a));
-    else FLEET_SEED.forEach((a) => updateAmbulance({ ...a }));
-
-    if (Array.isArray(hosps) && hosps.length > 0) hosps.forEach((h) => updateHospital(h));
-    else HOSP_SEED.forEach((h) => updateHospital({ ...h }));
+    if (Array.isArray(ambs)) ambs.forEach(updateAmbulance);
+    if (Array.isArray(hosps)) hosps.forEach(updateHospital);
   } catch (e) {
-    FLEET_SEED.forEach((a) => updateAmbulance({ ...a }));
-    HOSP_SEED.forEach((h) => updateHospital({ ...h }));
+    toast("OPERATIONS DATA UNAVAILABLE", "Fleet and hospital positions will appear when the backend reconnects.", "warn");
   }
   renderKPIs();
+  if ($("testAmbulanceId")) populateTestResources();
 }
 
 async function loadInfrastructure() {
@@ -358,13 +352,15 @@ function updateAmbulance(a) {
   if (!a || !a.id) return;
   const prev = state.ambulances[a.id] || {};
   const amb = { ...prev, ...a };
-  if (num(amb.lat) === null || num(amb.lng) === null) return;
   state.ambulances[amb.id] = amb;
+  if (num(amb.lat) === null || num(amb.lng) === null) return;
   const sel = state.selectedIncidentId && state.routes[state.selectedIncidentId]?.ambulanceId === amb.id;
   const pos = [amb.lat, amb.lng];
   const popup = `<div class="pop-t" style="color:var(--blue)">${esc(amb.id)} · ${esc(amb.type || "ALS")}</div>
     Status: <b>${esc(String(amb.status || "AVAILABLE").toUpperCase())}</b><br/>
-    Speed: <b>${amb.speed ? amb.speed + " km/h" : "0 km/h"}</b><br/>
+    Location: <b>${amb.lat}, ${amb.lng}</b><br/>
+    Location state: <b>${amb.status === "OFFLINE" ? "OFFLINE" : amb.locationUpdatedAt && Date.now() - new Date(amb.locationUpdatedAt).getTime() > 60000 ? "STALE" : "LIVE"}</b><br/>
+    Last update: <b>${amb.locationUpdatedAt ? hhmmss(amb.locationUpdatedAt) : "UNAVAILABLE"}</b><br/>
     Trauma Capable: <b>${amb.traumaReady || amb.trauma ? "YES" : "NO"}</b>
     ${amb.eta ? "<br/>ETA: <b>" + amb.eta + " min</b>" : ""}`;
 
@@ -380,12 +376,14 @@ function updateHospital(h) {
   if (!h || !h.id) return;
   state.hospitals[h.id] = { ...(state.hospitals[h.id] || {}), ...h };
   const hh = state.hospitals[h.id];
+  if (num(hh.lat) === null || num(hh.lng) === null) return;
   const sel = state.selectedIncidentId && state.routes[state.selectedIncidentId]?.hospitalId === hh.id;
   const popup = `<div class="pop-t" style="color:var(--green)">${esc(hh.name)}</div>
     Category: <b>${sel ? "SELECTED TRAUMA HOSPITAL" : "ALTERNATIVE HOSPITAL"}</b><br/>
-    Capacity: <b>${esc(hh.capacity || "AVAILABLE")}</b><br/>
-    Trauma Unit: <b>${hh.trauma ? "YES (Level 1)" : "NO"}</b><br/>
-    ED Readiness: <b>${hh.edReadiness || 90}%</b>`;
+    Status: <b>${esc(hh.status || "UNAVAILABLE")}</b><br/>
+    Emergency Capacity: <b>${esc(hh.emergencyCapacity ?? hh.capacity ?? "UNAVAILABLE")}</b><br/>
+    Trauma Level: <b>${esc(hh.traumaLevel ?? "UNAVAILABLE")}</b><br/>
+    Last update: <b>${hh.locationUpdatedAt ? hhmmss(hh.locationUpdatedAt) : "UNAVAILABLE"}</b>`;
 
   if (hospMarkers[hh.id]) {
     hospMarkers[hh.id].setIcon(makeHospIcon(hh.capacity, hh.trauma, sel)).setPopupContent(popup);
@@ -540,7 +538,7 @@ async function drawRoute(id) {
   const hosp = state.hospitals[r.hospitalId];
   if (!amb) return;
 
-  let coords = null, distKm = null, etaMin = r.etaMin, geometrySource = "STRAIGHT LINE (OSRM UNAVAILABLE)";
+  let coords = null, distKm = null, etaMin = r.etaMin, geometrySource = "ROUTE UNAVAILABLE";
 
   // Check backend authoritative route geometry first
   if (inc.route && inc.route.geometry && Array.isArray(inc.route.geometry.coordinates) && inc.route.geometry.coordinates.length > 0) {
@@ -548,45 +546,13 @@ async function drawRoute(id) {
     distKm = inc.route.distanceKm ? String(inc.route.distanceKm) : distKm;
     etaMin = inc.route.etaMinutes ? Number(inc.route.etaMinutes) : etaMin;
     geometrySource = inc.route.isFallback ? "⚠ ROUTING DEGRADED (APPROXIMATION)" : "OSRM ROAD";
-  } else {
-    try {
-      const t0 = performance.now();
-      const res = await fetch(`${OSRM}/route/v1/driving/${amb.lng},${amb.lat};${inc.longitude},${inc.latitude}?overview=full&geometries=geojson`);
-      const data = await res.json();
-      const route = data && data.routes && data.routes[0];
-      if (route) {
-        coords = route.geometry.coordinates.map((c) => [c[1], c[0]]);
-        distKm = (route.distance / 1000).toFixed(1);
-        etaMin = Math.max(2, Math.round(route.duration / 60));
-        geometrySource = "OSRM ROAD";
-        setHealth("Routing", true);
-        state.perf[id] = { ...(state.perf[id] || {}), "Route computation": Math.round(performance.now() - t0) };
-      }
-    } catch (e) {
-      setHealth("Routing", false);
-    }
   }
-
-  if (!coords) {
-    coords = [[amb.lat, amb.lng], [inc.latitude, inc.longitude]];
-    distKm = haversine([amb.lat, amb.lng], [inc.latitude, inc.longitude]).toFixed(1);
-  }
-
-  let hospCoords = null;
-  if (hosp) {
-    try {
-      const res2 = await fetch(`${OSRM}/route/v1/driving/${inc.longitude},${inc.latitude};${hosp.lng},${hosp.lat}?overview=full&geometries=geojson`);
-      const d2 = await res2.json();
-      if (d2 && d2.routes && d2.routes[0]) hospCoords = d2.routes[0].geometry.coordinates.map((c) => [c[1], c[0]]);
-    } catch (e) {
-      hospCoords = [[inc.latitude, inc.longitude], [hosp.lat, hosp.lng]];
-    }
-  }
+  const hospCoords = inc.hospitalRoute?.geometry?.coordinates?.map((c) => [c[1], c[0]]) || null;
 
   state.routes[id] = { ...r, coords, hospCoords, distKm, etaMin, geometrySource };
 
   L_route.clearLayers();
-  L.polyline(coords, { color: "#FF9F0A", weight: 5, opacity: 0.9, lineCap: "round" }).addTo(L_route);
+  if (coords) L.polyline(coords, { color: "#FF9F0A", weight: 5, opacity: 0.9, lineCap: "round" }).addTo(L_route);
   if (hospCoords) {
     L.polyline(hospCoords, { color: "#409CFF", weight: 4, opacity: 0.8, dashArray: "9,9" }).addTo(L_route);
   }
@@ -595,19 +561,6 @@ async function drawRoute(id) {
   if (hosp) updateHospital({ id: hosp.id });
   renderKPIs();
   if (state.selectedIncidentId === id) renderIncidentDetails();
-}
-
-function animateAmbulance(id) {
-  const r = state.routes[id];
-  if (!r || !r.coords || !r.coords.length) return;
-  if (ambAnim) clearInterval(ambAnim);
-  const pts = r.coords, ambId = r.ambulanceId;
-  let i = 0;
-  ambAnim = setInterval(() => {
-    i += Math.max(1, Math.floor(pts.length / 40));
-    if (i >= pts.length) { clearInterval(ambAnim); ambAnim = null; return; }
-    updateAmbulance({ id: ambId, lat: pts[i][0], lng: pts[i][1], status: "EN_ROUTE" });
-  }, 700);
 }
 
 /* ---------- SYSTEM HEALTH & SYNC ---------- */
@@ -706,9 +659,11 @@ function normalizeIncident(raw) {
     patients: num(raw.patients || raw.patientCount) || 1,
     assignedAmbulance: raw.assignedAmbulance || raw.ambulanceCode || raw.ambulanceId,
     assignedHospital: raw.assignedHospital || raw.hospitalId,
+    assignedHospitalId: raw.hospitalId || raw.assignedHospitalId || null,
     ambulanceReason: raw.ambulanceReason,
     hospitalReason: raw.hospitalReason,
     route: raw.route,
+    hospitalRoute: raw.hospitalRoute,
     hospitalPreAlert: raw.hospitalPreAlert,
     timeline: raw.timeline || [],
     createdAt: raw.createdAt || new Date().toISOString()
@@ -734,13 +689,11 @@ function selectIncident(id) {
     if (inc.route) {
       state.routes[id] = {
         ambulanceId: inc.assignedAmbulance,
-        hospitalId: inc.assignedHospital,
+        hospitalId: inc.assignedHospitalId || inc.assignedHospital,
         etaMin: inc.route.etaMinutes,
         coords: inc.route.geometry?.coordinates?.map((c) => [c[1], c[0]])
       };
       drawRoute(id);
-    } else {
-      computeDispatch(inc);
     }
   }
 }
@@ -983,7 +936,7 @@ function toast(title, msg, type) {
 /* ---------- SOCKET.IO REAL-TIME INTEGRATION (12A.16) ---------- */
 function initSocket() {
   try {
-    const socket = io(BACKEND_URL);
+    const socket = io(BACKEND_URL, { auth: { token: sessionToken } });
     socket.on("connect", () => {
       setHealth("Socket", true);
       addActivity("Real-time Socket.IO link established", "ok");
@@ -1001,14 +954,17 @@ function initSocket() {
       selectIncident(norm._id);
     });
 
-    socket.on("incident:update", (inc) => {
+    const applyIncidentUpdate = (inc) => {
       const norm = normalizeIncident(inc);
       state.incidents[norm._id] = norm;
       upsertIncidentMarker(norm);
       renderIncidentList();
       renderKPIs();
       if (state.selectedIncidentId === norm._id) renderIncidentDetails();
-    });
+    };
+    // Legacy operational events use incident:update; targeted role rooms use incident:updated.
+    socket.on("incident:update", applyIncidentUpdate);
+    socket.on("incident:updated", applyIncidentUpdate);
 
     socket.on("ambulance:telemetry", (amb) => {
       updateAmbulance(amb);
@@ -1017,6 +973,12 @@ function initSocket() {
     socket.on("ambulance:location", (amb) => {
       updateAmbulance(amb);
     });
+    socket.on("ambulance:status", (event) => {
+      const current = state.ambulances[event.ambulanceId];
+      if (current) updateAmbulance({ ...current, status: event.status, currentIncidentId: event.incidentId || current.currentIncidentId });
+    });
+    socket.on("ambulance:location:update", (amb) => { updateAmbulance(amb); populateTestResources(); });
+    socket.on("hospital:location:update", (hosp) => { updateHospital(hosp); populateTestResources(); });
 
     socket.on("incident:resolved", (data) => {
       const id = data.incidentId || data.id;
@@ -1048,7 +1010,6 @@ async function dispatchAmbulance() {
     if (d.success) {
       inc.status = "EN_ROUTE";
       pushTimeline(inc._id, `Operator authorized dispatch for Unit ${r.ambulanceId}`);
-      animateAmbulance(inc._id);
       renderIncidentDetails();
       toast("UNIT DISPATCHED", `Unit ${r.ambulanceId} is en route.`, "ok");
     }
@@ -1068,12 +1029,11 @@ async function failoverAmbulance() {
       inc.route = d.incident.route;
       state.routes[inc._id] = {
         ambulanceId: d.newAmbulance.id,
-        hospitalId: inc.assignedHospital,
+        hospitalId: inc.assignedHospitalId || inc.assignedHospital,
         etaMin: d.incident.route?.etaMinutes || 4,
         coords: d.incident.route?.geometry?.coordinates?.map((c) => [c[1], c[0]])
       };
       drawRoute(inc._id);
-      animateAmbulance(inc._id);
       pushTimeline(inc._id, `Automated failover reassigned to Unit ${d.newAmbulance.code}`);
       renderIncidentDetails();
       toast("FAILOVER DISPATCHED", `Unit ${d.newAmbulance.code} reassigned.`, "ok");
@@ -1215,6 +1175,7 @@ function wire() {
   $("demoCctv").onclick = () => runDemo("cctv");
   $("demoCitizen").onclick = () => runDemo("citizen");
   $("demoReset").onclick = resetDemo;
+  wireTestMode();
 
   // Tabs & Search
   $("tabIncidents").onclick = () => switchTab("incidents");
@@ -1237,6 +1198,34 @@ function wire() {
 const openDemo = () => $("demoModal").classList.add("show");
 const closeDemo = () => $("demoModal").classList.remove("show");
 
+function setTestCoordinates(target, lat, lng) {
+  const prefix = target === "amb" ? "testAmb" : target === "hosp" ? "testHosp" : "testInc";
+  $(prefix + "Lat").value = Number(lat).toFixed(6);
+  $(prefix + "Lng").value = Number(lng).toFixed(6);
+}
+function validTestCoordinates(lat, lng) { return Number.isFinite(lat) && Number.isFinite(lng) && Math.abs(lat) <= 90 && Math.abs(lng) <= 180; }
+function populateTestResources() {
+  const fill = (id, records, label) => { const select = $(id), previous = select.value; select.innerHTML = records.map(r => `<option value="${esc(r.id)}">${esc(r.id)} — ${esc(label(r))}</option>`).join(""); if (previous) select.value = previous; };
+  fill("testAmbulanceId", Object.values(state.ambulances), a => a.code || a.name || "Unit");
+  fill("testHospitalId", Object.values(state.hospitals), h => h.name || "Hospital");
+}
+async function securedTestRequest(url, body, method = "POST") {
+  const response = await fetch(API + url, { method, headers: authHeaders(), body: JSON.stringify(body) });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(data.error || "Test operation failed");
+  return data;
+}
+function wireTestMode() {
+  if (!sessionUser || sessionUser.role !== "COMMAND_CENTER") { $("testModePanel").style.display = "none"; return; }
+  const result = $("testModeResult");
+  $("demoBtnLabel").textContent = "DEMO / TEST MODE";
+  $("testAmbulanceForm").onsubmit = async (e) => { e.preventDefault(); const lat = Number($("testAmbLat").value), lng = Number($("testAmbLng").value); if (!validTestCoordinates(lat, lng)) return result.textContent = "Enter valid ambulance coordinates."; try { const data = await securedTestRequest(`/ambulances/${$("testAmbulanceId").value}/location`, { latitude: lat, longitude: lng, status: $("testAmbStatus").value }, "PATCH"); updateAmbulance(data.ambulance); result.textContent = `${data.ambulance.id} location updated in DEMO / TEST MODE.`; } catch (error) { result.textContent = error.message; } };
+  $("testHospitalForm").onsubmit = async (e) => { e.preventDefault(); const lat = Number($("testHospLat").value), lng = Number($("testHospLng").value); if (!validTestCoordinates(lat, lng)) return result.textContent = "Enter valid hospital coordinates."; try { const data = await securedTestRequest(`/hospitals/${$("testHospitalId").value}/location`, { latitude: lat, longitude: lng, status: $("testHospStatus").value }, "PATCH"); updateHospital(data.hospital); result.textContent = `${data.hospital.id} location updated in DEMO / TEST MODE.`; } catch (error) { result.textContent = error.message; } };
+  $("testIncidentForm").onsubmit = async (e) => { e.preventDefault(); const lat = Number($("testIncLat").value), lng = Number($("testIncLng").value); if (!validTestCoordinates(lat, lng)) return result.textContent = "Enter valid accident coordinates."; try { const data = await securedTestRequest("/incidents/test/incidents", { latitude: lat, longitude: lng, severity: Number($("testSeverity").value), patientCount: Number($("testPatients").value) || undefined, peakGForce: Number($("testGForce").value) || undefined, incidentType: $("testAccidentType").value, helpMessage: $("testHelpMessage").value || undefined }); result.textContent = `Emergency ${data.incidentId || data.id} created — targeted dispatch initiated.`; closeDemo(); } catch (error) { result.textContent = error.message; } };
+  document.querySelectorAll("[data-center]").forEach(button => button.onclick = () => { const target = button.dataset.center; const c = map.getCenter(); setTestCoordinates(target, c.lat, c.lng); result.textContent = "Coordinates copied from current map center."; });
+  populateTestResources();
+}
+
 function switchTab(t) {
   const inc = t === "incidents";
   $("tabIncidents").classList.toggle("active", inc);
@@ -1256,6 +1245,7 @@ function debounce(fn, ms) {
 
 /* ---------- BOOTSTRAP ---------- */
 window.addEventListener("DOMContentLoaded", async () => {
+  if (!sessionUser || sessionUser.role !== "COMMAND_CENTER" || !sessionToken) { window.location.replace("/login.html"); return; }
   initMap();
   wire();
   renderIncidentList();

@@ -1,0 +1,5 @@
+#!/bin/sh
+# Gradle wrapper bootstrap for ResQNet.
+APP_HOME=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd -P)
+export GRADLE_USER_HOME="${XDG_CACHE_HOME:-$HOME/.cache}/resqnet-gradle"
+exec java -classpath "$APP_HOME/gradle/wrapper/gradle-wrapper.jar" org.gradle.wrapper.GradleWrapperMain "$@"

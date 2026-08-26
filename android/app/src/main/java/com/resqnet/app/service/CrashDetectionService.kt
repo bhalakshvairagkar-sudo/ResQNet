@@ -108,18 +108,28 @@ class CrashDetectionService : Service(), SensorEventListener {
         currentState = EmergencyState.MONITORING
         Log.d(TAG, "[SENSOR] Crash detection state: MONITORING")
 
-        // Start periodic GPS speed feed to crash detector
-        pollGpsSpeed()
+        // Start periodic GPS speed feed to crash detector (every 2 seconds)
+        startContinuousGpsSpeedFeed()
     }
 
-    private fun pollGpsSpeed() {
-        locationManager.acquireLatestLocation { loc: LocationData ->
-            val isAvailable = (loc.quality != LocationQuality.UNAVAILABLE && !loc.isDegraded)
-            crashDetector.updateSpeed(
-                speedKmh = if (isAvailable) loc.speedKmh else null,
-                speedAvailable = isAvailable
-            )
+    private val gpsHandler = android.os.Handler(android.os.Looper.getMainLooper())
+    private val gpsRunnable = object : Runnable {
+        override fun run() {
+            if (isRunning) {
+                locationManager.acquireLatestLocation { loc: LocationData ->
+                    val isAvailable = (loc.quality != LocationQuality.UNAVAILABLE && loc.isSpeedAvailable && loc.speedKmh != null)
+                    crashDetector.updateSpeed(
+                        speedKmh = if (isAvailable) loc.speedKmh else null,
+                        speedAvailable = isAvailable
+                    )
+                }
+                gpsHandler.postDelayed(this, 2000L)
+            }
         }
+    }
+
+    private fun startContinuousGpsSpeedFeed() {
+        gpsHandler.post(gpsRunnable)
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -258,7 +268,7 @@ class CrashDetectionService : Service(), SensorEventListener {
         val notification: Notification = NotificationCompat.Builder(this, NOTIFICATION_CHANNEL_ID)
             .setContentTitle("ResQNet Crash Shield Active")
             .setContentText("Continuous sensor protection armed")
-            .setSmallIcon(android.R.drawable.ic_lock_idle_alarm)
+            .setSmallIcon(com.resqnet.app.R.drawable.ic_notification)
             .setOngoing(true)
             .build()
 
@@ -267,6 +277,7 @@ class CrashDetectionService : Service(), SensorEventListener {
 
     override fun onDestroy() {
         super.onDestroy()
+        gpsHandler.removeCallbacks(gpsRunnable)
         sensorManager.unregisterListener(this)
         isRunning = false
         currentState = EmergencyState.MONITORING

@@ -4,6 +4,7 @@ const Incident = require('../models/Incident');
 const Ambulance = require('../models/Ambulance');
 const Hospital = require('../models/Hospital');
 const ResponseHistory = require('../models/ResponseHistory');
+const EmergencyAlert = require('../models/EmergencyAlert');
 
 class DataStore {
     constructor() {
@@ -14,6 +15,7 @@ class DataStore {
         this.cctvCameras = new Map();
         this.hotspots = new Map();
         this.responseHistory = new Map();
+        this.alerts = new Map();
         this.seedInitialFleet();
         this.seedInitialInfrastructure();
     }
@@ -207,9 +209,10 @@ class DataStore {
 
         if (this.isMongoConnected) {
             try {
+                const hasCoordinates = (normalized.latitude !== null && normalized.longitude !== null);
                 const doc = {
                     ...normalized,
-                    location: normalized.location || { type: 'Point', coordinates: [normalized.longitude, normalized.latitude] }
+                    location: hasCoordinates ? (normalized.location || { type: 'Point', coordinates: [normalized.longitude, normalized.latitude] }) : null
                 };
                 await Incident.findOneAndUpdate({ incidentId: id }, doc, { upsert: true, new: true });
             } catch (err) {
@@ -222,8 +225,12 @@ class DataStore {
     async getIncident(id) {
         if (this.isMongoConnected) {
             try {
-                const found = await Incident.findOne({ incidentId: id });
-                if (found) return found.toObject();
+                const found = await Incident.findOne({ $or: [{ incidentId: id }, { id: id }] });
+                if (found) {
+                    const obj = found.toObject();
+                    obj.id = obj.incidentId || obj.id || id;
+                    return obj;
+                }
             } catch (e) { }
         }
         return this.incidents.get(id) || null;
@@ -302,8 +309,14 @@ class DataStore {
         }
 
         // Record response history
+        const eventTime = status => resolved.timeline?.find(e => e.status === status)?.timestamp;
+        const detectedAt = eventTime('DETECTED') || resolved.createdAt;
+        const dispatchedAt = eventTime('EN_ROUTE') || resolved.dispatchedAt;
+        const arrivedAt = eventTime('ARRIVED') || resolved.arrivedAt;
         const historyRecord = {
             incidentId: id,
+            dispatchLatencyMs: dispatchedAt ? Math.max(0, new Date(dispatchedAt) - new Date(detectedAt)) : null,
+            arrivalLatencyMs: arrivedAt && dispatchedAt ? Math.max(0, new Date(arrivedAt) - new Date(dispatchedAt)) : null,
             totalDurationMinutes: Math.round((new Date() - new Date(resolved.createdAt || Date.now())) / 60000),
             outcome: reason,
             auditLog: resolved.timeline
@@ -376,6 +389,13 @@ class DataStore {
         return Array.from(this.hospitals.values());
     }
 
+    async getResponseHistory() {
+        if (this.isMongoConnected) {
+            try { return (await ResponseHistory.find().sort({ createdAt: -1 })).map(item => item.toObject()); } catch (e) { /* fall through */ }
+        }
+        return Array.from(this.responseHistory.values());
+    }
+
     async getHospital(id) {
         if (this.isMongoConnected) {
             try {
@@ -390,6 +410,7 @@ class DataStore {
         const hosp = this.hospitals.get(id);
         if (!hosp) return null;
         const updated = { ...hosp, ...updates, updatedAt: new Date().toISOString() };
+        if (updates.lat !== undefined && updates.lng !== undefined) updated.location = { type: 'Point', coordinates: [updates.lng, updates.lat] };
         this.hospitals.set(id, updated);
         if (this.isMongoConnected) {
             try {
@@ -398,6 +419,14 @@ class DataStore {
         }
         return updated;
     }
+
+    async saveAlert(alert) {
+        this.alerts.set(alert.id, alert);
+        if (this.isMongoConnected) try { await EmergencyAlert.findOneAndUpdate({ id: alert.id }, alert, { upsert: true }); } catch (e) { console.error('[Database] alert save error:', e.message); }
+        return alert;
+    }
+    async getAlertsFor(recipientType, recipientId) { return Array.from(this.alerts.values()).filter(a => a.recipientType === recipientType && a.recipientId === recipientId && ['CREATED', 'DELIVERED'].includes(a.status)); }
+    async updateAlert(id, updates) { const alert = this.alerts.get(id); if (!alert) return null; return this.saveAlert({ ...alert, ...updates }); }
 
     // CCTV Cameras Operations
     async getAllCCTV() {
@@ -446,9 +475,11 @@ class DataStore {
     async resetDemoData() {
         // Keeps non-demo incidents, resets demo incidents and restores fleet
         for (const [id, inc] of this.incidents.entries()) {
-            if (inc.isDemo || inc.id.startsWith('DEMO-') || inc.id.startsWith('RNQ-')) {
+            const incidentKey = String(inc.id || inc.incidentId || '');
+            if (inc.isDemo === true || incidentKey.startsWith('DEMO-')) {
                 inc.status = 'RESOLVED';
                 inc.resolvedAt = new Date();
+                for (const alert of this.alerts.values()) if (alert.incidentId === id) alert.status = 'EXPIRED';
             }
         }
         this.seedInitialFleet();

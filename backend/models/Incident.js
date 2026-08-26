@@ -28,16 +28,24 @@ const IncidentSchema = new mongoose.Schema({
         },
         coordinates: {
             type: [Number], // [longitude, latitude]
-            required: true
+            required: false,
+            default: null
         }
+    },
+    locationQuality: {
+        type: String,
+        enum: ['FRESH_GPS', 'LAST_KNOWN', 'UNAVAILABLE'],
+        default: 'FRESH_GPS'
     },
     latitude: {
         type: Number,
-        required: true
+        required: false,
+        default: null
     },
     longitude: {
         type: Number,
-        required: true
+        required: false,
+        default: null
     },
     gpsAccuracy: {
         type: Number,
@@ -66,6 +74,7 @@ const IncidentSchema = new mongoose.Schema({
             'ROUTE_CALCULATED',
             'HOSPITAL_SELECTED',
             'HOSPITAL_PRE_ALERTED',
+            'AMBULANCE_ACCEPTED',
             'DISPATCHING',
             'EN_ROUTE',
             'ARRIVED',
@@ -78,6 +87,8 @@ const IncidentSchema = new mongoose.Schema({
         type: String,
         default: null
     },
+    ambulanceAcceptedAt: { type: Date, default: null },
+    dispatchedAt: { type: Date, default: null },
     ambulanceReason: {
         type: String,
         default: null
@@ -86,6 +97,9 @@ const IncidentSchema = new mongoose.Schema({
         type: String,
         default: null
     },
+    hospitalAcknowledgedAt: { type: Date, default: null },
+    statusDescription: { type: String, default: null },
+    actor: { type: String, default: null },
     hospitalReason: {
         type: String,
         default: null
@@ -98,12 +112,7 @@ const IncidentSchema = new mongoose.Schema({
         type: mongoose.Schema.Types.Mixed,
         default: null
     },
-    hospitalPreAlert: {
-        status: { type: String, default: 'PENDING' },
-        alertSentAt: { type: Date, default: null },
-        acknowledgedAt: { type: Date, default: null },
-        details: { type: mongoose.Schema.Types.Mixed, default: null }
-    },
+    hospitalPreAlert: { type: mongoose.Schema.Types.Mixed, default: null },
     patientCount: {
         type: Number,
         default: 1

@@ -8,6 +8,12 @@ import com.resqnet.app.domain.model.LocationQuality
 import com.resqnet.app.domain.model.SubmissionStatus
 import java.io.File
 import java.io.FileOutputStream
+import java.security.KeyStore
+import javax.crypto.Cipher
+import javax.crypto.KeyGenerator
+import javax.crypto.SecretKey
+import javax.crypto.spec.GCMParameterSpec
+import android.util.Base64
 
 data class LocalIncidentRecord(
     val incidentId: String,
@@ -21,13 +27,14 @@ data class LocalIncidentRecord(
     val longitude: Double?,
     val locationAccuracy: Float?,
     val locationQuality: LocationQuality = LocationQuality.FRESH_GPS,
-    val speedKmh: Float = 0f,
-    val speedDeltaKmh: Float = 0f,
-    val gForce: Float = 1f,
+    val speedKmh: Float? = null,
+    val speedAvailable: Boolean = false,
+    val speedDeltaKmh: Float? = null,
+    val gForce: Float? = null,
     val rollover: Boolean = false,
-    val confidence: Float,
-    val severity: Int,
-    val userMedicalInfo: String = "Blood: O+ | Known Allergies: None",
+    val confidence: Float? = null,
+    val severity: Int? = null,
+    val userMedicalInfo: String? = null,
     var submissionStatus: SubmissionStatus = SubmissionStatus.CREATED,
     var retryCount: Int = 0,
     val createdAt: Long = System.currentTimeMillis(),
@@ -51,6 +58,8 @@ class LocalIncidentStore(private val context: Context) {
 
     companion object {
         private const val TAG = "ResQNet_LocalStore"
+        private const val KEY_ALIAS = "resqnet.incident.storage.v1"
+        private const val ANDROID_KEYSTORE = "AndroidKeyStore"
     }
 
     /**
@@ -61,7 +70,7 @@ class LocalIncidentStore(private val context: Context) {
             val records = loadAllInternal().toMutableMap()
             records[record.incidentId] = record
             writeRecordsToDisk(records.values.toList())
-            Log.d(TAG, "[ResQNet] Incident ${record.incidentId} safely stored locally. Status: ${record.submissionStatus}")
+            Log.d(TAG, "Incident stored locally. Status: ${record.submissionStatus}")
         }
     }
 
@@ -113,12 +122,13 @@ class LocalIncidentStore(private val context: Context) {
     private fun loadAllInternal(): Map<String, LocalIncidentRecord> {
         if (!storeFile.exists()) return emptyMap()
         return try {
-            val json = storeFile.readText()
+            val stored = storeFile.readText()
+            val json = if (stored.startsWith("v1:")) decrypt(stored) else stored
             val type = object : TypeToken<List<LocalIncidentRecord>>() {}.type
             val list: List<LocalIncidentRecord> = gson.fromJson(json, type) ?: emptyList()
             list.associateBy { it.incidentId }
         } catch (e: Exception) {
-            Log.e(TAG, "[ResQNet] Error loading incident records from disk", e)
+            Log.e(TAG, "Unable to load encrypted incident store", e)
             emptyMap()
         }
     }
@@ -127,17 +137,42 @@ class LocalIncidentStore(private val context: Context) {
         try {
             val tempFile = File(context.filesDir, "resqnet_incidents_v2.tmp")
             val json = gson.toJson(records)
+            val encrypted = encrypt(json)
             FileOutputStream(tempFile).use { fos ->
-                fos.write(json.toByteArray(Charsets.UTF_8))
+                fos.write(encrypted.toByteArray(Charsets.UTF_8))
                 fos.fd.sync()
             }
             if (tempFile.renameTo(storeFile) || (storeFile.delete() && tempFile.renameTo(storeFile))) {
                 // Atomic replace succeeded
             } else {
-                storeFile.writeText(json)
+                throw IllegalStateException("Atomic incident-store replacement failed")
             }
         } catch (e: Exception) {
-            Log.e(TAG, "[ResQNet] Error writing incident records to disk", e)
+            Log.e(TAG, "Unable to persist encrypted incident store", e)
         }
+    }
+
+    private fun getOrCreateKey(): SecretKey {
+        val keyStore = KeyStore.getInstance(ANDROID_KEYSTORE).apply { load(null) }
+        (keyStore.getKey(KEY_ALIAS, null) as? SecretKey)?.let { return it }
+        return KeyGenerator.getInstance("AES", ANDROID_KEYSTORE).apply {
+            init(android.security.keystore.KeyGenParameterSpec.Builder(KEY_ALIAS, android.security.keystore.KeyProperties.PURPOSE_ENCRYPT or android.security.keystore.KeyProperties.PURPOSE_DECRYPT)
+                .setBlockModes(android.security.keystore.KeyProperties.BLOCK_MODE_GCM)
+                .setEncryptionPaddings(android.security.keystore.KeyProperties.ENCRYPTION_PADDING_NONE)
+                .build())
+        }.generateKey()
+    }
+
+    private fun encrypt(plain: String): String {
+        val cipher = Cipher.getInstance("AES/GCM/NoPadding").apply { init(Cipher.ENCRYPT_MODE, getOrCreateKey()) }
+        val payload = cipher.doFinal(plain.toByteArray(Charsets.UTF_8))
+        return "v1:${Base64.encodeToString(cipher.iv, Base64.NO_WRAP)}:${Base64.encodeToString(payload, Base64.NO_WRAP)}"
+    }
+
+    private fun decrypt(stored: String): String {
+        val parts = stored.split(":", limit = 3)
+        require(parts.size == 3 && parts[0] == "v1") { "Unsupported incident-store format" }
+        val cipher = Cipher.getInstance("AES/GCM/NoPadding").apply { init(Cipher.DECRYPT_MODE, getOrCreateKey(), GCMParameterSpec(128, Base64.decode(parts[1], Base64.NO_WRAP))) }
+        return String(cipher.doFinal(Base64.decode(parts[2], Base64.NO_WRAP)), Charsets.UTF_8)
     }
 }

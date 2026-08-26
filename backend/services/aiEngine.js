@@ -1,303 +1,57 @@
 const OSRMService = require('./osrmService');
 
 class AIEngine {
-    /**
-     * 1. Multi-Source Confidence Fusion
-     * Combines independent observation channels (smartphone, CCTV, citizen report, IoT)
-     */
-    static fuseConfidence(sources) {
-        if (!sources || sources.length === 0) {
-            return 85; // Default single-source confidence baseline
+    static fuseConfidence(sources = []) {
+        const seen = new Set(); let unconfidence = 1;
+        for (const item of sources) {
+            const s = typeof item === 'object' ? item : { confidence: item };
+            const key = `${s.source || s.sourceType || 'unknown'}:${s.deviceId || s.cameraId || ''}`;
+            if (seen.has(key)) continue; seen.add(key);
+            let c = Number(s.confidence ?? s.confidenceScore ?? 0.85); if (c > 1) c /= 100;
+            unconfidence *= 1 - Math.min(.99, Math.max(.1, c));
         }
-
-        // De-duplicate signals from the same channel/device
-        const seenSources = new Set();
-        const validScores = [];
-
-        for (const s of sources) {
-            const key = typeof s === 'object' ? `${s.source || s.sourceType}` : 'unknown';
-            if (seenSources.has(key)) continue;
-            seenSources.add(key);
-
-            let rawConf = typeof s === 'object' ? (s.confidence !== undefined ? s.confidence : s.confidenceScore) : s;
-            if (rawConf === undefined || rawConf === null) rawConf = 0.85;
-            if (rawConf > 1.0) rawConf = rawConf / 100.0;
-            rawConf = Math.max(0.1, Math.min(0.99, Number(rawConf)));
-            validScores.push(rawConf);
-        }
-
-        if (validScores.length === 0) return 85;
-
-        // Fused probability = 1 - Product(1 - c_i)
-        let unconfidence = 1.0;
-        for (const c of validScores) {
-            unconfidence *= (1.0 - c);
-        }
-
-        const fused = 1.0 - unconfidence;
-        return Math.min(100, Math.max(10, Math.round(fused * 100)));
+        return Math.round(Math.max(.1, 1 - unconfidence) * 100);
     }
-
-    /**
-     * 2. Polytrauma Severity Scoring Engine (0-100)
-     */
-    static calculateSeverity(payload) {
-        const { gForce, speedDeltaKmh, rollover, patients, confidence, sourceType } = payload;
-
-        // 1. Kinetic Shock Contribution (max 40 pts)
-        const gVal = Number(gForce) || (sourceType === 'smartphone' ? 4.5 : 2.5);
-        const gScore = Math.min(40, (gVal / 6.0) * 40);
-
-        // 2. Velocity Delta (max 30 pts)
-        const deltaV = Number(speedDeltaKmh) || (gVal > 4.0 ? 55 : 25);
-        const deltaScore = Math.min(30, (deltaV / 80.0) * 30);
-
-        // 3. Vehicle Rollover Flag (20 pts)
-        const rolloverScore = (rollover === true || rollover === 'true') ? 20 : 0;
-
-        // 4. Occupant Risk Factor (max 10 pts)
-        const patientCount = Number(patients) || 1;
-        const patientScore = Math.min(10, patientCount * 5);
-
-        let total = Math.round(gScore + deltaScore + rolloverScore + patientScore);
-        if (payload.severity !== undefined && !isNaN(Number(payload.severity))) {
-            total = Math.max(total, Number(payload.severity));
-        }
-
-        return Math.min(100, Math.max(15, total));
+    static calculateSeverity(p) {
+        const g = Number(p.gForce), delta = Number(p.speedDeltaKmh), patients = Number(p.patients ?? p.patientCount ?? 1);
+        let score = (Number.isFinite(g) ? Math.min(40, g / 6 * 40) : 0) + (Number.isFinite(delta) ? Math.min(30, delta / 80 * 30) : 0) + (p.rollover === true || p.rollover === 'true' ? 20 : 0) + Math.min(10, patients * 5);
+        if (Number.isFinite(Number(p.severity))) score = Math.max(score, Number(p.severity));
+        return Math.min(100, Math.max(15, Math.round(score)));
     }
-
-    /**
-     * 3. Authoritative Capability-Aware Ambulance Optimization
-     * Scoring: 50% ETA + 15% Distance + 15% Traffic + 10% Capability + 10% Availability
-     */
-    static async optimizeAmbulance(incident, ambulances) {
-        if (!ambulances || ambulances.length === 0) {
-            return {
-                selected: null,
-                reason: 'No ambulances registered in fleet',
-                ranking: [],
-                rejections: []
-            };
-        }
-
-        const isCriticalTrauma = incident.severity >= 75;
-        const candidateScores = [];
-        const rejections = [];
-
-        for (const amb of ambulances) {
-            // Hard Filter: Must be AVAILABLE
-            if (amb.status !== 'AVAILABLE') {
-                rejections.push({
-                    id: amb.id,
-                    code: amb.code,
-                    reason: `Status is ${amb.status} (Unavailable for dispatch)`
-                });
-                continue;
-            }
-
-            // Real OSRM driving duration & distance from Ambulance -> Crash Scene
-            const route = await OSRMService.getRouteBetween(
-                amb.lng, amb.lat,
-                incident.longitude, incident.latitude
-            );
-
-            const roadEtaMins = route.etaMinutes;
-            const roadDistKm = route.distanceKm;
-
-            // Traffic congestion factor
-            const trafficFactor = amb.id === 'AMB-01' ? 1.1 : (amb.id === 'AMB-02' ? 1.2 : 1.0);
-
-            // Clinical capability matching penalty
-            let capabilityPenalty = 0;
-            if (isCriticalTrauma) {
-                if (amb.type !== 'ALS' || !amb.traumaReady) {
-                    capabilityPenalty = 12; // 12-minute equivalent clinical penalty for non-trauma unit on severe trauma
-                }
-            }
-
-            // Weighted multi-factor cost calculation (lower is better)
-            const compositeScore = (0.50 * roadEtaMins) + 
-                                   (0.15 * roadDistKm) + 
-                                   (0.15 * (roadEtaMins * (trafficFactor - 1.0))) + 
-                                   (0.10 * capabilityPenalty) + 
-                                   (0.10 * (amb.status === 'AVAILABLE' ? 0 : 10));
-
-            candidateScores.push({
-                ambulance: amb,
-                roadEtaMinutes: roadEtaMins,
-                roadDistanceKm: roadDistKm,
-                route: route,
-                capabilityPenalty,
-                compositeScore: +compositeScore.toFixed(2),
-                type: amb.type || 'ALS',
-                traumaReady: amb.traumaReady !== false
-            });
-        }
-
-        if (candidateScores.length === 0) {
-            return {
-                selected: null,
-                reason: 'All registered ambulances are currently busy or offline',
-                ranking: [],
-                rejections
-            };
-        }
-
-        // Sort by lowest composite score
-        candidateScores.sort((a, b) => a.compositeScore - b.compositeScore);
-        const best = candidateScores[0];
-
-        const selectionReason = `${best.ambulance.code}: Optimal unit (${best.roadDistanceKm} km road distance, ${best.roadEtaMinutes} min ETA, ${best.ambulance.type || 'ALS'} Trauma Equipped)`;
-
-        return {
-            selected: best.ambulance,
-            etaMinutes: best.roadEtaMinutes,
-            distanceKm: best.roadDistanceKm,
-            route: best.route,
-            reason: selectionReason,
-            ranking: candidateScores.map(c => ({
-                id: c.ambulance.id,
-                code: c.ambulance.code,
-                score: c.compositeScore,
-                eta: c.roadEtaMinutes,
-                distance: c.roadDistanceKm,
-                type: c.type
-            })),
-            rejections
-        };
+    static async optimizeAmbulance(incident, ambulances = []) {
+        const critical = incident.severity >= 75, rejected = [], candidates = ambulances.filter(a => {
+            if (a.status !== 'AVAILABLE' || a.currentIncidentId) { rejected.push({ id: a.id, code: a.code, reason: 'Not available' }); return false; }
+            if (critical && (a.type !== 'ALS' || !a.traumaReady)) { rejected.push({ id: a.id, code: a.code, reason: 'Critical trauma requires ALS and trauma-ready capability' }); return false; }
+            return true;
+        });
+        if (incident.latitude == null || incident.longitude == null) return { selected: null, reason: 'Scene location unavailable; unit selection deferred', ranking: [], rejections: rejected };
+        const settled = await Promise.allSettled(candidates.map(async ambulance => ({ ambulance, route: await OSRMService.getRouteBetween(ambulance.lng, ambulance.lat, incident.longitude, incident.latitude) })));
+        const rankings = settled.filter(x => x.status === 'fulfilled').map(x => {
+            const { ambulance, route } = x.value, capabilityPenalty = critical ? 0 : (ambulance.type === 'ALS' ? 0 : 1);
+            const score = +(route.etaMinutes * .65 + route.distanceKm * .2 + capabilityPenalty * 5).toFixed(2);
+            return { ambulance, route, score, reasons: [`${route.etaMinutes} min ETA`, `${route.distanceKm} km`, route.isFallback ? 'degraded routing fallback' : 'road route', `${ambulance.type} ${ambulance.traumaReady ? 'trauma-ready' : 'standard'}`] };
+        }).sort((a, b) => a.score - b.score);
+        const best = rankings[0];
+        return { selected: best?.ambulance || null, route: best?.route || null, etaMinutes: best?.route?.etaMinutes ?? null, distanceKm: best?.route?.distanceKm ?? null, reason: best ? `${best.ambulance.code}: ${best.reasons.join(', ')}` : 'No route candidates available', ranking: rankings.map(x => ({ id: x.ambulance.id, code: x.ambulance.code, score: x.score, eta: x.route.etaMinutes, distance: x.route.distanceKm, type: x.ambulance.type, reasons: x.reasons })), rejections: rejected };
     }
-
-    /**
-     * 4. Authoritative Capability-Aware Hospital Optimization
-     * Scoring: 45% ETA + 25% Trauma Match + 15% Capacity + 10% ED Readiness + 5% Distance
-     */
-    static async optimizeHospital(incident, hospitals) {
-        if (!hospitals || hospitals.length === 0) {
-            return {
-                selected: null,
-                reason: 'No hospitals registered in network',
-                ranking: [],
-                rejections: []
-            };
-        }
-
-        const isCritical = incident.severity >= 75;
-        const candidateScores = [];
-        const rejections = [];
-
-        for (const hosp of hospitals) {
-            // Hard Filter 1: Must not be OFFLINE
-            if (hosp.status === 'OFFLINE') {
-                rejections.push({ id: hosp.id, name: hosp.name, reason: 'Facility OFFLINE' });
-                continue;
-            }
-
-            // Hard Filter 2: Must have available emergency capacity
-            if (hosp.emergencyCapacity !== undefined && hosp.emergencyCapacity <= 0) {
-                rejections.push({ id: hosp.id, name: hosp.name, reason: 'Zero Emergency Bay Capacity' });
-                continue;
-            }
-
-            // Hard Filter 3: If severe critical trauma, reject facilities without active trauma center
-            if (isCritical && hosp.trauma === false) {
-                rejections.push({ id: hosp.id, name: hosp.name, reason: 'Lacks Level-1/2 Trauma Center for Critical Emergency' });
-                continue;
-            }
-
-            // Real OSRM driving duration from Crash Scene -> Hospital
-            const route = await OSRMService.getRouteBetween(
-                incident.longitude, incident.latitude,
-                hosp.lng, hosp.lat
-            );
-
-            const roadEtaMins = route.etaMinutes;
-            const roadDistKm = route.distanceKm;
-
-            // Trauma capability score
-            const traumaBonus = hosp.trauma ? 0 : 15;
-            const capacityScore = Math.max(0, 10 - (hosp.emergencyCapacity || 5));
-            const readinessPenalty = Math.max(0, (100 - (hosp.edReadiness || 85)) / 10);
-
-            // Weighted score (lower is better)
-            const score = (0.45 * roadEtaMins) + 
-                          (0.25 * traumaBonus) + 
-                          (0.15 * capacityScore) + 
-                          (0.10 * readinessPenalty) + 
-                          (0.05 * roadDistKm);
-
-            candidateScores.push({
-                hospital: hosp,
-                roadEtaMinutes: roadEtaMins,
-                roadDistanceKm: roadDistKm,
-                route,
-                score: +score.toFixed(2)
-            });
-        }
-
-        if (candidateScores.length === 0) {
-            return {
-                selected: null,
-                reason: 'No matching hospital with active capacity found',
-                ranking: [],
-                rejections
-            };
-        }
-
-        candidateScores.sort((a, b) => a.score - b.score);
-        const best = candidateScores[0];
-
-        const selectionReason = `${best.hospital.name}: Best match (${best.roadDistanceKm} km, ${best.roadEtaMinutes} min transit, Level-${best.hospital.traumaLevel || 1} Trauma Certified)`;
-
-        return {
-            selected: best.hospital,
-            etaMinutes: best.roadEtaMinutes,
-            distanceKm: best.roadDistanceKm,
-            route: best.route,
-            reason: selectionReason,
-            ranking: candidateScores.map(c => ({
-                id: c.hospital.id,
-                name: c.hospital.name,
-                score: c.score,
-                eta: c.roadEtaMinutes
-            })),
-            rejections
-        };
+    static async optimizeHospital(incident, hospitals = []) {
+        const critical = incident.severity >= 75, rejected = [], candidates = hospitals.filter(h => {
+            if (h.status === 'OFFLINE' || h.emergencyCapacity <= 0) { rejected.push({ id: h.id, name: h.name, reason: 'Facility unavailable or no emergency capacity' }); return false; }
+            if (critical && (!h.trauma || h.traumaLevel > 2)) { rejected.push({ id: h.id, name: h.name, reason: 'Critical trauma requires Level 1 or 2 trauma centre' }); return false; }
+            return true;
+        });
+        if (incident.latitude == null || incident.longitude == null) return { selected: null, reason: 'Scene location unavailable; destination selection deferred', ranking: [], rejections: rejected };
+        const settled = await Promise.allSettled(candidates.map(async hospital => ({ hospital, route: await OSRMService.getRouteBetween(incident.longitude, incident.latitude, hospital.lng, hospital.lat) })));
+        const rankings = settled.filter(x => x.status === 'fulfilled').map(x => {
+            const { hospital, route } = x.value, score = +(route.etaMinutes * .45 + route.distanceKm * .05 + (100 - (hospital.edReadiness ?? 0)) * .1 + (10 - (hospital.emergencyCapacity ?? 0)) * .15 + (hospital.trauma ? 0 : 20)).toFixed(2);
+            return { hospital, route, score, reasons: [`Level ${hospital.traumaLevel || 'UNAVAILABLE'} trauma`, `${hospital.emergencyCapacity ?? 'UNAVAILABLE'} bays`, `ED readiness ${hospital.edReadiness ?? 'UNAVAILABLE'}%`, `${route.etaMinutes} min ETA`] };
+        }).sort((a, b) => a.score - b.score);
+        const best = rankings[0];
+        return { selected: best?.hospital || null, route: best?.route || null, etaMinutes: best?.route?.etaMinutes ?? null, distanceKm: best?.route?.distanceKm ?? null, reason: best ? `${best.hospital.name}: ${best.reasons.join(', ')}` : 'No suitable hospital route available', ranking: rankings.map(x => ({ id: x.hospital.id, name: x.hospital.name, score: x.score, eta: x.route.etaMinutes, reasons: x.reasons })), rejections: rejected };
     }
-
-    /**
-     * 5. Generate Zero-Minute Clinical Pre-Alert Payload
-     */
     static buildHospitalPreAlert(incident, ambulance, hospital) {
-        return {
-            incidentId: incident.incidentId || incident.id,
-            alertStatus: 'ALERT_SENT',
-            alertSentAt: new Date().toISOString(),
-            destinationHospital: {
-                id: hospital.id,
-                name: hospital.name,
-                traumaLevel: hospital.traumaLevel || 1
-            },
-            assignedUnit: {
-                code: ambulance.code || ambulance.id,
-                type: ambulance.type || 'ALS',
-                etaMinutes: incident.route ? incident.route.etaMinutes : 4
-            },
-            clinicalTriage: {
-                severityIndex: incident.severity,
-                triageCategory: incident.severity >= 75 ? 'RED_CRITICAL_POLYTRAUMA' : (incident.severity >= 50 ? 'YELLOW_URGENT' : 'GREEN_STANDARD'),
-                patientCount: incident.patientCount || 1,
-                userMedicalVault: incident.userMedicalInfo || 'No pre-existing conditions recorded',
-                bloodGroupRequired: incident.userMedicalInfo ? incident.userMedicalInfo.match(/Blood:\s*([ABO\+\-]+)/i)?.[1] || 'O+' : 'O+'
-            },
-            traumaBayChecklist: [
-                'Trauma Bay 1 Reserved & Sanitized',
-                'CT Scan / Rapid Ultrasound on Standby',
-                'Matched Blood Units Thawed in Blood Bank',
-                'On-Call Neuro & Ortho Surgeon Alerted'
-            ]
-        };
+        const medical = incident.userMedicalInfo || null, blood = medical?.match(/blood\s*:\s*([ABO][+-]?)/i)?.[1] || 'NOT PROVIDED';
+        return { incidentId: incident.incidentId || incident.id, alertStatus: 'PENDING', alertSentAt: new Date().toISOString(), destinationHospital: { id: hospital.id, name: hospital.name, traumaLevel: hospital.traumaLevel ?? 'UNAVAILABLE' }, assignedUnit: { code: ambulance.code || ambulance.id, type: ambulance.type || 'UNAVAILABLE', etaMinutes: incident.route?.etaMinutes ?? 'UNAVAILABLE' }, clinicalTriage: { severityIndex: incident.severity, confidence: incident.confidence, patientCount: incident.patientCount ?? 'NOT PROVIDED', peakGForce: incident.peakGForce ?? incident.gForce ?? 'UNAVAILABLE', deltaV: incident.speedDeltaKmh ?? 'UNAVAILABLE', rollover: incident.rollover ?? 'NOT PROVIDED', locationQuality: incident.locationQuality, medicalInformation: medical || 'NOT PROVIDED', bloodGroup: blood, allergies: medical?.match(/allerg(?:y|ies)\s*:\s*([^|]+)/i)?.[1]?.trim() || 'NOT PROVIDED', routeStatus: incident.route?.routingStatus || 'UNAVAILABLE' } };
     }
 }
-
 module.exports = AIEngine;

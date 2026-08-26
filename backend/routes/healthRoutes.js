@@ -2,6 +2,9 @@ const express = require('express');
 const router = express.Router();
 const db = require('../database/db');
 const axios = require('axios');
+const OSRMService = require('../services/osrmService');
+
+let probeCache = { expires: 0, osrm: 'DEGRADED', ai: 'OFFLINE' };
 
 module.exports = (io) => {
     router.get('/health', async (req, res) => {
@@ -10,27 +13,24 @@ module.exports = (io) => {
         const activeIncidents = incidents.filter(i => i.status !== 'RESOLVED').length;
         const availableAmbs = ambulances.filter(a => a.status === 'AVAILABLE').length;
 
-        // Active probe to OSRM routing service
-        let osrmStatus = 'UP';
-        try {
-            const osrmUrl = process.env.OSRM_BASE_URL || 'https://router.project-osrm.org';
-            const osrmProbe = await axios.get(`${osrmUrl}/route/v1/driving/73.8567,18.5204;73.8780,18.5360?overview=false`, { timeout: 2000 });
-            if (!osrmProbe.data || osrmProbe.data.code !== 'Ok') osrmStatus = 'DEGRADED';
-        } catch (e) {
-            osrmStatus = 'DEGRADED';
+        if (Date.now() > probeCache.expires) {
+            const aiUrl = process.env.AI_SERVICE_URL || 'http://localhost:5001';
+            const [osrm, ai] = await Promise.allSettled([OSRMService.probe(), axios.get(`${aiUrl}/health`, { timeout: 800 })]);
+            probeCache = { expires: Date.now() + 10000, osrm: osrm.status === 'fulfilled' ? osrm.value : 'DEGRADED', ai: ai.status === 'fulfilled' && ai.value.data?.status === 'ONLINE' ? 'ONLINE' : 'OFFLINE' };
         }
 
         const healthData = {
             status: 'ok',
-            backend: 'UP',
-            mongodb: db.isMongoConnected ? 'UP' : 'DEGRADED',
+            backend: 'UP', // canonical legacy field; backendStatus is the ONLINE/DEGRADED/OFFLINE field
+            backendStatus: 'ONLINE',
+            mongodb: db.isMongoConnected ? 'ONLINE' : 'DEGRADED',
             database: db.isMongoConnected ? 'MONGODB' : 'IN_MEMORY_FALLBACK',
             databaseConnected: db.isMongoConnected,
-            aiEngine: 'UP',
-            ai: 'ONLINE',
-            osrm: osrmStatus,
-            routing: osrmStatus === 'UP' ? 'ONLINE' : 'DEGRADED',
-            socketIO: 'UP',
+            aiEngine: probeCache.ai,
+            ai: probeCache.ai,
+            osrm: probeCache.osrm,
+            routing: probeCache.osrm,
+            socketIO: 'ONLINE',
             socket: 'ONLINE',
             activeSockets: io && io.engine ? io.engine.clientsCount : 0,
             activeIncidents,

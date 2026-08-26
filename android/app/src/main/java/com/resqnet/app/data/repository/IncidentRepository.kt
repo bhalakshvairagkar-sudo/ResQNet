@@ -58,7 +58,7 @@ class IncidentRepository(private val context: Context) {
     fun createAndSaveLocalIncident(
         crashResult: CrashDetectionResult,
         location: LocationData,
-        userMedicalInfo: String = "Blood: O+ | Known Allergies: None"
+        userMedicalInfo: String? = null
     ): LocalIncidentRecord {
         val uniqueIncidentId = "RNQ-${UUID.randomUUID().toString().take(8).uppercase()}"
 
@@ -76,11 +76,12 @@ class IncidentRepository(private val context: Context) {
             source = "SMARTPHONE",
             title = title,
             timestamp = crashResult.timestamp,
-            latitude = if (location.quality != LocationQuality.UNAVAILABLE) location.latitude else 0.0,
-            longitude = if (location.quality != LocationQuality.UNAVAILABLE) location.longitude else 0.0,
+            latitude = if (location.quality != LocationQuality.UNAVAILABLE) location.latitude else null,
+            longitude = if (location.quality != LocationQuality.UNAVAILABLE) location.longitude else null,
             locationAccuracy = location.accuracy,
             locationQuality = location.quality,
             speedKmh = location.speedKmh,
+            speedAvailable = location.isSpeedAvailable,
             speedDeltaKmh = crashResult.speedDeltaKmh,
             gForce = crashResult.peakGForce,
             rollover = crashResult.isRollover,
@@ -93,7 +94,7 @@ class IncidentRepository(private val context: Context) {
         )
 
         localStore.saveIncident(record)
-        Log.d(TAG, "[ResQNet] Emergency incident ${record.incidentId} safely recorded locally FIRST.")
+        Log.d(TAG, "[LOCAL_STORE] Emergency incident ${record.incidentId} safely recorded locally FIRST.")
         return record
     }
 
@@ -234,41 +235,57 @@ class IncidentRepository(private val context: Context) {
             source = "smartphone",
             sourceType = "smartphone",
             title = record.title,
-            latitude = record.latitude ?: 18.5204,
-            longitude = record.longitude ?: 73.8567,
-            gpsAccuracy = record.locationAccuracy ?: 10.0f,
+            latitude = record.latitude,
+            longitude = record.longitude,
+            gpsAccuracy = record.locationAccuracy,
+            locationQuality = record.locationQuality.name,
             gForce = record.gForce,
             speedKmh = record.speedKmh,
             speedDeltaKmh = record.speedDeltaKmh,
+            speedAvailable = record.speedAvailable,
             rollover = record.rollover,
             confidence = record.confidence,
             severity = record.severity,
             status = "DETECTED",
             userMedicalInfo = record.userMedicalInfo,
-            timestamp = isoTimestamp
+            timestamp = isoTimestamp,
+            isDemo = false
         )
     }
 
     fun generateEmergencyMessage(record: LocalIncidentRecord): String {
         val timeString = SimpleDateFormat("HH:mm:ss", Locale.getDefault()).format(Date(record.timestamp))
         val locStr = when (record.locationQuality) {
-            LocationQuality.FRESH_GPS -> "${"%.4f".format(record.latitude)}, ${"%.4f".format(record.longitude)} (±${record.locationAccuracy?.toInt() ?: 5}m Live GPS)"
-            LocationQuality.LAST_KNOWN -> "${"%.4f".format(record.latitude)}, ${"%.4f".format(record.longitude)} (Last Known Location)"
+            LocationQuality.FRESH_GPS -> {
+                if (record.latitude != null && record.longitude != null) {
+                    "${"%.4f".format(record.latitude)}, ${"%.4f".format(record.longitude)} (±${record.locationAccuracy?.toInt() ?: 5}m Live GPS)"
+                } else "Location Unavailable"
+            }
+            LocationQuality.LAST_KNOWN -> {
+                if (record.latitude != null && record.longitude != null) {
+                    "${"%.4f".format(record.latitude)}, ${"%.4f".format(record.longitude)} (Last Known Location)"
+                } else "Location Unavailable"
+            }
             LocationQuality.UNAVAILABLE -> "Location Temporarily Unavailable"
         }
+
+        val gForceStr = if (record.gForce != null) "${"%.1f".format(record.gForce)}G" else "Unavailable"
+        val deltaVStr = if (record.speedDeltaKmh != null) "${"%.1f".format(record.speedDeltaKmh)} km/h" else "Unavailable"
+        val confStr = if (record.confidence != null) "${(record.confidence * 100).toInt()}%" else "Unavailable"
+        val sevStr = if (record.severity != null) "${record.severity}/100" else "Unavailable"
 
         return """
             🚨 RESQNET EMERGENCY ALERT 🚨
             Possible road collision autonomously detected.
 
             📍 Location: $locStr
-            📊 Impact Force: ${"%.1f".format(record.gForce)}G
-            ⚡ Deceleration Δv: ${"%.1f".format(record.speedDeltaKmh)} km/h
-            🎯 Confidence: ${(record.confidence * 100).toInt()}%
-            ⚠️ Severity: ${record.severity}/100
+            📊 Impact Force: $gForceStr
+            ⚡ Deceleration Δv: $deltaVStr
+            🎯 Confidence: $confStr
+            ⚠️ Severity: $sevStr
             🕒 Time: $timeString
             📱 Incident ID: ${record.incidentId}
-            🩺 Medical: ${record.userMedicalInfo}
+            🩺 Medical information: ${if (record.userMedicalInfo.isNullOrBlank()) "NOT PROVIDED" else "PROVIDED"}
         """.trimIndent()
     }
 }

@@ -15,10 +15,12 @@ android {
         versionCode = 1
         versionName = "3.4.0"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+        buildConfigField("String", "DEFAULT_BACKEND_URL", "\"${System.getenv("RESQNET_BACKEND_URL") ?: "http://10.0.2.2:5000/"}\"")
     }
 
     buildFeatures {
         compose = true
+        buildConfig = true
     }
 
     compileOptions {
