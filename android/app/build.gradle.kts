@@ -15,7 +15,13 @@ android {
         versionCode = 1
         versionName = "3.4.0"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
-        buildConfigField("String", "DEFAULT_BACKEND_URL", "\"${System.getenv("RESQNET_BACKEND_URL") ?: "http://10.0.2.2:5000/"}\"")
+        val backendUrl = providers.gradleProperty("RESQNET_BACKEND_URL")
+            .orElse(providers.environmentVariable("RESQNET_BACKEND_URL"))
+            .orElse("https://your-resqnet-backend.onrender.com/")
+            .get()
+            .let { if (it.endsWith('/')) it else "$it/" }
+        buildConfigField("String", "DEFAULT_BACKEND_URL", "\"$backendUrl\"")
+        buildConfigField("String", "DEFAULT_SOCKET_URL", "\"${backendUrl.removeSuffix("/")}\"")
     }
 
     buildFeatures {

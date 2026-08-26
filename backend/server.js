@@ -11,10 +11,15 @@ const auth = require('./services/authService');
 const app = express();
 const server = http.createServer(app);
 
-// Permissive CORS for local & production deployment
+// Local development permits any browser origin.  Render production deployments
+// use an explicit comma-separated CORS_ORIGINS allow-list for both REST and
+// Socket.IO, while native Android clients continue to work without an Origin.
 const allowedOrigins = (process.env.CORS_ORIGINS || '').split(',').filter(Boolean);
+const corsOrigin = process.env.NODE_ENV === 'production'
+    ? (origin, cb) => cb(null, !origin || allowedOrigins.includes(origin))
+    : '*';
 app.use(cors({
-    origin: process.env.NODE_ENV === 'production' ? (origin, cb) => cb(null, !origin || allowedOrigins.includes(origin)) : '*',
+    origin: corsOrigin,
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With']
 }));
@@ -39,10 +44,10 @@ app.use('/api', (req, res, next) => {
     next();
 });
 
-// Setup Socket.IO with permissive CORS
+// Socket.IO shares this same HTTP service and origin policy on Render.
 const io = new Server(server, {
     cors: {
-        origin: '*',
+        origin: corsOrigin,
         methods: ['GET', 'POST']
     }
 });
@@ -137,7 +142,8 @@ app.use((err, req, res, next) => {
 });
 
 // Start server
-server.listen(config.PORT, () => {
+// Render forwards traffic to the port in PORT and requires a public bind.
+server.listen(config.PORT, '0.0.0.0', () => {
     console.log(`\n======================================================`);
     console.log(`🚀 ResQNet Central AI Backend Live on Port ${config.PORT}`);
     console.log(`📡 WebSocket / Socket.IO Live on port ${config.PORT}`);
