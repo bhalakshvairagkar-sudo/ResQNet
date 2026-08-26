@@ -285,7 +285,7 @@ class IncidentRepository(private val context: Context) {
             ⚠️ Severity: $sevStr
             🕒 Time: $timeString
             📱 Incident ID: ${record.incidentId}
-            🩺 Medical information: ${if (record.userMedicalInfo.isNullOrBlank()) "NOT PROVIDED" else "PROVIDED"}
+            🩺 Medical: ${record.userMedicalInfo ?: "None reported"}
         """.trimIndent()
     }
 }
