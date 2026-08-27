@@ -110,7 +110,10 @@ interface ResQNetApi {
     @GET("api/hospitals/{id}")
     suspend fun getHospital(@Path("id") id: String, @Header("Authorization") authorization: String): Response<HospitalDto>
     @POST("api/incidents/detect")
-    suspend fun reportCrash(@Body payload: EmergencyPayload): Response<IncidentResponse>
+    suspend fun reportCrash(
+        @Body payload: EmergencyPayload,
+        @Header("Authorization") authorization: String?
+    ): Response<IncidentResponse>
 
     @POST("api/emergencies")
     suspend fun reportEmergency(@Body payload: EmergencyPayload): Response<IncidentResponse>
@@ -150,6 +153,13 @@ object ApiClient {
     }
 
     fun getBaseUrl(): String = baseUrl
+
+    // A deployment may protect public crash intake with RESQNET_API_KEY. The
+    // value is compiled from an ignored local.properties file, never Git.
+    fun crashUploadAuthorization(): String? = BuildConfig.RESQNET_API_KEY
+        .trim()
+        .takeIf { it.isNotEmpty() }
+        ?.let { "Bearer $it" }
 
     private var retrofitInstance: Retrofit? = null
 
