@@ -125,8 +125,11 @@ interface ResQNetApi {
 enum class AppEnvironment(val defaultUrl: String) {
     LOCAL_LAN(BuildConfig.DEFAULT_BACKEND_URL),
     EMULATOR(BuildConfig.DEFAULT_BACKEND_URL),
-    STAGING("https://staging-api.resqnet.io/"),
-    PRODUCTION("https://api.resqnet.io/")
+    // The shared deployed service is used in every build mode. Keeping these
+    // values identical prevents a user from accidentally selecting a demo URL
+    // that does not exist and silently switching the field app offline.
+    STAGING(BuildConfig.DEFAULT_BACKEND_URL),
+    PRODUCTION(BuildConfig.DEFAULT_BACKEND_URL)
 }
 
 object ApiClient {
