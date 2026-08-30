@@ -30,3 +30,5 @@ services:
         value: operator
       - key: AI_SERVICE_URL
         sync: false
+      - key: CCTV_AUTH_TOKEN
+        value: resqnet-cctv-secure-token-2026
