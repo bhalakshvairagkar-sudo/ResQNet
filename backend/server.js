@@ -51,10 +51,12 @@ io.on('connection', (socket) => {
 const incidentRoutes = require('./routes/incidentRoutes')(io);
 const fleetRoutes = require('./routes/fleetRoutes')(io);
 const healthRoutes = require('./routes/healthRoutes')(io);
+const cctvRoutes = require('./routes/cctvRoutes')(io);
 
 // Emergency & Incident API routes
 app.use('/api/emergencies', incidentRoutes);
 app.use('/api/incidents', incidentRoutes);
+app.use('/api/cctv', cctvRoutes);
 app.use('/api/fleet', fleetRoutes);
 app.use('/api', fleetRoutes);
 app.use('/api', healthRoutes);

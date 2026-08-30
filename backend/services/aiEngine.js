@@ -42,24 +42,42 @@ class AIEngine {
      * 2. Polytrauma Severity Scoring Engine (0-100)
      */
     static calculateSeverity(payload) {
-        const { gForce, speedDeltaKmh, rollover, patients, confidence, sourceType } = payload;
+        const { gForce, speedDeltaKmh, rollover, patients, confidence, sourceType, evidence } = payload;
 
-        // 1. Kinetic Shock Contribution (max 40 pts)
-        const gVal = Number(gForce) || (sourceType === 'smartphone' ? 4.5 : 2.5);
-        const gScore = Math.min(40, (gVal / 6.0) * 40);
+        let total = 0;
 
-        // 2. Velocity Delta (max 30 pts)
-        const deltaV = Number(speedDeltaKmh) || (gVal > 4.0 ? 55 : 25);
-        const deltaScore = Math.min(30, (deltaV / 80.0) * 30);
+        if (sourceType === 'cctv' || (evidence && (evidence.spatial_collision || evidence.is_confirmed))) {
+            // CCTV Optical Severity Formula (0-100)
+            let opticalScore = 35; // Base optical impact severity
+            if (evidence) {
+                if (evidence.spatial_collision) opticalScore += 25 + Math.min(15, Math.round((evidence.max_iou || 0.3) * 30));
+                if (evidence.rapid_deceleration) opticalScore += 15;
+                if (evidence.rollover_detected) opticalScore += 20;
+                if (evidence.pedestrian_involved) opticalScore += 15;
+            }
+            const patientCount = Number(patients || payload.patientCount) || 1;
+            opticalScore += Math.min(10, patientCount * 5);
+            total = opticalScore;
+        } else {
+            // IMU / Kinematic Shock Contribution (max 40 pts)
+            const gVal = Number(gForce) || (sourceType === 'smartphone' ? 4.5 : 2.5);
+            const gScore = Math.min(40, (gVal / 6.0) * 40);
 
-        // 3. Vehicle Rollover Flag (20 pts)
-        const rolloverScore = (rollover === true || rollover === 'true') ? 20 : 0;
+            // Velocity Delta (max 30 pts)
+            const deltaV = Number(speedDeltaKmh) || (gVal > 4.0 ? 55 : 25);
+            const deltaScore = Math.min(30, (deltaV / 80.0) * 30);
 
-        // 4. Occupant Risk Factor (max 10 pts)
-        const patientCount = Number(patients) || 1;
-        const patientScore = Math.min(10, patientCount * 5);
+            // Vehicle Rollover Flag (20 pts)
+            const isRollover = (rollover === true || rollover === 'true' || (evidence && evidence.rollover_detected));
+            const rolloverScore = isRollover ? 20 : 0;
 
-        let total = Math.round(gScore + deltaScore + rolloverScore + patientScore);
+            // Occupant Risk Factor (max 10 pts)
+            const patientCount = Number(patients || payload.patientCount) || 1;
+            const patientScore = Math.min(10, patientCount * 5);
+
+            total = Math.round(gScore + deltaScore + rolloverScore + patientScore);
+        }
+
         if (payload.severity !== undefined && !isNaN(Number(payload.severity))) {
             total = Math.max(total, Number(payload.severity));
         }

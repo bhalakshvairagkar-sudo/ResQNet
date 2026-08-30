@@ -3,6 +3,7 @@ const config = require('../config/config');
 const Incident = require('../models/Incident');
 const Ambulance = require('../models/Ambulance');
 const Hospital = require('../models/Hospital');
+const Camera = require('../models/Camera');
 const ResponseHistory = require('../models/ResponseHistory');
 
 class DataStore {
@@ -123,7 +124,10 @@ class DataStore {
             }
         ];
 
-        initialCCTV.forEach(c => this.cctvCameras.set(c.id, c));
+        initialCCTV.forEach(c => {
+            this.cctvCameras.set(c.id, c);
+            this.cctvCameras.set(c.cameraId, c);
+        });
         initialHotspots.forEach(h => this.hotspots.set(h.id, h));
     }
 
@@ -185,6 +189,17 @@ class DataStore {
                 const dbHosps = await Hospital.find();
                 dbHosps.forEach(h => this.hospitals.set(h.id, h.toObject()));
             }
+
+            // Seed / Update CCTV cameras with FOV metadata
+            for (const cam of this.cctvCameras.values()) {
+                await Camera.findOneAndUpdate({ id: cam.id }, cam, { upsert: true });
+            }
+            const dbCams = await Camera.find();
+            dbCams.forEach(c => {
+                const obj = c.toObject();
+                this.cctvCameras.set(obj.id, obj);
+                this.cctvCameras.set(obj.cameraId, obj);
+            });
 
             // Sync existing incidents into in-memory cache
             const dbIncidents = await Incident.find();
@@ -406,11 +421,99 @@ class DataStore {
 
     // CCTV Cameras Operations
     async getAllCCTV() {
-        return Array.from(this.cctvCameras.values());
+        if (this.isMongoConnected) {
+            try {
+                const docs = await Camera.find();
+                if (docs && docs.length > 0) return docs.map(d => d.toObject());
+            } catch (e) { }
+        }
+        // Deduplicate in-memory map entries (since stored by both id and cameraId)
+        const unique = new Map();
+        for (const cam of this.cctvCameras.values()) {
+            unique.set(cam.cameraId || cam.id, cam);
+        }
+        return Array.from(unique.values());
     }
 
     async getCCTV(id) {
+        if (this.isMongoConnected) {
+            try {
+                const doc = await Camera.findOne({ $or: [{ id }, { cameraId: id }] });
+                if (doc) return doc.toObject();
+            } catch (e) { }
+        }
         return this.cctvCameras.get(id) || null;
+    }
+
+    async registerCCTV(cameraData) {
+        const id = cameraData.camera_id || cameraData.cameraId || cameraData.id;
+        const normalized = {
+            id,
+            cameraId: id,
+            cameraName: cameraData.camera_name || cameraData.cameraName || `CCTV ${id}`,
+            lat: Number(cameraData.latitude || cameraData.lat || 18.5204),
+            lng: Number(cameraData.longitude || cameraData.lng || 73.8567),
+            latitude: Number(cameraData.latitude || cameraData.lat || 18.5204),
+            longitude: Number(cameraData.longitude || cameraData.lng || 73.8567),
+            road: cameraData.road || 'Main Arterial Corridor',
+            direction: cameraData.direction || 'NORTHBOUND',
+            sourceType: cameraData.source_type || cameraData.sourceType || 'FIXED_OPTICAL_AI',
+            status: cameraData.status || 'ONLINE',
+            fps: Number(cameraData.fps || 0.0),
+            inferenceLatency: Number(cameraData.inference_latency_ms || cameraData.inferenceLatency || 0.0),
+            fovAngle: cameraData.fovAngle !== undefined ? Number(cameraData.fovAngle) : (cameraData.fov_angle !== undefined ? Number(cameraData.fov_angle) : 60),
+            heading: cameraData.heading !== undefined ? Number(cameraData.heading) : 0,
+            coverageRadiusMeters: cameraData.coverageRadiusMeters !== undefined ? Number(cameraData.coverageRadiusMeters) : 200,
+            lastDetection: cameraData.lastDetection || { timestamp: new Date().toISOString(), detected: false, confidence: 0.9 },
+            lastFrameAt: new Date().toISOString(),
+            isDemo: cameraData.is_demo !== undefined ? cameraData.is_demo : (cameraData.isDemo || false)
+        };
+
+        this.cctvCameras.set(id, normalized);
+        this.cctvCameras.set(normalized.cameraId, normalized);
+
+        if (this.isMongoConnected) {
+            try {
+                await Camera.findOneAndUpdate(
+                    { $or: [{ id }, { cameraId: id }] },
+                    normalized,
+                    { upsert: true, new: true }
+                );
+            } catch (err) {
+                console.error('[Database] Mongo registerCCTV error:', err.message);
+            }
+        }
+        return normalized;
+    }
+
+    async updateCCTVHealth(id, healthData) {
+        const existing = await this.getCCTV(id);
+        const updated = {
+            ...(existing || {}),
+            id: id,
+            cameraId: id,
+            status: healthData.status || (existing ? existing.status : 'ONLINE'),
+            fps: healthData.fps !== undefined ? Number(healthData.fps) : (existing ? existing.fps : 0),
+            inferenceLatency: healthData.inference_latency_ms !== undefined ? Number(healthData.inference_latency_ms) : (healthData.inferenceLatency !== undefined ? Number(healthData.inferenceLatency) : (existing ? existing.inferenceLatency : 0)),
+            lastFrameAt: healthData.last_frame_at || new Date().toISOString(),
+            updatedAt: new Date().toISOString()
+        };
+
+        this.cctvCameras.set(id, updated);
+        this.cctvCameras.set(updated.cameraId, updated);
+
+        if (this.isMongoConnected) {
+            try {
+                await Camera.findOneAndUpdate(
+                    { $or: [{ id }, { cameraId: id }] },
+                    updated,
+                    { upsert: true, new: true }
+                );
+            } catch (err) {
+                console.error('[Database] Mongo updateCCTVHealth error:', err.message);
+            }
+        }
+        return updated;
     }
 
     // Historical Blackspot Hotspots Operations
@@ -451,7 +554,7 @@ class DataStore {
     async resetDemoData() {
         // Keeps non-demo incidents, resets demo incidents and restores fleet
         for (const [id, inc] of this.incidents.entries()) {
-            if (inc.isDemo || inc.id.startsWith('DEMO-') || inc.id.startsWith('RNQ-')) {
+            if (inc.isDemo || String(inc.id || '').startsWith('DEMO-') || String(inc.id || '').startsWith('RNQ-')) {
                 inc.status = 'RESOLVED';
                 inc.resolvedAt = new Date();
             }
@@ -459,9 +562,19 @@ class DataStore {
         this.seedInitialFleet();
         if (this.isMongoConnected) {
             try {
+                await Incident.updateMany(
+                    { $or: [{ isDemo: true }, { incidentId: /^RNQ-/ }, { id: /^RNQ-/ }] },
+                    { status: 'RESOLVED', resolvedAt: new Date() }
+                );
                 await Ambulance.deleteMany({});
                 await Hospital.deleteMany({});
-                await this.syncToMongo();
+                this.seedInitialFleet();
+                for (const amb of this.ambulances.values()) {
+                    await Ambulance.findOneAndUpdate({ id: amb.id }, amb, { upsert: true });
+                }
+                for (const hosp of this.hospitals.values()) {
+                    await Hospital.findOneAndUpdate({ id: hosp.id }, hosp, { upsert: true });
+                }
             } catch (e) { }
         }
         return true;

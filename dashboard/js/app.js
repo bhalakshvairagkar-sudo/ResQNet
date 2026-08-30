@@ -291,12 +291,14 @@ async function loadInfrastructure() {
         const popup = `<div class="pop-t" style="color:#38BDF8"><i class="fa-solid fa-video"></i> ${esc(cam.cameraId || cam.id)}</div>
           Name: <b>${esc(cam.cameraName || "Junction Cam")}</b><br/>
           Status: <b>${esc(cam.status)}</b><br/>
-          AI Confidence: <b>${pct((cam.lastDetection?.confidence || 0.9) * 100)}</b><br/>
+          FPS: <b>${cam.fps || 24.0}</b> | Latency: <b>${cam.inferenceLatency || 38}ms</b><br/>
           Coverage: <b>${cam.coverageRadiusMeters || 200}m @ ${cam.fovAngle || 60}°</b><br/>
-          <span style="color:var(--text-3);font-size:9.5px">FIXED OPTICAL SENSOR</span>`;
+          <div style="margin-top:8px"><button onclick="openCctvModal('${esc(cam.cameraId || cam.id)}')" style="width:100%;padding:4px 8px;background:#38BDF8;color:#000;border:none;border-radius:4px;font-weight:bold;cursor:pointer;font-size:10px;"><i class="fa-solid fa-play"></i> PREVIEW CAMERA FEED</button></div>`;
 
         if (!cctvMarkers[cam.id]) {
           cctvMarkers[cam.id] = L.marker(pos, { icon: makeCctvIcon(cam.status) }).bindPopup(popup).addTo(L_cctv);
+        } else {
+          cctvMarkers[cam.id].setLatLng(pos).setIcon(makeCctvIcon(cam.status)).setPopupContent(popup);
         }
 
         if (cam.fovAngle && cam.heading !== undefined) {
@@ -642,6 +644,7 @@ async function pollHealth() {
     setHealth("Backend", h.backend === "ONLINE" || h.backend === "UP");
     setHealth("Database", h.databaseConnected ? true : "degraded");
     setHealth("AI", h.ai === "ONLINE" || h.aiEngine === "UP");
+    setHealth("Cctv", h.cctv === "ONLINE" || h.cctvCamerasOnline > 0);
     setHealth("Routing", h.routing === "ONLINE" || h.osrm === "UP" ? true : "degraded");
     setHealth("Socket", (h.socket === "ONLINE" || h.socketIO === "UP") ? true : false);
   } catch (e) {
@@ -1028,6 +1031,24 @@ function initSocket() {
         if (state.selectedIncidentId === id) renderIncidentDetails();
       }
     });
+
+    socket.on("cctv:accident", (data) => {
+      addActivity(`📹 Optical Collision Anomaly detected by ${data.cameraId} (${data.confidence}% confidence)`, "alert");
+      toast("CCTV COLLISION ALERT", `Optical crash anomaly reported by ${data.cameraId}`, "alert");
+      if (data.incidentId && state.incidents[data.incidentId]) {
+        selectIncident(data.incidentId);
+      }
+    });
+
+    socket.on("cctv:health", (cam) => {
+      const id = cam.id || cam.cameraId;
+      if (state.cctv[id]) {
+        Object.assign(state.cctv[id], cam);
+        if (cctvMarkers[id]) {
+          cctvMarkers[id].setIcon(makeCctvIcon(state.cctv[id].status));
+        }
+      }
+    });
   } catch (e) {
     setHealth("Socket", false);
   }
@@ -1111,6 +1132,54 @@ async function resolveIncident() {
 async function runDemo(source) {
   closeDemo();
   state.demoBusy = true;
+
+  if (source === "fusion") {
+    const fusionId = `RNQ-FUSION-${Date.now().toString().slice(-4)}`;
+    const lat = 18.5308;
+    const lng = 73.8290;
+
+    toast("FUSION DEMO", "Step 1: CCTV optical collision detected at Pune University Junction...", "info");
+    try {
+      // 1. CCTV Event
+      await fetch(API + "/cctv/events", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "x-cctv-auth-token": "resqnet-cctv-secure-token-2026" },
+        body: JSON.stringify({
+          id: fusionId,
+          cameraId: "CCTV-01",
+          latitude: lat,
+          longitude: lng,
+          confidence: 0.94,
+          isDemo: true,
+          evidence: { spatial_collision: true, max_iou: 0.42, rapid_deceleration: true }
+        })
+      });
+
+      // 2. Simultaneous Smartphone Crash Report at same coordinates
+      setTimeout(async () => {
+        toast("FUSION DEMO", "Step 2: Smartphone IMU crash report arrived at same coordinates -> Fusing!", "ok");
+        await fetch(API + "/incidents/detect", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            source: "smartphone",
+            latitude: lat + 0.0001,
+            longitude: lng + 0.0001,
+            gForce: 5.6,
+            speedDeltaKmh: 64,
+            confidence: 0.96,
+            isDemo: true
+          })
+        });
+      }, 1000);
+    } catch (e) {
+      toast("FUSION DEMO ERROR", e.message, "error");
+    } finally {
+      state.demoBusy = false;
+    }
+    return;
+  }
+
   const demoId = `RNQ-DEMO-${Date.now().toString().slice(-4)}`;
   const lat = 18.5204 + (Math.random() - 0.5) * 0.04;
   const lng = 73.8567 + (Math.random() - 0.5) * 0.04;
@@ -1148,21 +1217,36 @@ async function resetDemo() {
   try {
     await fetch(API + "/incidents/demo/reset", { method: "POST" });
     state.incidents = {};
+    state.routes = {};
+    state.timelines = {};
+    state.selectedIncidentId = null;
     L_inc.clearLayers();
-    L_resolved.clearLayers();
     L_route.clearLayers();
-    seedFleet();
+    L_resolved.clearLayers();
     renderIncidentList();
     renderIncidentDetails();
     renderKPIs();
-    toast("DEMO RESET", "All demo incidents cleared.", "info");
+    toast("DEMO RESET", "Cleared all demo incidents and routes.", "ok");
   } catch (e) {
     toast("RESET ERROR", e.message, "error");
   }
 }
 
-/* ---------- DOM WIRING ---------- */
+/* ---------- EVENT WIRING ---------- */
+window.openCctvModal = (cameraId) => {
+  const cam = state.cctv[cameraId] || { id: cameraId, name: `Camera ${cameraId}`, lat: 18.5204, lng: 73.8567, road: 'Main Corridor', status: 'ONLINE', fps: 24, inferenceLatency: 38 };
+  if ($("cctvModalTitle")) $("cctvModalTitle").textContent = `${cam.cameraName || cam.name || cameraId} OPTICAL STREAM`;
+  if ($("cctvModalSub")) $("cctvModalSub").textContent = `${cameraId} • ${cam.lat ? cam.lat.toFixed(4) : 18.5204}, ${cam.lng ? cam.lng.toFixed(4) : 73.8567}`;
+  if ($("cctvModalRoad")) $("cctvModalRoad").textContent = cam.road || "Main Corridor";
+  if ($("cctvModalBadge")) $("cctvModalBadge").textContent = cam.status || "ONLINE";
+  if ($("cctvStreamMetrics")) $("cctvStreamMetrics").textContent = `FPS: ${cam.fps || 24.0} | YOLO Latency: ${cam.inferenceLatency || 38}ms | Model: YOLOv8n`;
+  if ($("cctvModal")) $("cctvModal").style.display = "block";
+};
+
 function wire() {
+  // CCTV Modal Close
+  if ($("closeCctvModal")) $("closeCctvModal").onclick = () => { if ($("cctvModal")) $("cctvModal").style.display = "none"; };
+
   setInterval(() => {
     $("clock").textContent = new Date().toLocaleTimeString("en-GB", { hour12: false }) + " IST";
   }, 1000);
@@ -1214,6 +1298,7 @@ function wire() {
   $("demoSmartphone").onclick = () => runDemo("smartphone");
   $("demoCctv").onclick = () => runDemo("cctv");
   $("demoCitizen").onclick = () => runDemo("citizen");
+  if ($("demoFusion")) $("demoFusion").onclick = () => runDemo("fusion");
   $("demoReset").onclick = resetDemo;
 
   // Tabs & Search

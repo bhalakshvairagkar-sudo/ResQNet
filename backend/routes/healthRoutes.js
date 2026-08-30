@@ -20,6 +20,9 @@ module.exports = (io) => {
             osrmStatus = 'DEGRADED';
         }
 
+        const cameras = await db.getAllCCTV();
+        const onlineCameras = cameras.filter(c => c.status === 'ONLINE').length;
+
         const healthData = {
             status: 'ok',
             backend: 'UP',
@@ -28,6 +31,9 @@ module.exports = (io) => {
             databaseConnected: db.isMongoConnected,
             aiEngine: 'UP',
             ai: 'ONLINE',
+            cctv: onlineCameras > 0 ? 'ONLINE' : 'DEGRADED',
+            cctvCamerasOnline: onlineCameras,
+            cctvCamerasTotal: cameras.length,
             osrm: osrmStatus,
             routing: osrmStatus === 'UP' ? 'ONLINE' : 'DEGRADED',
             socketIO: 'UP',

@@ -48,6 +48,7 @@
     <div class="health-row"><span>Socket.IO</span><span class="val"><span class="dot online" id="hSocket"></span><i id="tSocket">ONLINE</i></span></div>
     <div class="health-row"><span>Database</span><span class="val"><span class="dot online" id="hDb"></span><i id="tDb">ONLINE</i></span></div>
     <div class="health-row"><span>AI Engine</span><span class="val"><span class="dot online" id="hAi"></span><i id="tAi">ONLINE</i></span></div>
+    <div class="health-row"><span>YOLO CCTV AI</span><span class="val"><span class="dot online" id="hCctv"></span><i id="tCctv">ONLINE</i></span></div>
     <div class="health-row"><span>Routing (OSRM)</span><span class="val"><span class="dot online" id="hRouting"></span><i id="tRouting">ONLINE</i></span></div>
     <p class="note" id="healthNote">Statuses are reported by <span class="mono">GET /api/health</span> and live probes. Components that do not report are shown as UNKNOWN — never assumed online.</p>
   </div>
@@ -271,11 +272,44 @@
       <div><div class="t"><i class="fa-solid fa-user-shield" style="color:var(--orange)"></i> CITIZEN REPORT</div><div class="s">Human SOS with location and patient count</div></div>
       <i class="fa-solid fa-arrow-right" style="color:var(--text-3)"></i>
     </button>
+    <button class="dbtn" id="demoFusion" data-testid="demo-fusion">
+      <div><div class="t"><i class="fa-solid fa-code-merge" style="color:var(--green)"></i> CCTV + SMARTPHONE FUSION</div><div class="s">Simultaneous optical AI + IMU crash merging into 1 incident</div></div>
+      <i class="fa-solid fa-arrow-right" style="color:var(--text-3)"></i>
+    </button>
     <div class="flowline"><span class="f"></span> SAME DOWNSTREAM PIPELINE <span class="f"></span></div>
     <button class="dbtn" id="demoReset" data-testid="demo-reset" style="margin-top:10px">
       <div><div class="t"><i class="fa-solid fa-rotate-left" style="color:var(--red)"></i> RESET DEMO</div><div class="s">Clears demo incidents, routes, markers, feed and fleet</div></div>
       <i class="fa-solid fa-arrow-right" style="color:var(--text-3)"></i>
     </button>
+  </div>
+</div>
+
+<!-- CCTV LIVE STREAM / OPTICAL PREVIEW MODAL -->
+<div id="cctvModal" class="popover" style="display:none;position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);width:min(640px,94vw);background:#0f172a;border:1px solid #334155;border-radius:12px;box-shadow:0 25px 50px -12px rgba(0,0,0,0.7);z-index:9999;padding:16px;">
+  <div style="display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid #1e293b;padding-bottom:10px;margin-bottom:12px;">
+    <div>
+      <h3 style="margin:0;font-size:15px;color:#fff;font-weight:700;display:flex;align-items:center;gap:8px;">
+        <i class="fa-solid fa-video" style="color:#38bdf8;"></i> <span id="cctvModalTitle">CCTV OPTICAL STREAM</span>
+      </h3>
+      <small id="cctvModalSub" style="color:#94a3b8;font-size:11px;font-family:monospace;">CAM-01 • 18.5308, 73.8290</small>
+    </div>
+    <button id="closeCctvModal" style="background:none;border:none;color:#94a3b8;font-size:18px;cursor:pointer;">✕</button>
+  </div>
+  
+  <div style="position:relative;background:#020617;border-radius:8px;overflow:hidden;min-height:260px;display:flex;align-items:center;justify-content:center;border:1px solid #1e293b;">
+    <div id="cctvStreamCanvas" style="width:100%;height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:20px;text-align:center;">
+      <i class="fa-solid fa-satellite-dish" style="font-size:36px;color:#38bdf8;margin-bottom:10px;"></i>
+      <div style="font-family:monospace;font-size:13px;color:#f8fafc;font-weight:600;" id="cctvStreamStatus">REAL-TIME OPTICAL FEED ACTIVE</div>
+      <div style="font-family:monospace;font-size:11px;color:#94a3b8;margin-top:6px;" id="cctvStreamMetrics">FPS: 24.0 | YOLO Latency: 38ms | Model: YOLOv8n</div>
+      <div style="margin-top:14px;padding:6px 12px;background:rgba(56,189,248,0.1);border:1px solid rgba(56,189,248,0.3);border-radius:6px;font-size:11px;color:#38bdf8;">
+        <i class="fa-solid fa-shield-halved"></i> Optical Collision Telemetry Live
+      </div>
+    </div>
+  </div>
+
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-top:12px;font-size:11px;color:#64748b;">
+    <span>Target Corridor: <b id="cctvModalRoad" style="color:#cbd5e1;">Ganeshkhind Road</b></span>
+    <span id="cctvModalBadge" style="padding:2px 8px;border-radius:4px;background:#10b981;color:#fff;font-weight:700;">ONLINE</span>
   </div>
 </div>
 

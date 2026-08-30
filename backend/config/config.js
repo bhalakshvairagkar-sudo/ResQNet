@@ -15,5 +15,6 @@ module.exports = {
     PUNE_COORDINATES: {
         latitude: 18.5204,
         longitude: 73.8567
-    }
+    },
+    CCTV_AUTH_TOKEN: process.env.CCTV_AUTH_TOKEN || 'resqnet-cctv-secure-token-2026'
 };

@@ -32,6 +32,11 @@ async function runPhase12ATests() {
         }
     }
 
+    // 0. Clean test slate
+    try {
+        await axios.post(`${BACKEND_URL}/api/incidents/demo/reset`);
+    } catch (e) { }
+
     // 1. Backend Health Probe
     await test('Authoritative Subsystem Health Probe (GET /api/health)', async () => {
         const res = await axios.get(`${BACKEND_URL}/api/health`);

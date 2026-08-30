@@ -48,29 +48,49 @@ module.exports = (io) => {
 
             // Spatial-Temporal Correlation Check (Multi-Source Fusion)
             const allIncidents = await db.getAllIncidents();
-            const correlatedIncident = allIncidents.find(i => {
-                if (i.status === 'RESOLVED' || i.id === incId) return false;
-                if (!isLocationAvailable || i.latitude === null || i.longitude === null) return false;
+            let correlatedIncident = null;
+            let minDistance = Infinity;
+
+            for (const i of allIncidents) {
+                if (i.status === 'RESOLVED' || i.id === incId || (i.incidentId && i.incidentId === incId)) continue;
+                if (!isLocationAvailable || i.latitude === null || i.longitude === null) continue;
                 const dist = OSRMService.calculateHaversineDistance(lat, lng, i.latitude, i.longitude);
                 const timeDiffSec = Math.abs(Date.now() - new Date(i.createdAt).getTime()) / 1000;
-                return (dist <= 0.25 && timeDiffSec <= 60); // 250m & 60s correlation window
-            });
+                if (dist <= 0.25 && timeDiffSec <= 60) {
+                    if (dist < minDistance) {
+                        minDistance = dist;
+                        correlatedIncident = i;
+                    }
+                }
+            }
 
             if (correlatedIncident) {
-                console.log(`[FUSION] Correlated ${src.toUpperCase()} report into existing incident ${correlatedIncident.id} (Distance: ~${(OSRMService.calculateHaversineDistance(lat, lng, correlatedIncident.latitude, correlatedIncident.longitude)*1000).toFixed(0)}m)`);
+                const corrId = correlatedIncident.incidentId || correlatedIncident.id;
+                console.log(`[FUSION] Correlated ${src.toUpperCase()} report into existing incident ${corrId} (Distance: ~${(minDistance*1000).toFixed(0)}m)`);
                 
                 const newSourceEntry = {
                     source: src,
+                    cameraId: body.cameraId || null,
                     confidence: body.confidence !== undefined ? (body.confidence > 1 ? body.confidence : Math.round(body.confidence * 100)) : 92,
+                    evidence: body.evidence || {},
                     timestamp: new Date().toISOString()
                 };
                 const updatedSources = [...(correlatedIncident.sources || []), newSourceEntry];
                 const updatedConfidence = AIEngine.fuseConfidence(updatedSources);
 
-                const updated = await db.updateIncident(correlatedIncident.id, {
+                const timeline = correlatedIncident.timeline || [];
+                timeline.push({
+                    status: 'VERIFIED',
+                    timestamp: new Date(),
+                    description: `Fused multi-source confirmation from ${src.toUpperCase()}${body.cameraId ? ` (${body.cameraId})` : ''} (Confidence: ${newSourceEntry.confidence}% -> Fused: ${updatedConfidence}%)`,
+                    actor: src === 'cctv' ? 'YOLO_AI_CORE' : 'AI_CORE'
+                });
+
+                const updated = await db.updateIncident(corrId, {
                     sources: updatedSources,
                     confidence: updatedConfidence,
                     confidenceScore: updatedConfidence,
+                    timeline: timeline,
                     statusDescription: `Fused multi-source confirmation from ${src.toUpperCase()} (Confidence: ${updatedConfidence}%)`
                 });
 
@@ -78,8 +98,8 @@ module.exports = (io) => {
                 io.emit('incidentUpdated', updated);
                 return res.status(200).json({
                     success: true,
-                    incidentId: correlatedIncident.id,
-                    id: correlatedIncident.id,
+                    incidentId: corrId,
+                    id: corrId,
                     incident: updated,
                     fused: true
                 });
