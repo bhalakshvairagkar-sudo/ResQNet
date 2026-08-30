@@ -17,6 +17,7 @@ build/
 app/build/
 android/app/build/
 android/.gradle/
+android/.gradle-user-home/
 android/build/
 local.properties
 *.iml

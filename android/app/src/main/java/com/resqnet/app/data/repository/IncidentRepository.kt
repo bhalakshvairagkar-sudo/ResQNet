@@ -58,7 +58,7 @@ class IncidentRepository(private val context: Context) {
     fun createAndSaveLocalIncident(
         crashResult: CrashDetectionResult,
         location: LocationData,
-        userMedicalInfo: String = "Blood: O+ | Known Allergies: None"
+        userMedicalInfo: String? = null
     ): LocalIncidentRecord {
         val uniqueIncidentId = "RNQ-${UUID.randomUUID().toString().take(8).uppercase()}"
 
@@ -113,7 +113,7 @@ class IncidentRepository(private val context: Context) {
 
         try {
             Log.d(TAG, "[ResQNet] Submitting incident ${record.incidentId} to backend (Attempt ${record.retryCount + 1})...")
-            val response = ApiClient.api.reportCrash(payload)
+            val response = ApiClient.api.reportCrash(payload, ApiClient.crashUploadAuthorization())
 
             if (response.isSuccessful && response.body()?.success == true) {
                 val body = response.body()!!

@@ -1,149 +1,41 @@
 const axios = require('axios');
 
+/** Bounded, failure-tolerant routing. A route never holds up emergency ingestion. */
 class OSRMService {
-    static getBaseUrl() {
-        return process.env.OSRM_BASE_URL || 'https://router.project-osrm.org';
-    }
-
-    /**
-     * Calculates driving route between two points: Origin -> Destination
-     */
-    static async getRouteBetween(originLng, originLat, destLng, destLat) {
-        if (originLng == null || originLat == null || destLng == null || destLat == null) {
-            return {
-                success: false,
-                isFallback: true,
-                routingStatus: 'DEGRADED_MISSING_COORDS',
-                distanceKm: null,
-                etaMinutes: null,
-                geometry: null,
-                error: 'Missing required coordinate parameters'
-            };
-        }
-
-        const url = `${this.getBaseUrl()}/route/v1/driving/${originLng},${originLat};${destLng},${destLat}?overview=full&geometries=geojson&steps=false`;
-        const startTime = Date.now();
-
-        try {
-            const response = await axios.get(url, { timeout: 3500 });
-            if (response.data && response.data.code === 'Ok' && response.data.routes.length > 0) {
-                const route = response.data.routes[0];
-                const latencyMs = Date.now() - startTime;
-                return {
-                    success: true,
-                    isFallback: false,
-                    routingStatus: 'OPTIMAL_ROAD',
-                    trafficWeighting: 'configured traffic weighting',
-                    distanceMeters: Math.round(route.distance),
-                    distanceKm: +(route.distance / 1000).toFixed(2),
-                    durationSeconds: Math.round(route.duration),
-                    etaMinutes: Math.max(1, Math.round(route.duration / 60)),
-                    geometry: route.geometry,
-                    osrmLatencyMs: latencyMs
-                };
-            }
-        } catch (err) {
-            console.warn(`[OSRM] Single-leg route degraded fallback (${err.message})`);
-        }
-
-        // Explicit degraded fallback using Haversine
-        const haversineDistKm = this.calculateHaversineDistance(originLat, originLng, destLat, destLng);
-        const estimatedDurationSeconds = Math.round((haversineDistKm / 45) * 3600); // 45 km/h avg speed
-        return {
-            success: true,
-            isFallback: true,
-            routingStatus: 'DEGRADED',
-            trafficWeighting: 'configured traffic weighting',
-            distanceMeters: Math.round(haversineDistKm * 1000),
-            distanceKm: +haversineDistKm.toFixed(2),
-            durationSeconds: estimatedDurationSeconds,
-            etaMinutes: Math.max(1, Math.round(estimatedDurationSeconds / 60)),
-            geometry: {
-                type: 'LineString',
-                coordinates: [
-                    [originLng, originLat],
-                    [destLng, destLat]
-                ]
-            },
-            fallbackNote: 'Calculated via direct topological approximation (OSRM offline/timeout)'
-        };
-    }
-
-    /**
-     * Calculates full 2-leg emergency route: Ambulance -> Crash Site -> Hospital
-     */
-    static async getTwoLegRoute(ambLng, ambLat, sceneLng, sceneLat, hospLng, hospLat) {
-        if (sceneLng == null || sceneLat == null) {
-            return {
-                success: false,
-                isFallback: true,
-                routingStatus: 'DEGRADED_NO_SCENE_GPS',
-                distanceKm: null,
-                etaMinutes: null,
-                geometry: null
-            };
-        }
-
-        const url = `${this.getBaseUrl()}/route/v1/driving/${ambLng},${ambLat};${sceneLng},${sceneLat};${hospLng},${hospLat}?overview=full&geometries=geojson&steps=false`;
-
-        try {
-            const response = await axios.get(url, { timeout: 4000 });
-            if (response.data && response.data.code === 'Ok' && response.data.routes.length > 0) {
-                const route = response.data.routes[0];
-                return {
-                    success: true,
-                    isFallback: false,
-                    routingStatus: 'OPTIMAL_ROAD',
-                    trafficWeighting: 'configured traffic weighting',
-                    distanceMeters: Math.round(route.distance),
-                    distanceKm: +(route.distance / 1000).toFixed(2),
-                    durationSeconds: Math.round(route.duration),
-                    etaMinutes: Math.max(1, Math.round(route.duration / 60)),
-                    geometry: route.geometry,
-                    legs: route.legs ? route.legs.map(l => ({
-                        distanceKm: +(l.distance / 1000).toFixed(2),
-                        durationSeconds: Math.round(l.duration),
-                        etaMinutes: Math.max(1, Math.round(l.duration / 60))
-                    })) : []
-                };
-            }
-        } catch (err) {
-            console.warn(`[OSRM] Two-leg route degraded fallback (${err.message})`);
-        }
-
-        const leg1 = await this.getRouteBetween(ambLng, ambLat, sceneLng, sceneLat);
-        const leg2 = await this.getRouteBetween(sceneLng, sceneLat, hospLng, hospLat);
-
-        return {
-            success: true,
-            isFallback: true,
-            routingStatus: 'DEGRADED',
-            trafficWeighting: 'configured traffic weighting',
-            distanceMeters: (leg1.distanceMeters || 0) + (leg2.distanceMeters || 0),
-            distanceKm: +((leg1.distanceKm || 0) + (leg2.distanceKm || 0)).toFixed(2),
-            durationSeconds: (leg1.durationSeconds || 0) + (leg2.durationSeconds || 0),
-            etaMinutes: (leg1.etaMinutes || 0) + (leg2.etaMinutes || 0),
-            geometry: {
-                type: 'LineString',
-                coordinates: [
-                    ...(leg1.geometry?.coordinates || []),
-                    ...(leg2.geometry?.coordinates || [])
-                ]
-            },
-            legs: [leg1, leg2]
-        };
-    }
-
+    static cache = new Map(); static failures = 0; static openUntil = 0;
+    static timeoutMs = Number(process.env.OSRM_TIMEOUT_MS || 1800);
+    static circuitMs = Number(process.env.OSRM_CIRCUIT_MS || 15000);
+    static getBaseUrl() { return process.env.OSRM_BASE_URL || 'https://router.project-osrm.org'; }
+    static status() { return Date.now() < this.openUntil ? 'DEGRADED' : 'ONLINE'; }
     static calculateHaversineDistance(lat1, lon1, lat2, lon2) {
-        const R = 6371; // Earth radius in km
-        const dLat = (lat2 - lat1) * Math.PI / 180;
-        const dLon = (lon2 - lon1) * Math.PI / 180;
-        const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-                  Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
-                  Math.sin(dLon / 2) * Math.sin(dLon / 2);
-        const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-        return R * c;
+        const r = 6371, dLat = (lat2 - lat1) * Math.PI / 180, dLon = (lon2 - lon1) * Math.PI / 180;
+        const a = Math.sin(dLat / 2) ** 2 + Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.sin(dLon / 2) ** 2;
+        return r * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
     }
+    static fallback(points, note = 'OSRM unavailable') {
+        if (points.some(p => p[0] == null || p[1] == null)) return { success: false, isFallback: true, routingStatus: 'DEGRADED_MISSING_COORDS', distanceKm: null, etaMinutes: null, geometry: null };
+        let km = 0; for (let i = 1; i < points.length; i++) km += this.calculateHaversineDistance(points[i - 1][1], points[i - 1][0], points[i][1], points[i][0]);
+        const seconds = Math.round(km / 45 * 3600);
+        return { success: true, isFallback: true, routingStatus: 'DEGRADED', trafficWeighting: 'CONFIGURED_TRAFFIC_CONTEXT', distanceMeters: Math.round(km * 1000), distanceKm: +km.toFixed(2), durationSeconds: seconds, etaMinutes: Math.max(1, Math.round(seconds / 60)), geometry: { type: 'LineString', coordinates: points }, fallbackNote: note };
+    }
+    static async route(points) {
+        if (points.some(p => p[0] == null || p[1] == null)) return this.fallback(points);
+        const key = points.map(p => p.join(',')).join(';'), cached = this.cache.get(key);
+        if (cached && cached.expires > Date.now()) return cached.value;
+        if (Date.now() < this.openUntil) return this.fallback(points, 'OSRM circuit breaker is open');
+        const started = Date.now();
+        try {
+            const { data } = await axios.get(`${this.getBaseUrl()}/route/v1/driving/${key}?overview=full&geometries=geojson&steps=false`, { timeout: this.timeoutMs });
+            if (!data?.routes?.length || data.code !== 'Ok') throw new Error('OSRM returned no route');
+            const r = data.routes[0], value = { success: true, isFallback: false, routingStatus: 'OPTIMAL_ROAD', trafficWeighting: 'CONFIGURED_TRAFFIC_CONTEXT', distanceMeters: Math.round(r.distance), distanceKm: +(r.distance / 1000).toFixed(2), durationSeconds: Math.round(r.duration), etaMinutes: Math.max(1, Math.round(r.duration / 60)), geometry: r.geometry, legs: (r.legs || []).map(l => ({ distanceKm: +(l.distance / 1000).toFixed(2), durationSeconds: Math.round(l.duration), etaMinutes: Math.max(1, Math.round(l.duration / 60)) })), osrmLatencyMs: Date.now() - started };
+            this.failures = 0; this.cache.set(key, { value, expires: Date.now() + 30000 }); return value;
+        } catch (error) {
+            if (++this.failures >= 2) this.openUntil = Date.now() + this.circuitMs;
+            return this.fallback(points, `OSRM degraded: ${error.code || error.message}`);
+        }
+    }
+    static getRouteBetween(originLng, originLat, destLng, destLat) { return this.route([[originLng, originLat], [destLng, destLat]]); }
+    static getTwoLegRoute(ambLng, ambLat, sceneLng, sceneLat, hospLng, hospLat) { return this.route([[ambLng, ambLat], [sceneLng, sceneLat], [hospLng, hospLat]]); }
+    static async probe() { if (Date.now() < this.openUntil) return 'DEGRADED'; return (await this.getRouteBetween(73.8567, 18.5204, 73.878, 18.536)).isFallback ? 'DEGRADED' : 'ONLINE'; }
 }
-
 module.exports = OSRMService;

@@ -27,8 +27,6 @@
 
   <div class="nav-links" style="display:flex;gap:6px;margin:0 12px">
     <a href="/dashboard.html" class="pill on" style="background:#38BDF8;color:#000;border-color:#38BDF8;text-decoration:none"><i class="fa-solid fa-map-location-dot"></i> COMMAND</a>
-    <a href="/hospital.html" class="pill" style="text-decoration:none"><i class="fa-solid fa-hospital"></i> TRAUMA</a>
-    <a href="/sos.html" class="pill" style="text-decoration:none"><i class="fa-solid fa-hand-holding-medical"></i> SOS</a>
     <a href="/analytics.html" class="pill" style="text-decoration:none"><i class="fa-solid fa-chart-pie"></i> ANALYTICS</a>
   </div>
 
@@ -260,6 +258,15 @@
       <button class="x" id="demoClose" data-testid="demo-close" aria-label="Close">✕</button>
     </div>
     <p>Every simulated event below is written to the backend flagged <span class="mono">isDemo</span> and is labelled DEMO across the UI. Routes use real OSRM road geometry; ambulance and hospital fleets are demo assets.</p>
+    <div id="testModePanel" class="test-mode-panel" data-testid="test-mode-panel">
+      <div class="flowline"><span class="f"></span> SECURED COMMAND CENTER TEST MODE <span class="f"></span></div>
+      <p class="test-note">DEMO / TEST MODE — updates real demo fleet records and uses the same emergency dispatch pipeline as an incoming incident.</p>
+      <div class="test-grid">
+        <form id="testAmbulanceForm" class="test-form"><h4>TEST AMBULANCE LOCATION</h4><select id="testAmbulanceId"></select><input id="testAmbLat" type="number" step="any" placeholder="Latitude" required><input id="testAmbLng" type="number" step="any" placeholder="Longitude" required><select id="testAmbStatus"><option>AVAILABLE</option><option>UNAVAILABLE</option><option>OFFLINE</option></select><button class="pbtn" type="button" data-center="amb">USE MAP CENTER</button><button class="pbtn primary" type="submit">UPDATE LOCATION</button></form>
+        <form id="testHospitalForm" class="test-form"><h4>TEST HOSPITAL LOCATION</h4><select id="testHospitalId"></select><input id="testHospLat" type="number" step="any" placeholder="Latitude" required><input id="testHospLng" type="number" step="any" placeholder="Longitude" required><select id="testHospStatus"><option value="AVAILABLE">OPERATIONAL</option><option>LIMITED</option><option>OFFLINE</option></select><button class="pbtn" type="button" data-center="hosp">USE MAP CENTER</button><button class="pbtn primary" type="submit">UPDATE LOCATION</button></form>
+        <form id="testIncidentForm" class="test-form test-incident"><h4>CREATE TEST ACCIDENT</h4><input id="testIncLat" type="number" step="any" placeholder="Latitude" required><input id="testIncLng" type="number" step="any" placeholder="Longitude" required><select id="testSeverity"><option value="20">LOW</option><option value="45">MEDIUM</option><option value="65">HIGH</option><option value="90" selected>CRITICAL</option></select><input id="testPatients" type="number" min="1" placeholder="Patient count (optional)"><input id="testGForce" type="number" min="0" step="any" placeholder="Peak G-force (optional)"><select id="testAccidentType"><option>ROAD ACCIDENT</option><option>COLLISION</option><option>OTHER</option></select><textarea id="testHelpMessage" placeholder="Custom help message (optional)"></textarea><button class="pbtn" type="button" data-center="inc">USE MAP CENTER</button><button class="pbtn primary" type="submit">CREATE EMERGENCY</button></form>
+      </div><div id="testModeResult" class="test-result" aria-live="polite"></div>
+    </div>
     <button class="dbtn" id="demoSmartphone" data-testid="demo-smartphone">
       <div><div class="t"><i class="fa-solid fa-mobile-screen" style="color:var(--blue)"></i> SMARTPHONE CRASH</div><div class="s">No CCTV in the area — IMU + acoustic signature</div></div>
       <i class="fa-solid fa-arrow-right" style="color:var(--text-3)"></i>

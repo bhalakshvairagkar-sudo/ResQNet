@@ -268,7 +268,7 @@ class CrashDetectionService : Service(), SensorEventListener {
         val notification: Notification = NotificationCompat.Builder(this, NOTIFICATION_CHANNEL_ID)
             .setContentTitle("ResQNet Crash Shield Active")
             .setContentText("Continuous sensor protection armed")
-            .setSmallIcon(android.R.drawable.ic_lock_idle_alarm)
+            .setSmallIcon(com.resqnet.app.R.drawable.ic_notification)
             .setOngoing(true)
             .build()
 

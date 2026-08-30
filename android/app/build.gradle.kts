@@ -1,7 +1,18 @@
+import java.util.Properties
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.compose)
 }
+
+val localProperties = Properties().apply {
+    val localFile = rootProject.file("local.properties")
+    if (localFile.isFile) {
+        localFile.inputStream().use(::load)
+    }
+}
+
+fun String.asBuildConfigString(): String = replace("\\", "\\\\").replace("\"", "\\\"")
 
 android {
     namespace = "com.resqnet.app"
@@ -14,10 +25,23 @@ android {
         versionCode = 1
         versionName = "3.4.0"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+        val backendUrl = providers.gradleProperty("RESQNET_BACKEND_URL")
+            .orElse(providers.environmentVariable("RESQNET_BACKEND_URL"))
+            .orElse("https://your-resqnet-backend.onrender.com/")
+            .get()
+            .let { if (it.endsWith('/')) it else "$it/" }
+        // Kept out of source control: local.properties is ignored by Git.
+        val emergencyApiKey = localProperties.getProperty("RESQNET_API_KEY")
+            ?: providers.environmentVariable("RESQNET_API_KEY").orNull
+            ?: ""
+        buildConfigField("String", "DEFAULT_BACKEND_URL", "\"$backendUrl\"")
+        buildConfigField("String", "DEFAULT_SOCKET_URL", "\"${backendUrl.removeSuffix("/")}\"")
+        buildConfigField("String", "RESQNET_API_KEY", "\"${emergencyApiKey.asBuildConfigString()}\"")
     }
 
     buildFeatures {
         compose = true
+        buildConfig = true
     }
 
     compileOptions {

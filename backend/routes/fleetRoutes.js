@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const db = require('../database/db');
+const auth = require('../services/authService');
 
 module.exports = (io) => {
     // 1. Ambulances Registry
@@ -27,8 +28,8 @@ module.exports = (io) => {
             const updates = {
                 lat: finalLat,
                 lng: finalLng,
-                speed: speed !== undefined ? speed : 60,
-                heading: heading !== undefined ? heading : 0,
+                speed: speed !== undefined ? Number(speed) : undefined,
+                heading: heading !== undefined ? Number(heading) : undefined,
                 status: status || 'EN_ROUTE'
             };
 
@@ -48,6 +49,12 @@ module.exports = (io) => {
 
     router.post('/ambulances/:id/telemetry', handleTelemetry);
     router.post('/ambulances/:id/location', handleTelemetry);
+    router.patch('/ambulances/:id/location', auth.authenticate, auth.allow('COMMAND_CENTER'), async (req, res) => {
+        const lat = Number(req.body.latitude ?? req.body.lat), lng = Number(req.body.longitude ?? req.body.lng);
+        if (!Number.isFinite(lat) || !Number.isFinite(lng) || Math.abs(lat) > 90 || Math.abs(lng) > 180) return res.status(400).json({ error: 'Valid latitude and longitude are required' });
+        const ambulance = await db.updateAmbulance(req.params.id, { lat, lng, status: req.body.status || 'AVAILABLE', locationUpdatedAt: new Date().toISOString(), isDemoLocation: true });
+        if (!ambulance) return res.status(404).json({ error: 'Ambulance not found' }); io.to('role:COMMAND_CENTER').emit('ambulance:location:update', ambulance); io.to(`ambulance:${ambulance.id}`).emit('ambulance:location:update', ambulance); res.json({ success: true, ambulance });
+    });
 
     // 3. Update Ambulance Status
     router.post('/ambulances/:id/status', async (req, res) => {
@@ -100,6 +107,35 @@ module.exports = (io) => {
         } catch (err) {
             return res.status(500).json({ error: err.message });
         }
+    });
+    router.patch('/hospitals/:id/location', auth.authenticate, auth.allow('COMMAND_CENTER'), async (req, res) => {
+        const lat = Number(req.body.latitude ?? req.body.lat), lng = Number(req.body.longitude ?? req.body.lng);
+        if (!Number.isFinite(lat) || !Number.isFinite(lng) || Math.abs(lat) > 90 || Math.abs(lng) > 180) return res.status(400).json({ error: 'Valid latitude and longitude are required' });
+        const hospital = await db.updateHospital(req.params.id, { lat, lng, status: req.body.status || 'AVAILABLE', locationUpdatedAt: new Date().toISOString(), isDemoLocation: true });
+        if (!hospital) return res.status(404).json({ error: 'Hospital not found' }); io.to('role:COMMAND_CENTER').emit('hospital:location:update', hospital); io.to(`hospital:${hospital.id}`).emit('hospital:location:update', hospital); res.json({ success: true, hospital });
+    });
+
+    // Persistent acknowledgement from the destination hospital.
+    router.post('/hospitals/:hospitalId/incidents/:incidentId/ack', async (req, res) => {
+        try {
+            const hospital = await db.getHospital(req.params.hospitalId);
+            const incident = await db.getIncident(req.params.incidentId);
+            if (!hospital) return res.status(404).json({ error: 'Hospital not found' });
+            if (!incident) return res.status(404).json({ error: 'Incident not found' });
+            if (incident.hospitalId && incident.hospitalId !== hospital.id) return res.status(409).json({ error: 'Hospital is not assigned to this incident' });
+            const acknowledgement = { hospitalId: hospital.id, incidentId: incident.id, acknowledgedAt: new Date().toISOString(), acknowledgedBy: req.body.acknowledgedBy || 'HOSPITAL_OPERATOR', readinessStatus: req.body.readinessStatus || 'ACKNOWLEDGED' };
+            const updated = await db.updateIncident(incident.id, {
+                hospitalPreAlert: { ...(incident.hospitalPreAlert || {}), ...acknowledgement, alertStatus: acknowledgement.readinessStatus },
+                statusDescription: `Hospital acknowledgement: ${acknowledgement.readinessStatus}`,
+                actor: acknowledgement.acknowledgedBy
+            });
+            updated.timeline = updated.timeline || [];
+            updated.timeline.push({ status: 'HOSPITAL_ACKNOWLEDGED', timestamp: new Date(), description: `Hospital ${hospital.name} acknowledged pre-alert`, actor: acknowledgement.acknowledgedBy });
+            await db.saveIncident(updated);
+            io.emit('hospital:prealert:ack', acknowledgement);
+            io.emit('incident:update', updated);
+            return res.json({ success: true, acknowledgement, incident: updated });
+        } catch (err) { return res.status(500).json({ error: 'Unable to save acknowledgement' }); }
     });
 
     // 6. CCTV Junction Cameras Registry

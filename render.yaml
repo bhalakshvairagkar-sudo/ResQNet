@@ -1,0 +1,32 @@
+services:
+  - type: web
+    name: resqnet-backend
+    runtime: node
+    rootDir: backend
+    buildCommand: npm ci
+    startCommand: npm start
+    healthCheckPath: /api/health
+    autoDeploy: true
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: NODE_VERSION
+        value: 22
+      - key: MONGODB_URI
+        sync: false
+      - key: DEMO_PASSWORD
+        sync: false
+      - key: RESQNET_API_KEY
+        sync: false
+      - key: CORS_ORIGINS
+        sync: false
+      - key: OSRM_BASE_URL
+        value: https://router.project-osrm.org
+      - key: RATE_LIMIT_PER_MINUTE
+        value: "120"
+      - key: DEMO_MODE
+        value: "false"
+      - key: COMMAND_CENTER_USER
+        value: operator
+      - key: AI_SERVICE_URL
+        sync: false
