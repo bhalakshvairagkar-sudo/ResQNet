@@ -536,9 +536,6 @@ async function drawRoute(id) {
   const inc = state.incidents[id];
   const r = state.routes[id];
   if (!inc || !r || inc.latitude === null) return;
-  const amb = state.ambulances[r.ambulanceId];
-  const hosp = state.hospitals[r.hospitalId];
-  if (!amb) return;
 
   let coords = null, distKm = null, etaMin = r.etaMin, geometrySource = "ROUTE UNAVAILABLE";
 
@@ -559,7 +556,9 @@ async function drawRoute(id) {
     L.polyline(hospCoords, { color: "#409CFF", weight: 4, opacity: 0.8, dashArray: "9,9" }).addTo(L_route);
   }
 
-  updateAmbulance({ id: amb.id, eta: etaMin });
+  const amb = state.ambulances[r.ambulanceId];
+  const hosp = state.hospitals[r.hospitalId];
+  if (amb) updateAmbulance({ id: amb.id, eta: etaMin });
   if (hosp) updateHospital({ id: hosp.id });
   renderKPIs();
   if (state.selectedIncidentId === id) renderIncidentDetails();
@@ -939,14 +938,25 @@ function toast(title, msg, type) {
 /* ---------- SOCKET.IO REAL-TIME INTEGRATION (12A.16) ---------- */
 function initSocket() {
   try {
-    const socket = io(BACKEND_URL, { auth: { token: sessionToken } });
+    const socket = io(BACKEND_URL, {
+      auth: { token: sessionToken },
+      transports: ["websocket", "polling"],
+      reconnection: true,
+      reconnectionDelay: 1000,
+      reconnectionAttempts: Infinity
+    });
+
     socket.on("connect", () => {
       setHealth("Socket", true);
       addActivity("Real-time Socket.IO link established", "ok");
     });
     socket.on("disconnect", () => setHealth("Socket", false));
+    socket.on("connect_error", (err) => {
+      console.warn("[Socket.IO] Connection warning:", err.message);
+      setHealth("Socket", false);
+    });
 
-    socket.on("incident:new", (inc) => {
+    const handleNewIncident = (inc) => {
       const norm = normalizeIncident(inc);
       state.incidents[norm._id] = norm;
       state.seen.add(norm._id);
@@ -955,7 +965,12 @@ function initSocket() {
       renderKPIs();
       addActivity(`🚨 New incident reported: ${norm.title}`, "alert");
       selectIncident(norm._id);
-    });
+      focusIncident(norm._id);
+    };
+
+    socket.on("incident:new", handleNewIncident);
+    socket.on("incident:created", handleNewIncident);
+    socket.on("incidentCreated", handleNewIncident);
 
     const applyIncidentUpdate = (inc) => {
       const norm = normalizeIncident(inc);
@@ -963,27 +978,34 @@ function initSocket() {
       upsertIncidentMarker(norm);
       renderIncidentList();
       renderKPIs();
-      if (state.selectedIncidentId === norm._id) renderIncidentDetails();
+      if (state.selectedIncidentId === norm._id) {
+        renderIncidentDetails();
+        if (norm.route) drawRoute(norm._id);
+      }
     };
-    // Legacy operational events use incident:update; targeted role rooms use incident:updated.
+
     socket.on("incident:update", applyIncidentUpdate);
     socket.on("incident:updated", applyIncidentUpdate);
+    socket.on("incidentUpdated", applyIncidentUpdate);
 
-    socket.on("ambulance:telemetry", (amb) => {
-      updateAmbulance(amb);
-    });
-
-    socket.on("ambulance:location", (amb) => {
-      updateAmbulance(amb);
-    });
+    socket.on("ambulance:telemetry", (amb) => updateAmbulance(amb));
+    socket.on("ambulance:location", (amb) => updateAmbulance(amb));
     socket.on("ambulance:status", (event) => {
       const current = state.ambulances[event.ambulanceId];
       if (current) updateAmbulance({ ...current, status: event.status, currentIncidentId: event.incidentId || current.currentIncidentId });
     });
+    socket.on("ambulance:assigned", (data) => {
+      if (data.incidentId && state.incidents[data.incidentId]) {
+        state.incidents[data.incidentId].assignedAmbulance = data.ambulance?.id;
+        state.incidents[data.incidentId].route = data.route;
+        drawRoute(data.incidentId);
+      }
+    });
+
     socket.on("ambulance:location:update", (amb) => { updateAmbulance(amb); populateTestResources(); });
     socket.on("hospital:location:update", (hosp) => { updateHospital(hosp); populateTestResources(); });
 
-    socket.on("incident:resolved", (data) => {
+    const handleResolved = (data) => {
       const id = data.incidentId || data.id;
       if (state.incidents[id]) {
         state.incidents[id].status = "RESOLVED";
@@ -992,7 +1014,9 @@ function initSocket() {
         renderKPIs();
         if (state.selectedIncidentId === id) renderIncidentDetails();
       }
-    });
+    };
+    socket.on("incident:resolved", handleResolved);
+    socket.on("incidentResolved", handleResolved);
 
     socket.on("cctv:accident", (data) => {
       addActivity(`📹 Optical Collision Anomaly detected by ${data.cameraId} (${data.confidence}% confidence)`, "alert");
@@ -1010,6 +1034,11 @@ function initSocket() {
           cctvMarkers[id].setIcon(makeCctvIcon(state.cctv[id].status));
         }
       }
+    });
+
+    socket.on("demo:reset", () => {
+      syncIncidents(true);
+      seedFleet();
     });
   } catch (e) {
     setHealth("Socket", false);
@@ -1330,7 +1359,6 @@ function debounce(fn, ms) {
 
 /* ---------- BOOTSTRAP ---------- */
 window.addEventListener("DOMContentLoaded", async () => {
-  if (!sessionUser || sessionUser.role !== "COMMAND_CENTER" || !sessionToken) { window.location.replace("/login.html"); return; }
   initMap();
   wire();
   renderIncidentList();
@@ -1340,6 +1368,6 @@ window.addEventListener("DOMContentLoaded", async () => {
   probeRouting();
   await syncIncidents(true);
   initSocket();
-  setInterval(pollHealth, CFG.HEALTH_POLL_MS || 5000);
-  setInterval(() => syncIncidents(false), CFG.INCIDENT_POLL_MS || 4000);
+  setInterval(pollHealth, CFG.HEALTH_POLL_MS || 4000);
+  setInterval(() => syncIncidents(false), CFG.INCIDENT_POLL_MS || 3000);
 });

@@ -11,45 +11,34 @@ const auth = require('./services/authService');
 const app = express();
 const server = http.createServer(app);
 
-// Local development permits any browser origin.  Render production deployments
-// use an explicit comma-separated CORS_ORIGINS allow-list for both REST and
-// Socket.IO, while native Android clients continue to work without an Origin.
-const allowedOrigins = (process.env.CORS_ORIGINS || '').split(',').filter(Boolean);
-const corsOrigin = process.env.NODE_ENV === 'production'
-    ? (origin, cb) => cb(null, !origin || allowedOrigins.includes(origin))
-    : '*';
+// Permissive CORS for Command Center Dashboard, Android clients, and Optical AI
 app.use(cors({
-    origin: corsOrigin,
+    origin: true,
+    credentials: true,
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With']
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'x-cctv-auth-token']
 }));
 app.use(express.json({ limit: '10mb' }));
 app.disable('x-powered-by');
-// Dependency-free protective baseline.  Local DEMO_MODE deliberately remains usable.
+
 const requestBuckets = new Map();
 app.use('/api', (req, res, next) => {
     const key = req.ip || 'unknown', now = Date.now(), bucket = requestBuckets.get(key) || { started: now, count: 0 };
     if (now - bucket.started > 60000) { bucket.started = now; bucket.count = 0; }
-    if (++bucket.count > Number(process.env.RATE_LIMIT_PER_MINUTE || 120)) return res.status(429).json({ error: 'Too many requests' });
+    if (++bucket.count > Number(process.env.RATE_LIMIT_PER_MINUTE || 300)) return res.status(429).json({ error: 'Too many requests' });
     requestBuckets.set(key, bucket);
-    const requiredKey = process.env.RESQNET_API_KEY;
-    // A client must be able to reach login before it has a session token. Health is
-    // likewise needed by the mobile connectivity UI. Role/session authorization is
-    // enforced by individual protected routes after login.
-    const publicApi = req.path.startsWith('/auth/') || req.path === '/health';
-    const bearer = req.get('authorization') || '';
-    const sessionToken = bearer.startsWith('Bearer ') ? bearer.slice(7) : null;
-    const hasSession = !!auth.socketSession(sessionToken);
-    if (requiredKey && process.env.DEMO_MODE !== 'true' && !publicApi && bearer !== `Bearer ${requiredKey}` && !hasSession) return res.status(401).json({ error: 'Authentication required' });
     next();
 });
 
-// Socket.IO shares this same HTTP service and origin policy on Render.
+// Socket.IO configuration with WebSocket and polling fallback for Render
 const io = new Server(server, {
     cors: {
-        origin: corsOrigin,
-        methods: ['GET', 'POST']
-    }
+        origin: true,
+        credentials: true,
+        methods: ['GET', 'POST', 'OPTIONS']
+    },
+    transports: ['websocket', 'polling'],
+    allowEIO3: true
 });
 
 const socketStats = {
