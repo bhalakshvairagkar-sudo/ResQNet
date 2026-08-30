@@ -154,9 +154,18 @@ class DataStore {
     }
 
     async connect() {
+        // Prevent unhandled error event from exiting process
+        mongoose.connection.on('error', (err) => {
+            console.error('[Database] MongoDB runtime connection warning:', err.message);
+            this.isMongoConnected = false;
+        });
+        mongoose.connection.on('disconnected', () => {
+            this.isMongoConnected = false;
+        });
+
         try {
             await mongoose.connect(config.MONGODB_URI, {
-                serverSelectionTimeoutMS: 2000
+                serverSelectionTimeoutMS: 2500
             });
             this.isMongoConnected = true;
             console.log('[Database] MongoDB connected successfully.');

@@ -133,13 +133,21 @@ app.use((err, req, res, next) => {
     res.status(500).json({ error: 'Internal Server Error', ...(process.env.NODE_ENV !== 'production' ? { message: err.message } : {}) });
 });
 
+process.on('uncaughtException', (err) => {
+    console.error('[Process] Uncaught Exception:', err.message || err);
+});
+process.on('unhandledRejection', (reason) => {
+    console.error('[Process] Unhandled Rejection:', reason);
+});
+
 // Start server
 // Render forwards traffic to the port in PORT and requires a public bind.
-server.listen(config.PORT, '0.0.0.0', () => {
+const port = Number(process.env.PORT || config.PORT || 5000);
+server.listen(port, '0.0.0.0', () => {
     console.log(`\n======================================================`);
-    console.log(`🚀 ResQNet Central AI Backend Live on Port ${config.PORT}`);
-    console.log(`📡 WebSocket / Socket.IO Live on port ${config.PORT}`);
-    console.log(`🖥️  Live Dashboard Served at: http://localhost:${config.PORT}/dashboard.html`);
+    console.log(`🚀 ResQNet Central AI Backend Live on Port ${port}`);
+    console.log(`📡 WebSocket / Socket.IO Live on port ${port}`);
+    console.log(`🖥️  Live Dashboard Served at: http://localhost:${port}/dashboard.html`);
     console.log(`======================================================\n`);
 });
 
