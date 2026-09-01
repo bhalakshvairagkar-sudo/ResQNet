@@ -69,8 +69,8 @@ class CitizenWebPortalActivity : ComponentActivity() {
         }
 
         val actionButton = android.widget.TextView(this).apply {
-            text = if (isFirstLaunch) "SKIP TO SENSORS →" else "RELOAD ⟳"
-            setTextColor(android.graphics.Color.parseColor(if (isFirstLaunch) "#38BDF8" else "#94A3B8"))
+            text = "SENSOR SHIELD →"
+            setTextColor(android.graphics.Color.parseColor("#38BDF8"))
             textSize = 12f
             setTypeface(null, android.graphics.Typeface.BOLD)
             val params = android.widget.RelativeLayout.LayoutParams(
@@ -81,13 +81,7 @@ class CitizenWebPortalActivity : ComponentActivity() {
             }
             layoutParams = params
             setOnClickListener {
-                if (isFirstLaunch) {
-                    UserSessionManager.setOnboardingCompleted(this@CitizenWebPortalActivity, true)
-                    startActivity(Intent(this@CitizenWebPortalActivity, MainActivity::class.java))
-                    finish()
-                } else {
-                    webView.reload()
-                }
+                startActivity(Intent(this@CitizenWebPortalActivity, MainActivity::class.java))
             }
         }
 

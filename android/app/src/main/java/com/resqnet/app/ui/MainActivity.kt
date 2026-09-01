@@ -89,17 +89,6 @@ class MainActivity : ComponentActivity(), SensorEventListener {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        // ONBOARDING GATE: First-time users must create an account and fill medical intake first!
-        if (!UserSessionManager.isOnboardingCompleted(this)) {
-            val onboardingIntent = Intent(this, CitizenWebPortalActivity::class.java).apply {
-                putExtra(CitizenWebPortalActivity.EXTRA_IS_FIRST_LAUNCH, true)
-                putExtra(CitizenWebPortalActivity.EXTRA_URL, ApiClient.getBaseUrl())
-            }
-            startActivity(onboardingIntent)
-            finish()
-            return
-        }
-
         repository = IncidentRepository(this)
         locationManager = AppLocationManager(this)
         networkMonitor = NetworkMonitor.getInstance(this)
