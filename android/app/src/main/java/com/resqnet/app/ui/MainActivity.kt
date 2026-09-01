@@ -160,6 +160,12 @@ class MainActivity : ComponentActivity(), SensorEventListener {
                         ApiClient.setBaseUrl(url)
                         Toast.makeText(this, "Custom URL Updated: $url", Toast.LENGTH_SHORT).show()
                     },
+                    onOpenCitizenWebPortal = {
+                        val intent = Intent(this, CitizenWebPortalActivity::class.java).apply {
+                            putExtra(CitizenWebPortalActivity.EXTRA_URL, ApiClient.getBaseUrl())
+                        }
+                        startActivity(intent)
+                    },
                     onOpenOperationsPortal = { startActivity(Intent(this, RolePortalActivity::class.java)) },
                     onFlushRetries = {
                         lifecycleScope.launch {
@@ -317,6 +323,7 @@ fun ResQNetAppUI(
     onToggleShield: (Boolean) -> Unit,
     onSelectEnvironment: (AppEnvironment) -> Unit,
     onUpdateBackendUrl: (String) -> Unit,
+    onOpenCitizenWebPortal: () -> Unit,
     onOpenOperationsPortal: () -> Unit,
     onFlushRetries: () -> Unit
 ) {
@@ -611,6 +618,19 @@ fun ResQNetAppUI(
             Icon(Icons.Default.LocalHospital, contentDescription = null)
             Spacer(modifier = Modifier.width(6.dp))
             Text("AMBULANCE / HOSPITAL OPERATIONS PORTAL", fontWeight = FontWeight.Bold, fontSize = 11.sp)
+        }
+
+        Spacer(modifier = Modifier.height(10.dp))
+
+        Button(
+            onClick = onOpenCitizenWebPortal,
+            modifier = Modifier.fillMaxWidth().height(48.dp),
+            shape = RoundedCornerShape(12.dp),
+            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF0284C7))
+        ) {
+            Icon(Icons.Default.AccountBox, contentDescription = null)
+            Spacer(modifier = Modifier.width(8.dp))
+            Text("CITIZEN MEDICAL VAULT & REGISTRATION", fontWeight = FontWeight.Bold, fontSize = 11.sp)
         }
 
         Spacer(modifier = Modifier.height(14.dp))

@@ -37,6 +37,7 @@
 
         <!-- Fullscreen Crash Interception Countdown Dialog -->
         <activity android:name=".ui.RolePortalActivity" android:exported="false" />
+        <activity android:name=".ui.CitizenWebPortalActivity" android:exported="false" android:theme="@style/Theme.ResQNet" />
         <activity
             android:name=".ui.CrashCountdownActivity"
             android:exported="false"

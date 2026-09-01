@@ -27,7 +27,7 @@ android {
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         val backendUrl = providers.gradleProperty("RESQNET_BACKEND_URL")
             .orElse(providers.environmentVariable("RESQNET_BACKEND_URL"))
-            .orElse("https://your-resqnet-backend.onrender.com/")
+            .orElse("https://resqnet-backend-pyqc.onrender.com/")
             .get()
             .let { if (it.endsWith('/')) it else "$it/" }
         // Kept out of source control: local.properties is ignored by Git.
