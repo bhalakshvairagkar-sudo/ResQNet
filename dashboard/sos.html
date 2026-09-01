@@ -83,7 +83,12 @@
 
 <!-- MEDICAL PROFILE VAULT -->
 <div class="card-box">
-  <h4><i class="fa-solid fa-id-card-clip"></i> OPTIONAL EMERGENCY MEDICAL VAULT</h4>
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
+    <h4 style="margin:0;"><i class="fa-solid fa-id-card-clip"></i> EMERGENCY MEDICAL VAULT</h4>
+    <a href="/medical-profile.html" style="font-size:11px;color:#38bdf8;text-decoration:none;font-weight:700;">
+      <i class="fa-solid fa-pen-to-square"></i> EDIT PROFILE
+    </a>
+  </div>
   <input id="userBlood" class="input-field" placeholder="Blood Group (e.g. O+, O-, A+)" value="O-" />
   <input id="userContact" class="input-field" placeholder="Emergency Contact Phone" value="+91 98765 43210" />
   <input id="userAllergies" class="input-field" placeholder="Allergies / Conditions (e.g. Penicillin, Asthma)" value="Penicillin allergy" />
@@ -93,6 +98,33 @@
   const BACKEND_URL = window.location.origin;
   const socket = io(BACKEND_URL);
   let currentCoords = { lat: 18.5204, lng: 73.8567, accuracy: 5.0 };
+
+  // Load authenticated user medical profile if present
+  async function loadUserVault() {
+    const token = localStorage.resqnetToken;
+    if (!token) return;
+    try {
+      const res = await fetch('/api/auth/medical-profile', {
+        headers: { Authorization: 'Bearer ' + token }
+      });
+      if (res.ok) {
+        const d = await res.json();
+        const p = d.profile;
+        if (p) {
+          if (p.bloodGroup && p.bloodGroup !== 'UNKNOWN') document.getElementById('userBlood').value = p.bloodGroup;
+          if (p.primaryContact?.phone) document.getElementById('userContact').value = `${p.primaryContact.name ? p.primaryContact.name + ': ' : ''}${p.primaryContact.phone}`;
+          const allArr = [];
+          if (Array.isArray(p.allergies) && p.allergies.length > 0) allArr.push('Allergies: ' + p.allergies.join(', '));
+          if (Array.isArray(p.chronicConditions) && p.chronicConditions.length > 0) allArr.push('Conditions: ' + p.chronicConditions.join(', '));
+          if (p.currentMedications) allArr.push('Meds: ' + p.currentMedications);
+          if (allArr.length > 0) document.getElementById('userAllergies').value = allArr.join(' | ');
+        }
+      }
+    } catch (e) {
+      console.warn('Vault load error:', e);
+    }
+  }
+  loadUserVault();
 
   if (navigator.geolocation) {
     navigator.geolocation.getCurrentPosition(
@@ -118,24 +150,30 @@
     btn.disabled = true;
     btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin" style="font-size:36px"></i><span>DISPATCHING...</span>';
 
+    const token = localStorage.resqnetToken;
+    const user = JSON.parse(localStorage.resqnetUser || 'null');
+
     const payload = {
       id: `RNQ-CITIZEN-${Date.now().toString().slice(-4)}`,
       source: 'citizen',
       sourceType: 'citizen',
-      title: 'Citizen 1-Tap Emergency SOS Beacon',
+      title: `${user?.fullName || 'Citizen'} Emergency SOS Beacon`,
       latitude: currentCoords.lat,
       longitude: currentCoords.lng,
       gpsAccuracy: currentCoords.accuracy,
       confidence: 1.0,
-      severity: 85,
+      severity: 88,
       patients: 1,
-      userMedicalInfo: `Blood: ${document.getElementById('userBlood').value} | Contact: ${document.getElementById('userContact').value} | Allergies: ${document.getElementById('userAllergies').value}`
+      userMedicalInfo: `Blood: ${document.getElementById('userBlood').value} | Contact: ${document.getElementById('userContact').value} | Clinical: ${document.getElementById('userAllergies').value}`
     };
 
     try {
+      const headers = { 'Content-Type': 'application/json' };
+      if (token) headers.Authorization = 'Bearer ' + token;
+
       const res = await fetch(`${BACKEND_URL}/api/incidents/detect`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers,
         body: JSON.stringify(payload)
       });
       const data = await res.json();

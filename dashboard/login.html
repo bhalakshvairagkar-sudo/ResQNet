@@ -1,1 +1,339 @@
-<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>ResQNet Login</title><link rel="stylesheet" href="/css/resqnet.css"><style>body{min-height:100vh;display:grid;place-items:center;background:#030508}.card{width:360px;background:#0b111e;border:1px solid #334155;border-radius:14px;padding:28px}.card h1{letter-spacing:.12em}.card input,.card button{width:100%;box-sizing:border-box;padding:12px;margin-top:12px;border-radius:7px}.card input{background:#070b14;border:1px solid #334155;color:#fff}.card button{border:0;background:#38bdf8;font-weight:800}.err{color:#f87171;font-size:12px}</style></head><body><form class="card" id="login"><h1>RES<b>Q</b>NET</h1><p>Secure emergency operations sign-in</p><input name="username" placeholder="Username" required autofocus><input name="password" type="password" placeholder="Password" required><button>LOGIN</button><p id="err" class="err"></p><small>Demo accounts: operator, ambulance1, hospital1. Password is configured on the server.</small></form><script>login.onsubmit=async e=>{e.preventDefault();let f=new FormData(login),r=await fetch('/api/auth/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(Object.fromEntries(f))}),d=await r.json();if(!r.ok)return err.textContent=d.error;localStorage.resqnetToken=d.token;localStorage.resqnetUser=JSON.stringify(d.user);location.href=d.user.role==='AMBULANCE'?'/ambulance.html':d.user.role==='HOSPITAL'?'/hospital.html':'/dashboard.html'}</script></body></html>
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>ResQNet — Secure Portal Authentication</title>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Archivo:wght@600;700;800;900&family=IBM+Plex+Mono:wght@600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: radial-gradient(circle at 50% 20%, #0d1829 0%, #03060a 100%);
+      color: #e2e8f0;
+      font-family: 'Inter', -apple-system, sans-serif;
+      padding: 16px;
+    }
+    .auth-card {
+      width: 100%;
+      max-width: 440px;
+      background: #0b1220;
+      border: 1px solid #1e293b;
+      border-radius: 16px;
+      padding: 30px 28px;
+      box-shadow: 0 10px 40px rgba(0,0,0,0.6);
+    }
+    .brand-header {
+      text-align: center;
+      margin-bottom: 22px;
+    }
+    .brand-logo {
+      font-family: 'Archivo', sans-serif;
+      font-size: 26px;
+      font-weight: 900;
+      letter-spacing: 0.12em;
+      color: #fff;
+    }
+    .brand-logo b { color: #38bdf8; }
+    .brand-sub {
+      font-size: 11px;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: #64748b;
+      font-weight: 700;
+      margin-top: 4px;
+    }
+
+    /* Tabs */
+    .tabs-nav {
+      display: flex;
+      background: #060911;
+      border: 1px solid #1e293b;
+      border-radius: 8px;
+      padding: 4px;
+      margin-bottom: 20px;
+      gap: 4px;
+    }
+    .tab-btn {
+      flex: 1;
+      padding: 9px 0;
+      text-align: center;
+      background: transparent;
+      border: none;
+      color: #94a3b8;
+      font-size: 12px;
+      font-weight: 700;
+      border-radius: 6px;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    .tab-btn.active {
+      background: #38bdf8;
+      color: #040810;
+      box-shadow: 0 2px 8px rgba(56, 189, 248, 0.3);
+    }
+
+    /* Form Fields */
+    .field-group {
+      margin-bottom: 14px;
+    }
+    .field-label {
+      font-size: 11px;
+      font-weight: 700;
+      color: #94a3b8;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-bottom: 6px;
+      display: block;
+    }
+    .input-box {
+      width: 100%;
+      background: #060a12;
+      border: 1px solid #334155;
+      border-radius: 8px;
+      padding: 11px 14px;
+      color: #fff;
+      font-size: 13px;
+      outline: none;
+      transition: border-color 0.15s;
+      font-family: inherit;
+    }
+    .input-box:focus {
+      border-color: #38bdf8;
+      box-shadow: 0 0 0 2px rgba(56, 189, 248, 0.2);
+    }
+    select.input-box {
+      cursor: pointer;
+    }
+
+    .btn-submit {
+      width: 100%;
+      background: #38bdf8;
+      color: #040810;
+      border: none;
+      padding: 13px;
+      border-radius: 8px;
+      font-family: 'Archivo', sans-serif;
+      font-size: 14px;
+      font-weight: 800;
+      letter-spacing: 0.5px;
+      cursor: pointer;
+      margin-top: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      transition: background 0.15s;
+    }
+    .btn-submit:hover { background: #0284c7; color: #fff; }
+
+    .err-box {
+      background: rgba(239, 68, 68, 0.12);
+      border: 1px solid #ef444455;
+      color: #f87171;
+      padding: 10px 12px;
+      border-radius: 6px;
+      font-size: 12px;
+      margin-bottom: 14px;
+      display: none;
+    }
+
+    .demo-info {
+      margin-top: 20px;
+      padding: 12px;
+      background: #070c16;
+      border: 1px dashed #334155;
+      border-radius: 8px;
+      font-size: 11px;
+      color: #64748b;
+      line-height: 1.5;
+    }
+    .demo-info b { color: #94a3b8; }
+  </style>
+</head>
+<body>
+
+<div class="auth-card">
+  <div class="brand-header">
+    <div class="brand-logo">RES<b>Q</b>NET</div>
+    <div class="brand-sub">Emergency Tactical & Clinical Network</div>
+  </div>
+
+  <!-- Tab Toggle -->
+  <div class="tabs-nav">
+    <button class="tab-btn active" id="tabLoginBtn" onclick="setTab('login')">
+      <i class="fa-solid fa-right-to-bracket"></i> SIGN IN
+    </button>
+    <button class="tab-btn" id="tabRegisterBtn" onclick="setTab('register')">
+      <i class="fa-solid fa-user-plus"></i> CREATE ACCOUNT
+    </button>
+  </div>
+
+  <div id="errBox" class="err-box"></div>
+
+  <!-- Sign In Form -->
+  <form id="formLogin">
+    <div class="field-group">
+      <label class="field-label">Username</label>
+      <input class="input-box" name="username" placeholder="Enter your username" required autofocus>
+    </div>
+    <div class="field-group">
+      <label class="field-label">Password</label>
+      <input class="input-box" name="password" type="password" placeholder="Enter your password" required>
+    </div>
+    <button type="submit" class="btn-submit" id="btnLogin">
+      <i class="fa-solid fa-arrow-right"></i> SIGN IN TO RESQNET
+    </button>
+  </form>
+
+  <!-- Create Account Form -->
+  <form id="formRegister" style="display:none;">
+    <div class="field-group">
+      <label class="field-label">Full Name</label>
+      <input class="input-box" name="fullName" placeholder="e.g. Dr. Aryan Sharma" required>
+    </div>
+    <div class="field-group">
+      <label class="field-label">Choose Username</label>
+      <input class="input-box" name="username" placeholder="Choose unique username (e.g. aryan26)" required>
+    </div>
+    <div class="field-group">
+      <label class="field-label">Create Password</label>
+      <input class="input-box" name="password" type="password" placeholder="Min 4 characters" required>
+    </div>
+    <div class="field-group">
+      <label class="field-label">Mobile Phone Number</label>
+      <input class="input-box" name="phone" type="tel" placeholder="+91 98765 43210" required>
+    </div>
+    <div class="field-group">
+      <label class="field-label">Account Role</label>
+      <select class="input-box" name="role" required>
+        <option value="USER">Citizen / General User (with Medical Vault)</option>
+        <option value="AMBULANCE">Ambulance Paramedic / Fleet Driver</option>
+        <option value="HOSPITAL">Hospital Emergency Department Staff</option>
+        <option value="COMMAND_CENTER">Command Center Dispatch Operator</option>
+      </select>
+    </div>
+    <button type="submit" class="btn-submit" id="btnReg">
+      <i class="fa-solid fa-id-card-clip"></i> REGISTER & FILL MEDICAL INTAKE
+    </button>
+  </form>
+
+  <div class="demo-info">
+    <b>💡 Quick Demo Credentials:</b><br>
+    • Dispatch: <code>operator</code><br>
+    • Ambulance: <code>ambulance1</code> to <code>ambulance5</code><br>
+    • Hospital: <code>hospital1</code> to <code>hospital4</code><br>
+    • Password: <code>configurable-demo-password</code>
+  </div>
+</div>
+
+<script>
+  function setTab(mode) {
+    const isLogin = mode === 'login';
+    document.getElementById('tabLoginBtn').classList.toggle('active', isLogin);
+    document.getElementById('tabRegisterBtn').classList.toggle('active', !isLogin);
+    document.getElementById('formLogin').style.display = isLogin ? 'block' : 'none';
+    document.getElementById('formRegister').style.display = isLogin ? 'none' : 'block';
+    hideError();
+  }
+
+  function showError(msg) {
+    const el = document.getElementById('errBox');
+    el.textContent = msg;
+    el.style.display = 'block';
+  }
+
+  function hideError() {
+    document.getElementById('errBox').style.display = 'none';
+  }
+
+  // 1. Sign In Handler
+  document.getElementById('formLogin').onsubmit = async (e) => {
+    e.preventDefault();
+    hideError();
+    const btn = document.getElementById('btnLogin');
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> AUTHENTICATING...';
+
+    const formData = new FormData(e.target);
+    try {
+      const res = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(Object.fromEntries(formData))
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        showError(data.error || 'Invalid credentials');
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fa-solid fa-arrow-right"></i> SIGN IN TO RESQNET';
+        return;
+      }
+
+      localStorage.resqnetToken = data.token;
+      localStorage.resqnetUser = JSON.stringify(data.user);
+
+      // Check if citizen hasn't completed medical profile
+      if (data.user.role === 'USER' && !data.user.hasCompletedMedicalProfile) {
+        location.href = '/medical-profile.html';
+      } else if (data.user.role === 'AMBULANCE') {
+        location.href = '/ambulance.html';
+      } else if (data.user.role === 'HOSPITAL') {
+        location.href = '/hospital.html';
+      } else if (data.user.role === 'COMMAND_CENTER') {
+        location.href = '/dashboard.html';
+      } else {
+        location.href = '/sos.html';
+      }
+    } catch (err) {
+      showError('Network error: ' + err.message);
+      btn.disabled = false;
+      btn.innerHTML = '<i class="fa-solid fa-arrow-right"></i> SIGN IN TO RESQNET';
+    }
+  };
+
+  // 2. Registration Handler
+  document.getElementById('formRegister').onsubmit = async (e) => {
+    e.preventDefault();
+    hideError();
+    const btn = document.getElementById('btnReg');
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> CREATING ACCOUNT...';
+
+    const formData = new FormData(e.target);
+    const payload = Object.fromEntries(formData);
+
+    try {
+      const res = await fetch('/api/auth/register', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        showError(data.error || 'Registration failed');
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fa-solid fa-id-card-clip"></i> REGISTER & FILL MEDICAL INTAKE';
+        return;
+      }
+
+      localStorage.resqnetToken = data.token;
+      localStorage.resqnetUser = JSON.stringify(data.user);
+
+      // Directly prompt new user with Google Form Medical Intake!
+      location.href = '/medical-profile.html';
+    } catch (err) {
+      showError('Network error: ' + err.message);
+      btn.disabled = false;
+      btn.innerHTML = '<i class="fa-solid fa-id-card-clip"></i> REGISTER & FILL MEDICAL INTAKE';
+    }
+  };
+</script>
+</body>
+</html>
+

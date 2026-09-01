@@ -6,6 +6,7 @@ const Hospital = require('../models/Hospital');
 const Camera = require('../models/Camera');
 const ResponseHistory = require('../models/ResponseHistory');
 const EmergencyAlert = require('../models/EmergencyAlert');
+const User = require('../models/User');
 
 class DataStore {
     constructor() {
@@ -17,6 +18,7 @@ class DataStore {
         this.hotspots = new Map();
         this.responseHistory = new Map();
         this.alerts = new Map();
+        this.users = new Map();
         this.seedInitialFleet();
         this.seedInitialInfrastructure();
     }
@@ -582,6 +584,97 @@ class DataStore {
                 ]
             }
         ];
+    }
+
+    // User Management & Emergency Medical Profile Vault
+    async createUser(userData) {
+        const username = String(userData.username || '').toLowerCase().trim();
+        const userObj = {
+            ...userData,
+            username,
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString()
+        };
+        this.users.set(username, userObj);
+
+        if (this.isMongoConnected) {
+            try {
+                const created = await User.create(userObj);
+                return created.toObject();
+            } catch (err) {
+                console.error('[Database] Mongo createUser error:', err.message);
+            }
+        }
+        return userObj;
+    }
+
+    async findUserByUsername(username) {
+        const cleanUsername = String(username || '').toLowerCase().trim();
+        if (this.isMongoConnected) {
+            try {
+                const found = await User.findOne({ username: cleanUsername }).lean();
+                if (found) return found;
+            } catch (err) {
+                console.error('[Database] Mongo findUserByUsername error:', err.message);
+            }
+        }
+        return this.users.get(cleanUsername) || null;
+    }
+
+    async findUserById(id) {
+        if (this.isMongoConnected) {
+            try {
+                const found = await User.findById(id).lean();
+                if (found) return found;
+            } catch (err) {
+                console.error('[Database] Mongo findUserById error:', err.message);
+            }
+        }
+        for (const user of this.users.values()) {
+            if (user._id === id || user.id === id || user.username === id) return user;
+        }
+        return null;
+    }
+
+    async saveMedicalProfile(usernameOrId, profileData) {
+        const cleanKey = String(usernameOrId || '').toLowerCase().trim();
+        const user = await this.findUserByUsername(cleanKey) || await this.findUserById(cleanKey);
+        if (!user) return null;
+
+        const medicalProfile = {
+            ...(user.medicalProfile || {}),
+            ...profileData,
+            isComplete: true,
+            completedAt: new Date()
+        };
+
+        const updated = {
+            ...user,
+            medicalProfile,
+            updatedAt: new Date().toISOString()
+        };
+
+        this.users.set(user.username, updated);
+
+        if (this.isMongoConnected) {
+            try {
+                const saved = await User.findOneAndUpdate(
+                    { username: user.username },
+                    { $set: { medicalProfile, updatedAt: new Date() } },
+                    { new: true }
+                ).lean();
+                return saved ? saved.medicalProfile : medicalProfile;
+            } catch (err) {
+                console.error('[Database] Mongo saveMedicalProfile error:', err.message);
+            }
+        }
+        return medicalProfile;
+    }
+
+    async getMedicalProfile(usernameOrId) {
+        const cleanKey = String(usernameOrId || '').toLowerCase().trim();
+        const user = await this.findUserByUsername(cleanKey) || await this.findUserById(cleanKey);
+        return user ? (user.medicalProfile || null) : null;
     }
 
     async resetDemoData() {

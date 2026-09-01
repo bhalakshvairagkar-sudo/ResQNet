@@ -1,0 +1,476 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>ResQNet — Emergency Medical Intake Form</title>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Google+Sans:wght@400;500;700&family=Roboto:wght@400;500;700&display=swap" rel="stylesheet">
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background: #f0ebf8;
+      color: #202124;
+      font-family: 'Roboto', -apple-system, sans-serif;
+      min-height: 100vh;
+      padding: 16px 12px 48px;
+      display: flex;
+      justify-content: center;
+    }
+    .form-container {
+      max-width: 680px;
+      width: 100%;
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+    }
+
+    /* Google Form Header Card */
+    .header-card {
+      background: #fff;
+      border-radius: 8px;
+      border-top: 10px solid #673ab7;
+      padding: 24px 28px;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.12), 0 1px 2px rgba(0,0,0,0.24);
+      position: relative;
+    }
+    .form-title {
+      font-family: 'Google Sans', sans-serif;
+      font-size: 26px;
+      font-weight: 700;
+      color: #202124;
+      margin-bottom: 8px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .form-desc {
+      font-size: 13px;
+      line-height: 1.6;
+      color: #5f6368;
+    }
+    .auth-banner {
+      margin-top: 14px;
+      padding: 10px 14px;
+      background: #ede7f6;
+      border-radius: 6px;
+      font-size: 12px;
+      color: #4527a0;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    /* Form Question Section Cards */
+    .section-card {
+      background: #fff;
+      border-radius: 8px;
+      padding: 22px 28px;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.12);
+      border-left: 5px solid transparent;
+      transition: border-color 0.2s;
+    }
+    .section-card:focus-within {
+      border-left-color: #673ab7;
+    }
+    .q-title {
+      font-size: 15px;
+      font-weight: 600;
+      color: #202124;
+      margin-bottom: 4px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .q-req { color: #d93025; }
+    .q-hint {
+      font-size: 12px;
+      color: #70757a;
+      margin-bottom: 14px;
+    }
+
+    /* Inputs & Controls */
+    .input-text {
+      width: 100%;
+      border: none;
+      border-bottom: 1px solid #dadce0;
+      padding: 8px 0;
+      font-size: 14px;
+      font-family: inherit;
+      color: #202124;
+      outline: none;
+      transition: border-color 0.2s;
+      background: transparent;
+    }
+    .input-text:focus {
+      border-bottom: 2px solid #673ab7;
+    }
+
+    .grid-2 {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 18px;
+    }
+    @media (max-width: 520px) {
+      .grid-2 { grid-template-columns: 1fr; }
+    }
+
+    /* Option Pills / Blood Group */
+    .blood-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 10px;
+      margin-top: 8px;
+    }
+    .blood-pill {
+      border: 1px solid #dadce0;
+      border-radius: 6px;
+      padding: 10px 4px;
+      text-align: center;
+      font-weight: 700;
+      font-size: 13px;
+      color: #3c4043;
+      cursor: pointer;
+      background: #f8f9fa;
+      transition: all 0.15s;
+    }
+    .blood-pill:hover { background: #ede7f6; }
+    .blood-pill.active {
+      background: #673ab7;
+      color: #fff;
+      border-color: #673ab7;
+      box-shadow: 0 2px 6px rgba(103, 58, 183, 0.4);
+    }
+
+    /* Checkbox Group */
+    .check-grid {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      margin-top: 6px;
+    }
+    .check-label {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-size: 13px;
+      color: #3c4043;
+      cursor: pointer;
+    }
+    .check-label input {
+      accent-color: #673ab7;
+      width: 16px;
+      height: 16px;
+    }
+
+    /* Actions Bar */
+    .actions-bar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-top: 8px;
+      gap: 12px;
+    }
+    .btn-submit {
+      background: #673ab7;
+      color: #fff;
+      border: none;
+      padding: 12px 28px;
+      border-radius: 4px;
+      font-family: 'Google Sans', sans-serif;
+      font-size: 14px;
+      font-weight: 700;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+      transition: background 0.15s;
+    }
+    .btn-submit:hover { background: #5e35b1; }
+    .btn-skip {
+      color: #5f6368;
+      background: transparent;
+      border: none;
+      padding: 10px 16px;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      text-decoration: underline;
+    }
+
+    .msg-box {
+      padding: 12px 16px;
+      border-radius: 6px;
+      font-size: 13px;
+      font-weight: 600;
+      display: none;
+    }
+    .msg-box.success {
+      background: #e6f4ea;
+      color: #137333;
+      border: 1px solid #ceead6;
+    }
+    .msg-box.error {
+      background: #fce8e6;
+      color: #c5221f;
+      border: 1px solid #fad2cf;
+    }
+  </style>
+</head>
+<body>
+
+<form class="form-container" id="medicalForm">
+  <!-- Google Form Header Card -->
+  <div class="header-card">
+    <div class="form-title">
+      <i class="fa-solid fa-file-medical" style="color:#673ab7;"></i>
+      <span>ResQNet Emergency Clinical Intake</span>
+    </div>
+    <div class="form-desc">
+      Welcome to <b>ResQNet</b>. Please fill out your emergency medical details. This information is encrypted in your personal Emergency Response Vault and instantly transmitted to responding ambulances and trauma hospitals during accidents to save critical minutes in the <b>Golden Hour</b>.
+    </div>
+    <div class="auth-banner" id="authBanner">
+      <span><i class="fa-solid fa-user-shield"></i> Logged in as: <b id="userNameLabel">Loading...</b></span>
+      <span style="font-size:11px;"><i class="fa-solid fa-lock"></i> 256-Bit Encrypted</span>
+    </div>
+  </div>
+
+  <div id="statusMsg" class="msg-box"></div>
+
+  <!-- Section 1: Demographics -->
+  <div class="section-card">
+    <div class="q-title"><i class="fa-solid fa-user" style="color:#673ab7;"></i> Full Legal Name <span class="q-req">*</span></div>
+    <div class="q-hint">As listed on medical insurance / government ID</div>
+    <input type="text" id="fullName" class="input-text" placeholder="Your full name" required>
+  </div>
+
+  <div class="section-card">
+    <div class="grid-2">
+      <div>
+        <div class="q-title">Date of Birth</div>
+        <input type="date" id="dob" class="input-text">
+      </div>
+      <div>
+        <div class="q-title">Gender</div>
+        <select id="gender" class="input-text" style="padding:6px 0;">
+          <option value="">Select Gender</option>
+          <option value="Male">Male</option>
+          <option value="Female">Female</option>
+          <option value="Non-Binary">Non-Binary</option>
+          <option value="Other">Prefer not to say</option>
+        </select>
+      </div>
+    </div>
+  </div>
+
+  <!-- Section 2: Blood Type -->
+  <div class="section-card">
+    <div class="q-title"><i class="fa-solid fa-droplet" style="color:#e53935;"></i> Blood Group / Type <span class="q-req">*</span></div>
+    <div class="q-hint">Critical for Zero-Minute blood bank matching during major haemorrhage trauma</div>
+    <input type="hidden" id="bloodGroup" value="O+">
+    <div class="blood-grid">
+      <div class="blood-pill active" onclick="selectBlood('O+')">O+</div>
+      <div class="blood-pill" onclick="selectBlood('O-')">O- (Universal)</div>
+      <div class="blood-pill" onclick="selectBlood('A+')">A+</div>
+      <div class="blood-pill" onclick="selectBlood('A-')">A-</div>
+      <div class="blood-pill" onclick="selectBlood('B+')">B+</div>
+      <div class="blood-pill" onclick="selectBlood('B-')">B-</div>
+      <div class="blood-pill" onclick="selectBlood('AB+')">AB+</div>
+      <div class="blood-pill" onclick="selectBlood('AB-')">AB-</div>
+    </div>
+  </div>
+
+  <!-- Section 3: Allergies -->
+  <div class="section-card">
+    <div class="q-title"><i class="fa-solid fa-triangle-exclamation" style="color:#f57c00;"></i> Known Drug & Environmental Allergies</div>
+    <div class="q-hint">Select all medications or substances that trigger severe allergic reactions</div>
+    <div class="check-grid">
+      <label class="check-label"><input type="checkbox" name="allergy" value="Penicillin / Amoxicillin"> Penicillin / Beta-Lactam Antibiotics</label>
+      <label class="check-label"><input type="checkbox" name="allergy" value="NSAIDs / Aspirin / Ibuprofen"> Aspirin / NSAID Analgesics</label>
+      <label class="check-label"><input type="checkbox" name="allergy" value="Latex"> Medical Latex</label>
+      <label class="check-label"><input type="checkbox" name="allergy" value="Sulfa Drugs"> Sulfonamide Antibiotics</label>
+      <label class="check-label"><input type="checkbox" name="allergy" value="General Anesthesia"> General Anesthesia / Paralytics</label>
+    </div>
+    <input type="text" id="customAllergies" class="input-text" placeholder="Other specific allergies (e.g. Peanuts, Contrast Dye, Morphine)" style="margin-top:12px;">
+  </div>
+
+  <!-- Section 4: Chronic Conditions & Medications -->
+  <div class="section-card">
+    <div class="q-title"><i class="fa-solid fa-heart-pulse" style="color:#e53935;"></i> Pre-Existing Medical Conditions</div>
+    <div class="q-hint">Conditions that emergency responders must factor into resuscitation protocols</div>
+    <div class="check-grid">
+      <label class="check-label"><input type="checkbox" name="condition" value="Diabetes (Type 1 or 2)"> Diabetes Mellitus</label>
+      <label class="check-label"><input type="checkbox" name="condition" value="Cardiovascular Disease / Pacemaker"> Cardiovascular / Hypertension / Pacemaker</label>
+      <label class="check-label"><input type="checkbox" name="condition" value="Asthma / COPD"> Asthma / Respiratory Conditions</label>
+      <label class="check-label"><input type="checkbox" name="condition" value="Epilepsy / Seizures"> Epilepsy / Seizure Disorder</label>
+      <label class="check-label"><input type="checkbox" name="condition" value="Bleeding Disorder / Anticoagulated"> Bleeding Disorder / On Blood Thinners (Warfarin/Heparin)</label>
+    </div>
+    <input type="text" id="currentMedications" class="input-text" placeholder="Current daily medications (e.g. Insulin 20U, Metoprolol 50mg)" style="margin-top:14px;">
+  </div>
+
+  <!-- Section 5: Emergency Contacts -->
+  <div class="section-card">
+    <div class="q-title"><i class="fa-solid fa-phone-volume" style="color:#43a047;"></i> Primary Emergency Next-of-Kin Contact <span class="q-req">*</span></div>
+    <div class="q-hint">Direct phone number of spouse, parent, or guardian to notify upon hospital admission</div>
+    <div class="grid-2">
+      <input type="text" id="emName" class="input-text" placeholder="Contact Full Name" required>
+      <input type="tel" id="emPhone" class="input-text" placeholder="Mobile Phone (+91 98765 43210)" required>
+    </div>
+    <input type="text" id="emRel" class="input-text" placeholder="Relationship (e.g. Spouse, Father, Sibling)" style="margin-top:10px;">
+  </div>
+
+  <!-- Section 6: Organ Donor & Notes -->
+  <div class="section-card">
+    <div class="q-title"><i class="fa-solid fa-notes-medical" style="color:#673ab7;"></i> Organ Donor & Special Medical Directives</div>
+    <div class="check-grid" style="margin-bottom:12px;">
+      <label class="check-label"><input type="checkbox" id="organDonor"> Registered Organ Donor</label>
+    </div>
+    <input type="text" id="specialNotes" class="input-text" placeholder="Any additional clinical notes or private hospital preference">
+  </div>
+
+  <!-- Submit Buttons -->
+  <div class="actions-bar">
+    <button type="submit" class="btn-submit" id="btnSubmit">
+      <i class="fa-solid fa-check"></i> SUBMIT EMERGENCY MEDICAL PROFILE
+    </button>
+    <button type="button" class="btn-skip" onclick="proceedToPortal()">
+      Skip for now →
+    </button>
+  </div>
+</form>
+
+<script>
+  const token = localStorage.resqnetToken;
+  const user = JSON.parse(localStorage.resqnetUser || 'null');
+
+  if (!token || !user) {
+    location.href = '/login.html';
+  }
+
+  document.getElementById('userNameLabel').textContent = `${user.fullName || user.username} (${user.role || 'Citizen'})`;
+  if (user.fullName) document.getElementById('fullName').value = user.fullName;
+  if (user.phone) document.getElementById('emPhone').value = user.phone;
+
+  function selectBlood(bg) {
+    document.getElementById('bloodGroup').value = bg;
+    document.querySelectorAll('.blood-pill').forEach(el => {
+      el.classList.toggle('active', el.textContent.trim().startsWith(bg));
+    });
+  }
+
+  async function loadExistingProfile() {
+    try {
+      const res = await fetch('/api/auth/medical-profile', {
+        headers: { Authorization: 'Bearer ' + token }
+      });
+      if (res.ok) {
+        const d = await res.json();
+        const p = d.profile;
+        if (p) {
+          if (p.bloodGroup) selectBlood(p.bloodGroup);
+          if (p.dateOfBirth) document.getElementById('dob').value = p.dateOfBirth;
+          if (p.gender) document.getElementById('gender').value = p.gender;
+          if (p.currentMedications) document.getElementById('currentMedications').value = p.currentMedications;
+          if (p.organDonor) document.getElementById('organDonor').checked = true;
+          if (p.specialNotes) document.getElementById('specialNotes').value = p.specialNotes;
+
+          if (p.primaryContact) {
+            if (p.primaryContact.name) document.getElementById('emName').value = p.primaryContact.name;
+            if (p.primaryContact.phone) document.getElementById('emPhone').value = p.primaryContact.phone;
+            if (p.primaryContact.relation) document.getElementById('emRel').value = p.primaryContact.relation;
+          }
+
+          if (Array.isArray(p.allergies)) {
+            document.querySelectorAll('input[name="allergy"]').forEach(cb => {
+              if (p.allergies.includes(cb.value)) cb.checked = true;
+            });
+          }
+          if (Array.isArray(p.chronicConditions)) {
+            document.querySelectorAll('input[name="condition"]').forEach(cb => {
+              if (p.chronicConditions.includes(cb.value)) cb.checked = true;
+            });
+          }
+        }
+      }
+    } catch (e) {
+      console.warn('Profile load error:', e);
+    }
+  }
+
+  document.getElementById('medicalForm').onsubmit = async (e) => {
+    e.preventDefault();
+    const btn = document.getElementById('btnSubmit');
+    const msg = document.getElementById('statusMsg');
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> ENCRYPTING & SAVING...';
+
+    const selectedAllergies = Array.from(document.querySelectorAll('input[name="allergy"]:checked')).map(cb => cb.value);
+    const customAll = document.getElementById('customAllergies').value.trim();
+    if (customAll) selectedAllergies.push(customAll);
+
+    const selectedConditions = Array.from(document.querySelectorAll('input[name="condition"]:checked')).map(cb => cb.value);
+
+    const payload = {
+      fullName: document.getElementById('fullName').value.trim(),
+      dateOfBirth: document.getElementById('dob').value,
+      gender: document.getElementById('gender').value,
+      bloodGroup: document.getElementById('bloodGroup').value,
+      allergies: selectedAllergies,
+      chronicConditions: selectedConditions,
+      currentMedications: document.getElementById('currentMedications').value.trim(),
+      primaryContact: {
+        name: document.getElementById('emName').value.trim(),
+        phone: document.getElementById('emPhone').value.trim(),
+        relation: document.getElementById('emRel').value.trim() || 'Primary Next-of-Kin'
+      },
+      organDonor: document.getElementById('organDonor').checked,
+      specialNotes: document.getElementById('specialNotes').value.trim()
+    };
+
+    try {
+      const res = await fetch('/api/auth/medical-profile', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: 'Bearer ' + token
+        },
+        body: JSON.stringify(payload)
+      });
+      const data = await res.json();
+      if (res.ok) {
+        msg.className = 'msg-box success';
+        msg.style.display = 'block';
+        msg.innerHTML = '<i class="fa-solid fa-circle-check"></i> Medical Emergency Profile successfully saved and armed in ResQNet Emergency Vault!';
+        user.hasCompletedMedicalProfile = true;
+        user.medicalProfile = data.profile;
+        localStorage.resqnetUser = JSON.stringify(user);
+        setTimeout(proceedToPortal, 1200);
+      } else {
+        msg.className = 'msg-box error';
+        msg.style.display = 'block';
+        msg.textContent = 'Error: ' + (data.error || 'Failed to save profile');
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fa-solid fa-check"></i> SUBMIT EMERGENCY MEDICAL PROFILE';
+      }
+    } catch (err) {
+      msg.className = 'msg-box error';
+      msg.style.display = 'block';
+      msg.textContent = 'Network error: ' + err.message;
+      btn.disabled = false;
+      btn.innerHTML = '<i class="fa-solid fa-check"></i> SUBMIT EMERGENCY MEDICAL PROFILE';
+    }
+  };
+
+  function proceedToPortal() {
+    if (user.role === 'AMBULANCE') location.href = '/ambulance.html';
+    else if (user.role === 'HOSPITAL') location.href = '/hospital.html';
+    else if (user.role === 'COMMAND_CENTER') location.href = '/dashboard.html';
+    else location.href = '/sos.html';
+  }
+
+  loadExistingProfile();
+</script>
+</body>
+</html>
