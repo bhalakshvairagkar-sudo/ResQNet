@@ -120,15 +120,21 @@ class MainActivity : ComponentActivity(), SensorEventListener {
             }
         }
 
-        // Keep-Alive Background Heartbeat (keeps Render backend awake 24/7)
+        // Keep-Alive Background Heartbeat & Online Status Confirmation
         lifecycleScope.launch {
             while (true) {
                 try {
-                    ApiClient.api.checkHealth()
+                    val resp = ApiClient.api.checkHealth()
+                    if (resp.isSuccessful) {
+                        networkMonitor.setOnline(true)
+                    }
                 } catch (e: Exception) {
                     android.util.Log.d("ResQNet", "Render health check ping: ${e.message}")
+                    if (networkMonitor.checkCurrentConnectivity()) {
+                        networkMonitor.setOnline(true)
+                    }
                 }
-                delay(45000L) // Ping every 45 seconds
+                delay(15000L) // Ping every 15 seconds
             }
         }
 
@@ -229,6 +235,9 @@ class MainActivity : ComponentActivity(), SensorEventListener {
 
     override fun onResume() {
         super.onResume()
+        if (networkMonitor.checkCurrentConnectivity()) {
+            networkMonitor.setOnline(true)
+        }
         accelerometer?.let {
             sensorManager.registerListener(this, it, SensorManager.SENSOR_DELAY_UI)
         }
