@@ -2,25 +2,27 @@ package com.resqnet.app.ui
 
 import android.annotation.SuppressLint
 import android.content.Intent
-import android.graphics.Bitmap
 import android.net.Uri
 import android.os.Bundle
 import android.view.View
 import android.webkit.*
 import android.widget.ProgressBar
-import android.widget.TextView
+import android.widget.Toast
 import androidx.activity.ComponentActivity
-import com.resqnet.app.R
 import com.resqnet.app.data.api.ApiClient
+import com.resqnet.app.data.local.UserSessionManager
 
 class CitizenWebPortalActivity : ComponentActivity() {
 
     private lateinit var webView: WebView
     private lateinit var progressBar: ProgressBar
+    private var isFirstLaunch: Boolean = false
 
     @SuppressLint("SetJavaScriptEnabled")
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
+        isFirstLaunch = intent.getBooleanExtra(EXTRA_IS_FIRST_LAUNCH, false)
 
         // Programmatic tactical dark container layout
         val rootLayout = android.widget.LinearLayout(this).apply {
@@ -43,17 +45,19 @@ class CitizenWebPortalActivity : ComponentActivity() {
         }
 
         val backButton = android.widget.TextView(this).apply {
-            text = "← BACK"
+            text = if (isFirstLaunch) "RESQNET AI" else "← BACK"
             setTextColor(android.graphics.Color.parseColor("#38BDF8"))
             textSize = 13f
             setTypeface(null, android.graphics.Typeface.BOLD)
-            setOnClickListener { finish() }
+            if (!isFirstLaunch) {
+                setOnClickListener { finish() }
+            }
         }
 
         val titleView = android.widget.TextView(this).apply {
-            text = "CITIZEN MEDICAL PORTAL"
+            text = if (isFirstLaunch) "NEW USER ONBOARDING" else "CITIZEN MEDICAL PORTAL"
             setTextColor(android.graphics.Color.WHITE)
-            textSize = 14f
+            textSize = 13f
             setTypeface(android.graphics.Typeface.MONOSPACE, android.graphics.Typeface.BOLD)
             val params = android.widget.RelativeLayout.LayoutParams(
                 android.widget.RelativeLayout.LayoutParams.WRAP_CONTENT,
@@ -64,10 +68,10 @@ class CitizenWebPortalActivity : ComponentActivity() {
             layoutParams = params
         }
 
-        val refreshButton = android.widget.TextView(this).apply {
-            text = "RELOAD ⟳"
-            setTextColor(android.graphics.Color.parseColor("#94A3B8"))
-            textSize = 13f
+        val actionButton = android.widget.TextView(this).apply {
+            text = if (isFirstLaunch) "SKIP TO SENSORS →" else "RELOAD ⟳"
+            setTextColor(android.graphics.Color.parseColor(if (isFirstLaunch) "#38BDF8" else "#94A3B8"))
+            textSize = 12f
             setTypeface(null, android.graphics.Typeface.BOLD)
             val params = android.widget.RelativeLayout.LayoutParams(
                 android.widget.RelativeLayout.LayoutParams.WRAP_CONTENT,
@@ -76,12 +80,32 @@ class CitizenWebPortalActivity : ComponentActivity() {
                 addRule(android.widget.RelativeLayout.ALIGN_PARENT_END)
             }
             layoutParams = params
-            setOnClickListener { webView.reload() }
+            setOnClickListener {
+                if (isFirstLaunch) {
+                    UserSessionManager.setOnboardingCompleted(this@CitizenWebPortalActivity, true)
+                    startActivity(Intent(this@CitizenWebPortalActivity, MainActivity::class.java))
+                    finish()
+                } else {
+                    webView.reload()
+                }
+            }
         }
 
         header.addView(backButton)
         header.addView(titleView)
-        header.addView(refreshButton)
+        header.addView(actionButton)
+
+        // First Launch Instruction Banner
+        if (isFirstLaunch) {
+            val banner = android.widget.TextView(this).apply {
+                text = "💡 Please create your citizen account and save your medical details below to arm your emergency crash shield."
+                setBackgroundColor(android.graphics.Color.parseColor("#0F1C32"))
+                setTextColor(android.graphics.Color.parseColor("#93C5FD"))
+                textSize = 11f
+                setPadding(20, 16, 20, 16)
+            }
+            rootLayout.addView(banner)
+        }
 
         progressBar = ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal).apply {
             max = 100
@@ -121,6 +145,9 @@ class CitizenWebPortalActivity : ComponentActivity() {
         settings.loadWithOverviewMode = true
         settings.useWideViewPort = true
         settings.cacheMode = WebSettings.LOAD_DEFAULT
+
+        // Attach Android Native Bridge
+        webView.addJavascriptInterface(AndroidWebAppBridge(), "AndroidBridge")
 
         webView.webChromeClient = object : WebChromeClient() {
             override fun onProgressChanged(view: WebView?, newProgress: Int) {
@@ -163,6 +190,62 @@ class CitizenWebPortalActivity : ComponentActivity() {
         webView.loadUrl(targetUrl)
     }
 
+    inner class AndroidWebAppBridge {
+        @JavascriptInterface
+        fun onAccountRegistered(
+            token: String,
+            username: String,
+            role: String,
+            fullName: String?,
+            phone: String?,
+            bloodGroup: String?,
+            emergencyContact: String?
+        ) {
+            runOnUiThread {
+                UserSessionManager.saveUserSession(
+                    this@CitizenWebPortalActivity,
+                    token = token,
+                    username = username,
+                    role = role,
+                    fullName = fullName,
+                    phone = phone,
+                    bloodGroup = bloodGroup,
+                    emergencyContact = emergencyContact
+                )
+                Toast.makeText(this@CitizenWebPortalActivity, "✓ Account Created & Medical Vault Active!", Toast.LENGTH_LONG).show()
+                if (isFirstLaunch) {
+                    startActivity(Intent(this@CitizenWebPortalActivity, MainActivity::class.java))
+                    finish()
+                }
+            }
+        }
+
+        @JavascriptInterface
+        fun onUserSignedIn(
+            token: String,
+            username: String,
+            role: String,
+            fullName: String?,
+            phone: String?
+        ) {
+            runOnUiThread {
+                UserSessionManager.saveUserSession(
+                    this@CitizenWebPortalActivity,
+                    token = token,
+                    username = username,
+                    role = role,
+                    fullName = fullName,
+                    phone = phone
+                )
+                Toast.makeText(this@CitizenWebPortalActivity, "✓ Welcome back, $username", Toast.LENGTH_SHORT).show()
+                if (isFirstLaunch) {
+                    startActivity(Intent(this@CitizenWebPortalActivity, MainActivity::class.java))
+                    finish()
+                }
+            }
+        }
+    }
+
     @Deprecated("Deprecated in Java")
     override fun onBackPressed() {
         if (webView.canGoBack()) {
@@ -174,5 +257,7 @@ class CitizenWebPortalActivity : ComponentActivity() {
 
     companion object {
         const val EXTRA_URL = "extra_target_url"
+        const val EXTRA_IS_FIRST_LAUNCH = "extra_is_first_launch"
     }
 }
+

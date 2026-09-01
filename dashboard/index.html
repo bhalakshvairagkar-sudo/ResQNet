@@ -636,6 +636,22 @@
         });
 
         showFeedback('✓ Account registered and Emergency Medical Vault active! Redirecting to SOS beacon...');
+
+        // Notify Android App Native Bridge if running inside Mobile App
+        if (window.AndroidBridge && window.AndroidBridge.onAccountRegistered) {
+          try {
+            window.AndroidBridge.onAccountRegistered(
+              token,
+              registerPayload.username,
+              registerPayload.role || 'USER',
+              registerPayload.fullName,
+              registerPayload.phone,
+              registerPayload.bloodGroup,
+              registerPayload.emergencyContactPhone
+            );
+          } catch(e) { console.warn('AndroidBridge error:', e); }
+        }
+
         setTimeout(() => { location.href = '/sos.html'; }, 1000);
       } catch (err) {
         showFeedback('Network error: ' + err.message, true);
@@ -669,6 +685,19 @@
 
         localStorage.resqnetToken = data.token;
         localStorage.resqnetUser = JSON.stringify(data.user);
+
+        // Notify Android App Native Bridge if running inside Mobile App
+        if (window.AndroidBridge && window.AndroidBridge.onUserSignedIn) {
+          try {
+            window.AndroidBridge.onUserSignedIn(
+              data.token,
+              data.user.username,
+              data.user.role || 'USER',
+              data.user.fullName || '',
+              data.user.phone || ''
+            );
+          } catch(e) { console.warn('AndroidBridge error:', e); }
+        }
 
         if (data.user.role === 'USER') {
           location.href = '/sos.html';
