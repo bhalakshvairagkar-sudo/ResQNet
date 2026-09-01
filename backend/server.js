@@ -163,6 +163,17 @@ server.listen(port, '0.0.0.0', () => {
     console.log(`📡 WebSocket / Socket.IO Live on port ${port}`);
     console.log(`🖥️  Live Dashboard Served at: http://localhost:${port}/dashboard.html`);
     console.log(`======================================================\n`);
+
+    // Keep-Alive Self-Pinger for Render Free Tier (pings every 8 minutes so server never sleeps)
+    const renderUrl = process.env.RENDER_EXTERNAL_URL || 'https://resqnet-backend-pyqc.onrender.com';
+    const https = require('https');
+    setInterval(() => {
+        https.get(`${renderUrl}/api/health`, (res) => {
+            console.log(`[Keep-Alive] Self-ping status: ${res.statusCode} (Server active)`);
+        }).on('error', (err) => {
+            console.warn(`[Keep-Alive] Ping notice: ${err.message}`);
+        });
+    }, 8 * 60 * 1000); // 8 minutes
 });
 
 module.exports = { app, server };
