@@ -117,17 +117,19 @@ class IncidentRepository(private val context: Context) {
 
             if (response.isSuccessful && response.body()?.success == true) {
                 val body = response.body()!!
+                val amb = body.incident?.ambulanceCode ?: body.incident?.ambulanceId
+                val hosp = body.incident?.assignedHospital ?: body.incident?.hospitalId
                 localStore.updateStatus(
                     incidentId = record.incidentId,
                     status = SubmissionStatus.CONFIRMED,
                     backendId = body.incidentId ?: record.incidentId,
-                    ambulance = body.assignedAmbulance ?: body.incident?.assignedAmbulance,
-                    hospital = body.assignedHospital ?: body.incident?.assignedHospital
+                    ambulance = amb,
+                    hospital = hosp
                 )
                 record.submissionStatus = SubmissionStatus.CONFIRMED
                 record.backendIncidentId = body.incidentId ?: record.incidentId
-                record.assignedAmbulance = body.assignedAmbulance ?: body.incident?.assignedAmbulance
-                record.assignedHospital = body.assignedHospital ?: body.incident?.assignedHospital
+                record.assignedAmbulance = amb
+                record.assignedHospital = hosp
 
                 Log.d(TAG, "[ResQNet] ✓ Backend confirmed incident ${record.incidentId}. Assigned: ${record.assignedAmbulance}")
                 onStatusUpdate?.invoke(SubmissionStatus.CONFIRMED, record)

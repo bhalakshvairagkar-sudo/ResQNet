@@ -24,21 +24,27 @@
         android:theme="@style/Theme.ResQNet"
         android:usesCleartextTraffic="true">
 
-        <!-- 1. Default App Launcher: Citizen Registration & Medical Details Form (Image 2) -->
+        <!-- 1. App Entry Router: Determines 1st-time (Image 2) vs Returning User (Image 1) -->
         <activity
-            android:name=".ui.CitizenWebPortalActivity"
+            android:name=".ui.SplashActivity"
             android:exported="true"
-            android:theme="@style/Theme.ResQNet">
+            android:theme="@android:style/Theme.NoDisplay">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
 
-        <!-- 2. Main Live Sensor & Crash Detection Shield Activity (Image 1) -->
+        <!-- 2. Main Live Sensor & Crash Detection Shield Activity (Image 1 - as original) -->
         <activity
             android:name=".ui.MainActivity"
             android:exported="true"
+            android:theme="@style/Theme.ResQNet" />
+
+        <!-- 3. Citizen Registration & Medical Details Form (Image 2 - 1st time for new user) -->
+        <activity
+            android:name=".ui.CitizenWebPortalActivity"
+            android:exported="false"
             android:theme="@style/Theme.ResQNet" />
 
         <!-- 3. Operations & Countdown Activities -->
