@@ -109,17 +109,31 @@ const dashboardPath = path.join(__dirname, '../dashboard');
 app.use(express.static(dashboardPath));
 
 // Dashboard route aliases
-app.get(['/', '/dashboard', '/dashboard.html', '/index.html'], (req, res) => {
+app.get(['/', '/index.html', '/citizen', '/register'], (req, res) => {
+    res.sendFile(path.join(dashboardPath, 'index.html'));
+});
+
+app.get(['/dashboard', '/dashboard.html', '/command', '/operations'], (req, res) => {
     res.sendFile(path.join(dashboardPath, 'dashboard.html'));
+});
+
+app.get(['/medical-profile', '/medical-profile.html', '/medical', '/profile'], (req, res) => {
+    res.sendFile(path.join(dashboardPath, 'medical-profile.html'));
 });
 
 app.get(['/hospital', '/hospital.html', '/trauma', '/er'], (req, res) => {
     res.sendFile(path.join(dashboardPath, 'hospital.html'));
 });
-app.get(['/ambulance', '/ambulance.html'], (req, res) => res.sendFile(path.join(dashboardPath, 'ambulance.html')));
-app.get(['/login', '/login.html'], (req, res) => res.sendFile(path.join(dashboardPath, 'login.html')));
 
-app.get(['/sos', '/sos.html', '/beacon', '/citizen'], (req, res) => {
+app.get(['/ambulance', '/ambulance.html', '/ems', '/fleet'], (req, res) => {
+    res.sendFile(path.join(dashboardPath, 'ambulance.html'));
+});
+
+app.get(['/login', '/login.html'], (req, res) => {
+    res.sendFile(path.join(dashboardPath, 'login.html'));
+});
+
+app.get(['/sos', '/sos.html', '/beacon'], (req, res) => {
     res.sendFile(path.join(dashboardPath, 'sos.html'));
 });
 
