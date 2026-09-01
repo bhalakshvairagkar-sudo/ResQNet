@@ -3,12 +3,12 @@ package com.resqnet.app.service
 import android.app.*
 import android.content.Context
 import android.content.Intent
+import android.content.pm.ServiceInfo
 import android.hardware.Sensor
 import android.hardware.SensorEvent
 import android.hardware.SensorEventListener
 import android.hardware.SensorManager
-import android.os.Build
-import android.os.IBinder
+import android.os.*
 import android.util.Log
 import androidx.core.app.NotificationCompat
 import com.resqnet.app.domain.detector.CrashDetector
@@ -19,12 +19,12 @@ import com.resqnet.app.domain.model.LocationQuality
 import com.resqnet.app.location.AppLocationManager
 import com.resqnet.app.location.LocationData
 import com.resqnet.app.ui.CrashCountdownActivity
-import kotlin.math.max
+import com.resqnet.app.ui.MainActivity
 import kotlin.math.sqrt
 
 /**
  * ResQNet Background Continuous G-Sensor & Accelerometer Crash Detection Service.
- * Implements measured-frequency kinematic evaluation, sliding window shock filtering, and duplicate cooldown.
+ * Runs 24/7 continuously with screen turned off using a dedicated Sensor HandlerThread and Partial WakeLock.
  */
 class CrashDetectionService : Service(), SensorEventListener {
 
@@ -38,6 +38,13 @@ class CrashDetectionService : Service(), SensorEventListener {
     private var currentState = EmergencyState.MONITORING
     private var lastCrashTimestamp = 0L
 
+    // Dedicated background thread for sensor processing (prevents main thread drops when screen is off)
+    private var sensorThread: HandlerThread? = null
+    private var sensorHandler: Handler? = null
+
+    // CPU WakeLock to guarantee continuous execution while screen is black/locked
+    private var wakeLock: PowerManager.WakeLock? = null
+
     // Sampling frequency tracking variables
     private var lastAccelTimestampNanos = 0L
     private var lastGyroTimestampNanos = 0L
@@ -49,6 +56,7 @@ class CrashDetectionService : Service(), SensorEventListener {
         private const val TAG = "ResQNet-SENSOR"
         private const val NOTIFICATION_CHANNEL_ID = "resqnet_crash_shield_channel"
         private const val NOTIFICATION_ID = 901
+        private const val WAKELOCK_TAG = "ResQNet:CrashShieldWakeLock"
 
         var isRunning = false
             private set
@@ -88,6 +96,10 @@ class CrashDetectionService : Service(), SensorEventListener {
 
     override fun onCreate() {
         super.onCreate()
+
+        acquireWakeLock()
+        initSensorThread()
+
         sensorManager = getSystemService(Context.SENSOR_SERVICE) as SensorManager
         accelerometer = sensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER)
         gyroscope = sensorManager.getDefaultSensor(Sensor.TYPE_GYROSCOPE)
@@ -95,7 +107,7 @@ class CrashDetectionService : Service(), SensorEventListener {
         isAccelAvailable = (accelerometer != null)
         isGyroAvailable = (gyroscope != null)
 
-        Log.d(TAG, "[SENSOR] Sensor initialized")
+        Log.d(TAG, "[SENSOR] Sensor initialized (Background thread & WakeLock active)")
         Log.d(TAG, "[SENSOR] Accelerometer: ${if (isAccelAvailable) "AVAILABLE (${accelerometer?.name})" else "UNAVAILABLE"}")
         Log.d(TAG, "[SENSOR] Gyroscope: ${if (isGyroAvailable) "AVAILABLE (${gyroscope?.name})" else "UNAVAILABLE (Fallback to Accel)"}")
 
@@ -112,7 +124,48 @@ class CrashDetectionService : Service(), SensorEventListener {
         startContinuousGpsSpeedFeed()
     }
 
-    private val gpsHandler = android.os.Handler(android.os.Looper.getMainLooper())
+    private fun acquireWakeLock() {
+        try {
+            if (wakeLock == null) {
+                val powerManager = getSystemService(Context.POWER_SERVICE) as PowerManager
+                wakeLock = powerManager.newWakeLock(
+                    PowerManager.PARTIAL_WAKE_LOCK,
+                    WAKELOCK_TAG
+                ).apply {
+                    setReferenceCounted(false)
+                    acquire()
+                }
+                Log.d(TAG, "[SENSOR] Partial WakeLock acquired. CPU will stay active when screen is OFF.")
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "[SENSOR] Failed to acquire WakeLock: ${e.message}")
+        }
+    }
+
+    private fun releaseWakeLock() {
+        try {
+            wakeLock?.let {
+                if (it.isHeld) {
+                    it.release()
+                    Log.d(TAG, "[SENSOR] Partial WakeLock released.")
+                }
+            }
+            wakeLock = null
+        } catch (e: Exception) {
+            Log.e(TAG, "[SENSOR] Error releasing WakeLock: ${e.message}")
+        }
+    }
+
+    private fun initSensorThread() {
+        if (sensorThread == null) {
+            sensorThread = HandlerThread("ResQNet-SensorThread", Process.THREAD_PRIORITY_MORE_FAVORABLE).apply {
+                start()
+                sensorHandler = Handler(looper)
+            }
+        }
+    }
+
+    private val gpsHandler = Handler(Looper.getMainLooper())
     private val gpsRunnable = object : Runnable {
         override fun run() {
             if (isRunning) {
@@ -133,22 +186,24 @@ class CrashDetectionService : Service(), SensorEventListener {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        acquireWakeLock()
         registerSensors()
         return START_STICKY
     }
 
     private fun registerSensors() {
+        val handler = sensorHandler ?: Handler(Looper.getMainLooper())
         var accelRegistered = false
         var gyroRegistered = false
 
         accelerometer?.let {
-            accelRegistered = sensorManager.registerListener(this, it, SensorManager.SENSOR_DELAY_GAME)
+            accelRegistered = sensorManager.registerListener(this, it, SensorManager.SENSOR_DELAY_GAME, 0, handler)
         }
         gyroscope?.let {
-            gyroRegistered = sensorManager.registerListener(this, it, SensorManager.SENSOR_DELAY_GAME)
+            gyroRegistered = sensorManager.registerListener(this, it, SensorManager.SENSOR_DELAY_GAME, 0, handler)
         }
 
-        Log.d(TAG, "[SENSOR] Sensor listener registered: Accel=$accelRegistered, Gyro=$gyroRegistered")
+        Log.d(TAG, "[SENSOR] Sensor listener registered on background thread: Accel=$accelRegistered, Gyro=$gyroRegistered")
     }
 
     private var latestGx = 0f
@@ -198,7 +253,7 @@ class CrashDetectionService : Service(), SensorEventListener {
                     measuredGyroHz = gyroSampleCount / seconds
                     measuredProcessingHz = (accelSampleCount + gyroSampleCount) / (2.0f * seconds)
 
-                    Log.d(TAG, "[SENSOR] Measured Cadence -> Accel: ${"%.1f".format(measuredAccelHz)} Hz | Gyro: ${"%.1f".format(measuredGyroHz)} Hz | Processing: ${"%.1f".format(measuredProcessingHz)} Hz")
+                    Log.d(TAG, "[SENSOR] Screen-Off Cadence -> Accel: ${"%.1f".format(measuredAccelHz)} Hz | Gyro: ${"%.1f".format(measuredGyroHz)} Hz | Processing: ${"%.1f".format(measuredProcessingHz)} Hz")
 
                     accelSampleCount = 0
                     gyroSampleCount = 0
@@ -228,7 +283,7 @@ class CrashDetectionService : Service(), SensorEventListener {
         currentState = EmergencyState.POSSIBLE_CRASH
 
         Log.w(TAG, "[SENSOR] ======================================================")
-        Log.w(TAG, "[SENSOR] 🚨 POSSIBLE CRASH DETECTED!")
+        Log.w(TAG, "[SENSOR] 🚨 POSSIBLE CRASH DETECTED WHILE SCREEN OFF/ON!")
         Log.w(TAG, "[SENSOR] Acceleration magnitude: ${"%.2f".format(result.accelerationMagnitude)} m/s² (${"%.2f".format(result.peakGForce)}G)")
         Log.w(TAG, "[SENSOR] Angular velocity: ${"%.2f".format(result.gyroMagnitude)} rad/s | Rollover: ${result.isRollover}")
         Log.w(TAG, "[SENSOR] Confidence: ${"%.2f".format(result.confidence)} | Severity: ${result.severity} (${result.severityScore}/100)")
@@ -237,7 +292,7 @@ class CrashDetectionService : Service(), SensorEventListener {
 
         currentState = EmergencyState.VERIFICATION_PENDING
 
-        // Launch the 15-second Verification Activity
+        // Wake screen up & launch the 15-second Verification Activity over lockscreen
         val intent = Intent(this, CrashCountdownActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_REORDER_TO_FRONT
             putExtra(CrashCountdownActivity.EXTRA_G_FORCE, result.peakGForce)
@@ -256,32 +311,58 @@ class CrashDetectionService : Service(), SensorEventListener {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val channel = NotificationChannel(
                 NOTIFICATION_CHANNEL_ID,
-                "ResQNet Crash Shield Active",
+                "ResQNet Crash Shield",
                 NotificationManager.IMPORTANCE_LOW
             ).apply {
-                description = "Continuous multi-sensor impact protection"
+                description = "Continuous 24/7 background sensor impact protection"
+                setShowBadge(false)
             }
             val manager = getSystemService(NotificationManager::class.java)
             manager?.createNotificationChannel(channel)
         }
 
+        val openAppIntent = Intent(this, MainActivity::class.java).apply {
+            flags = Intent.FLAG_ACTIVITY_SINGLE_TOP
+        }
+        val pendingIntent = PendingIntent.getActivity(
+            this,
+            0,
+            openAppIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+
         val notification: Notification = NotificationCompat.Builder(this, NOTIFICATION_CHANNEL_ID)
             .setContentTitle("ResQNet Crash Shield Active")
-            .setContentText("Continuous sensor protection armed")
-            .setSmallIcon(com.resqnet.app.R.drawable.ic_notification)
+            .setContentText("Continuous sensor kinematic evaluation armed (Screen-Off Protected)")
+            .setSmallIcon(android.R.drawable.ic_lock_idle_alarm)
+            .setContentIntent(pendingIntent)
             .setOngoing(true)
+            .setPriority(NotificationCompat.PRIORITY_LOW)
+            .setCategory(NotificationCompat.CATEGORY_SERVICE)
             .build()
 
-        startForeground(NOTIFICATION_ID, notification)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            startForeground(
+                NOTIFICATION_ID,
+                notification,
+                ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION
+            )
+        } else {
+            startForeground(NOTIFICATION_ID, notification)
+        }
     }
 
     override fun onDestroy() {
         super.onDestroy()
         gpsHandler.removeCallbacks(gpsRunnable)
         sensorManager.unregisterListener(this)
+        sensorThread?.quitSafely()
+        sensorThread = null
+        sensorHandler = null
+        releaseWakeLock()
         isRunning = false
         currentState = EmergencyState.MONITORING
-        Log.d(TAG, "[SENSOR] Sensor monitoring stopped")
+        Log.d(TAG, "[SENSOR] Sensor monitoring stopped & WakeLock released")
     }
 
     override fun onBind(intent: Intent?): IBinder? = null
