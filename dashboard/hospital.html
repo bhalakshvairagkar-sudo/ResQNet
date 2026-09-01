@@ -1,1 +1,422 @@
-<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>ResQNet Hospital</title><link rel="stylesheet" href="/css/resqnet.css"><script src="/socket.io/socket.io.js"></script><style>body{background:#030508;color:#eaf0f7;font-family:Arial;margin:0}header,main{max-width:1000px;margin:auto;padding:22px}.card{background:#0b111e;border:1px solid #334155;border-radius:12px;padding:22px;margin-top:18px}.alert{border:2px solid #ef4444;box-shadow:0 0 26px #ef444466}.grid{display:grid;grid-template-columns:repeat(2,1fr);gap:10px}.grid div{background:#070b14;padding:12px;border-radius:6px}.ack{background:#22c55e;padding:12px;border:0;border-radius:6px;font-weight:bold}a{color:#38bdf8}</style></head><body><header><h1>RES<b>Q</b>NET | HOSPITAL EMERGENCY PORTAL</h1><span id="name">Loading hospital…</span> <button onclick="logout()">Logout</button></header><main><div class="card"><h3>HOSPITAL READINESS</h3><div id="info" class="grid"></div></div><section id="alerts"></section></main><script>const token=localStorage.resqnetToken,user=JSON.parse(localStorage.resqnetUser||'null'),H={Authorization:'Bearer '+token};if(!user||user.role!=='HOSPITAL')location='/login.html';const socket=io({auth:{token}}),esc=x=>String(x??'NOT PROVIDED');async function load(){let h=await fetch('/api/hospitals/'+user.resourceId,{headers:H}).then(r=>r.json());name.textContent=h.name+' · '+h.id;info.innerHTML=`<div>Status<br><b>${esc(h.status)}</b></div><div>Trauma capability<br><b>Level ${esc(h.traumaLevel)}</b></div><div>Emergency capacity<br><b>${esc(h.emergencyCapacity)}</b></div><div>Location<br><b>${esc(h.lat)}, ${esc(h.lng)}</b></div>`;let a=await fetch('/api/incidents/alerts/pending',{headers:H}).then(r=>r.json());a.forEach(show)}function show(a){alerts.innerHTML=`<div class="card alert"><h2>🚨 INCOMING TRAUMA ALERT</h2><p><b>${a.priority}</b> · Incident ${a.incidentId}</p><div class="grid"><div>Incoming ambulance<br><b>${esc(a.incomingAmbulance)}</b></div><div>ETA<br><b>${esc(a.etaMinutes)} min</b></div><div>Accident location<br><b>${a.accidentLatitude}, ${a.accidentLongitude}</b></div><div>Patient information<br><b>${esc(a.patientCount)}</b></div><div>Help message<br>${esc(a.helpMessage)}</div><div>Acknowledgement<br><b>AWAITING RESPONSE</b></div></div><p><a target="_blank" href="${a.mapUrl}">OPEN ACCIDENT LOCATION</a></p><button class="ack" onclick="ack('${a.incidentId}')">ACKNOWLEDGE ALERT</button></div>`}async function ack(id){let r=await fetch('/api/incidents/'+id+'/hospital-ack',{method:'POST',headers:{...H,'Content-Type':'application/json'}});if(!r.ok)alert((await r.json()).error);else{alerts.innerHTML='';load()}}function logout(){localStorage.clear();location='/login.html'}socket.on('hospital:alert',show);socket.on('hospital:location:update',load);load()</script></body></html>
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>ResQNet — Hospital Trauma Emergency Portal</title>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+  <script src="/socket.io/socket.io.js"></script>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background: #06090e;
+      color: #e2e8f0;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+    header {
+      background: #0b111e;
+      border-bottom: 1px solid #1e293b;
+      padding: 12px 16px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      position: sticky;
+      top: 0;
+      z-index: 50;
+    }
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 15px;
+      font-weight: 800;
+      letter-spacing: 0.5px;
+      color: #fff;
+    }
+    .brand b { color: #22c55e; }
+    .hosp-tag {
+      background: #1e293b;
+      color: #4ade80;
+      border: 1px solid #22c55e44;
+      padding: 3px 8px;
+      border-radius: 4px;
+      font-size: 11px;
+      font-weight: 700;
+    }
+    .btn-logout {
+      background: #1e293b;
+      color: #94a3b8;
+      border: 1px solid #334155;
+      padding: 5px 10px;
+      border-radius: 6px;
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    main {
+      flex: 1;
+      max-width: 720px;
+      width: 100%;
+      margin: 0 auto;
+      padding: 14px;
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+    }
+    .card {
+      background: #0c1322;
+      border: 1px solid #1e293b;
+      border-radius: 12px;
+      padding: 16px;
+      box-shadow: 0 4px 16px rgba(0,0,0,0.4);
+    }
+    .card-title {
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      color: #64748b;
+      font-weight: 800;
+      margin-bottom: 12px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .grid-2 {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 10px;
+    }
+    .stat-box {
+      background: #070c16;
+      border: 1px solid #1e293b;
+      border-radius: 8px;
+      padding: 10px 12px;
+    }
+    .stat-label {
+      font-size: 10px;
+      color: #64748b;
+      text-transform: uppercase;
+      font-weight: 700;
+      margin-bottom: 4px;
+    }
+    .stat-val {
+      font-size: 13px;
+      font-weight: 700;
+      color: #f1f5f9;
+      word-break: break-all;
+    }
+    .badge {
+      display: inline-block;
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-size: 11px;
+      font-weight: 800;
+    }
+    .badge.available { background: #14532d; color: #4ade80; border: 1px solid #22c55e44; }
+    .badge.prepped { background: #075985; color: #38bdf8; border: 1px solid #0284c744; }
+    .badge.critical { background: #7f1d1d; color: #f87171; border: 1px solid #ef444444; }
+
+    /* Alert Card Styling */
+    .alert-card {
+      background: linear-gradient(180deg, #181109 0%, #0d121f 100%);
+      border: 2px solid #f97316;
+      border-radius: 12px;
+      padding: 18px;
+      box-shadow: 0 0 30px rgba(249, 115, 22, 0.35);
+      animation: hospPulse 2s infinite;
+      margin-bottom: 12px;
+    }
+    @keyframes hospPulse {
+      0% { border-color: #f97316; box-shadow: 0 0 20px rgba(249, 115, 22, 0.3); }
+      50% { border-color: #fdba74; box-shadow: 0 0 35px rgba(249, 115, 22, 0.6); }
+      100% { border-color: #f97316; box-shadow: 0 0 20px rgba(249, 115, 22, 0.3); }
+    }
+    .alert-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 12px;
+    }
+    .alert-headline {
+      font-size: 16px;
+      font-weight: 900;
+      color: #f97316;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .priority-badge {
+      background: #f97316;
+      color: #000;
+      font-size: 10px;
+      font-weight: 900;
+      padding: 3px 8px;
+      border-radius: 4px;
+      letter-spacing: 0.5px;
+    }
+    .alert-desc {
+      font-size: 14px;
+      font-weight: 700;
+      color: #f8fafc;
+      margin-bottom: 12px;
+    }
+    .btn-action {
+      width: 100%;
+      padding: 13px 16px;
+      border-radius: 8px;
+      font-size: 13px;
+      font-weight: 800;
+      border: none;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      transition: all 0.15s ease;
+      text-decoration: none;
+      margin-top: 14px;
+    }
+    .btn-ack { background: #22c55e; color: #000; }
+    .btn-ack:hover { background: #16a34a; }
+    .btn-prepped { background: #0284c7; color: #fff; cursor: default; }
+
+    .idle-state {
+      text-align: center;
+      padding: 36px 16px;
+      color: #64748b;
+    }
+    .idle-icon {
+      font-size: 36px;
+      color: #22c55e;
+      margin-bottom: 12px;
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="brand">
+      <i class="fa-solid fa-house-medical" style="color:#22c55e;"></i>
+      <span>RES<b>Q</b>NET</span>
+      <span class="hosp-tag" id="hospBadge">HOSP-01</span>
+    </div>
+    <div style="display:flex;align-items:center;gap:10px;">
+      <span id="socketDot" style="width:8px;height:8px;border-radius:50%;background:#22c55e;display:inline-block;"></span>
+      <button class="btn-logout" onclick="logout()"><i class="fa-solid fa-arrow-right-from-bracket"></i> Logout</button>
+    </div>
+  </header>
+
+  <main>
+    <!-- Hospital Facility Status -->
+    <div class="card">
+      <div class="card-title">
+        <span><i class="fa-solid fa-hospital"></i> Trauma Center Readiness</span>
+        <span id="lastUpdated" style="font-size:9px;color:#475569;">SYNCING...</span>
+      </div>
+      <div class="grid-2" id="hospDetails">
+        <div class="stat-box">
+          <div class="stat-label">Facility Name</div>
+          <div class="stat-val" id="valName">Loading...</div>
+        </div>
+        <div class="stat-box">
+          <div class="stat-label">Trauma Capability</div>
+          <div class="stat-val" id="valTrauma" style="color:#4ade80;">Level 1 Trauma</div>
+        </div>
+        <div class="stat-box">
+          <div class="stat-label">Emergency Capacity</div>
+          <div class="stat-val" id="valCapacity">--</div>
+        </div>
+        <div class="stat-box">
+          <div class="stat-label">Facility GPS Location</div>
+          <div class="stat-val" id="valLocation">--</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Active Inbound Trauma Alerts -->
+    <section id="alertsContainer"></section>
+  </main>
+
+  <script>
+    const token = localStorage.resqnetToken;
+    const user = JSON.parse(localStorage.resqnetUser || 'null');
+    const H = { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' };
+
+    if (!user || user.role !== 'HOSPITAL') {
+      location = '/login.html';
+    }
+
+    const hospId = user.resourceId || 'HOSP-01';
+    document.getElementById('hospBadge').textContent = hospId;
+
+    const socket = io({ auth: { token }, transports: ['websocket', 'polling'] });
+    const esc = (x) => String(x ?? 'UNAVAILABLE');
+
+    function playHospitalChime() {
+      try {
+        const ctx = new (window.AudioContext || window.webkitAudioContext)();
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(587.33, ctx.currentTime); // D5
+        osc.frequency.setValueAtTime(880, ctx.currentTime + 0.2); // A5
+        gain.gain.setValueAtTime(0.25, ctx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.5);
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.start();
+        osc.stop(ctx.currentTime + 0.55);
+      } catch (e) {}
+    }
+
+    socket.on('connect', () => {
+      document.getElementById('socketDot').style.background = '#22c55e';
+    });
+    socket.on('disconnect', () => {
+      document.getElementById('socketDot').style.background = '#ef4444';
+    });
+
+    async function loadHospital() {
+      try {
+        const res = await fetch('/api/hospitals/' + hospId, { headers: H });
+        if (res.ok) {
+          const h = await res.json();
+          document.getElementById('valName').textContent = h.name || hospId;
+          document.getElementById('valTrauma').textContent = `Level ${h.traumaLevel || 1} Trauma Center`;
+          document.getElementById('valCapacity').textContent = `${h.emergencyCapacity ?? h.capacity ?? 8} Available Beds`;
+          document.getElementById('valLocation').textContent = (h.lat && h.lng) ? `${Number(h.lat).toFixed(4)}, ${Number(h.lng).toFixed(4)}` : '18.5280, 73.8720';
+          document.getElementById('lastUpdated').textContent = new Date().toLocaleTimeString();
+        }
+      } catch (e) {
+        console.warn('Hospital load error:', e);
+      }
+    }
+
+    async function fetchPendingAlerts() {
+      try {
+        const res = await fetch('/api/incidents/alerts/pending?role=HOSPITAL&resourceId=' + hospId, { headers: H });
+        if (res.ok) {
+          const alerts = await res.json();
+          if (Array.isArray(alerts)) {
+            renderAlerts(alerts);
+          }
+        }
+      } catch (e) {
+        console.warn('Pending alerts error:', e);
+      }
+    }
+
+    function renderAlerts(alerts) {
+      const container = document.getElementById('alertsContainer');
+      if (!alerts || alerts.length === 0) {
+        container.innerHTML = `
+          <div class="card idle-state">
+            <div class="idle-icon"><i class="fa-solid fa-bed-pulse"></i></div>
+            <h3 style="color:#f1f5f9;font-size:15px;margin-bottom:6px;">NO INBOUND TRAUMA PRE-ALERTS</h3>
+            <p style="font-size:12px;">Zero-Minute pre-alerts from field ambulances and AI incident detection will appear here automatically.</p>
+          </div>`;
+        return;
+      }
+
+      container.innerHTML = alerts.map((a) => {
+        const isAck = a.acknowledged === true;
+        return `
+        <div class="alert-card">
+          <div class="alert-header">
+            <div class="alert-headline">
+              <i class="fa-solid fa-truck-medical"></i>
+              <span>INCOMING TRAUMA PRE-ALERT</span>
+            </div>
+            <span class="priority-badge">${esc(a.priority)}</span>
+          </div>
+
+          <div class="alert-desc">${esc(a.helpMessage)}</div>
+
+          <div class="grid-2">
+            <div class="stat-box">
+              <div class="stat-label">Inbound Unit</div>
+              <div class="stat-val" style="color:#38bdf8;">${esc(a.incomingAmbulance)}</div>
+            </div>
+            <div class="stat-box">
+              <div class="stat-label">Estimated ETA</div>
+              <div class="stat-val" style="color:#fb923c;">${esc(a.etaMinutes)} MIN</div>
+            </div>
+            <div class="stat-box">
+              <div class="stat-label">Estimated Patients</div>
+              <div class="stat-val">${esc(a.patientCount)} Patient(s)</div>
+            </div>
+            <div class="stat-box">
+              <div class="stat-label">Trauma Bay Readiness</div>
+              <div class="stat-val">${isAck ? '<span class="badge prepped">BAY PREPARED</span>' : '<span class="badge critical">ACTION NEEDED</span>'}</div>
+            </div>
+          </div>
+
+          <div style="margin-top:12px;font-size:11px;color:#94a3b8;background:#070c16;padding:8px 12px;border-radius:6px;">
+            <i class="fa-solid fa-clipboard-check" style="color:#4ade80;"></i> <b>Automated Clinical Protocols:</b> Blood Bank notified • CT Scanner reserved • Trauma Surgery team alerted.
+          </div>
+
+          ${!isAck ? `
+            <button class="btn-action btn-ack" onclick="acknowledgeAlert('${a.incidentId}')">
+              <i class="fa-solid fa-circle-check"></i> ACKNOWLEDGE ALERT & PREP TRAUMA BAY
+            </button>
+          ` : `
+            <div class="btn-action btn-prepped">
+              <i class="fa-solid fa-check-double"></i> TRAUMA BAY PREPARED & CONFIRMED
+            </div>
+          `}
+        </div>`;
+      }).join('');
+    }
+
+    async function acknowledgeAlert(id) {
+      try {
+        const res = await fetch(`/api/incidents/${id}/hospital-ack`, {
+          method: 'POST',
+          headers: H
+        });
+        const data = await res.json();
+        if (data.success) {
+          fetchPendingAlerts();
+        } else {
+          alert('Error: ' + (data.error || 'Failed to acknowledge alert'));
+        }
+      } catch (e) {
+        alert('Network error: ' + e.message);
+      }
+    }
+
+    function logout() {
+      localStorage.clear();
+      location = '/login.html';
+    }
+
+    // Socket Event Listeners
+    socket.on('hospital:alert', () => {
+      playHospitalChime();
+      fetchPendingAlerts();
+    });
+    socket.on('hospital:selected', () => {
+      playHospitalChime();
+      fetchPendingAlerts();
+    });
+    socket.on('hospital:prealert', () => {
+      playHospitalChime();
+      fetchPendingAlerts();
+    });
+    socket.on('hospital:alert:ack', fetchPendingAlerts);
+    socket.on('incident:update', fetchPendingAlerts);
+    socket.on('demo:reset', () => {
+      loadHospital();
+      fetchPendingAlerts();
+    });
+
+    // Bootstrap
+    loadHospital();
+    fetchPendingAlerts();
+    setInterval(loadHospital, 4000);
+    setInterval(fetchPendingAlerts, 3000);
+  </script>
+</body>
+</html>

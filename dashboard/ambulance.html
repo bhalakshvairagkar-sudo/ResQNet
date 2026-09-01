@@ -1,1 +1,482 @@
-<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>ResQNet Ambulance</title><link rel="stylesheet" href="/css/resqnet.css"><script src="/socket.io/socket.io.js"></script><style>body{background:#030508;color:#eaf0f7;font-family:Arial;margin:0}header,main{max-width:1000px;margin:auto;padding:22px}.card{background:#0b111e;border:1px solid #334155;border-radius:12px;padding:22px;margin-top:18px}.alert{border:2px solid #ef4444;box-shadow:0 0 26px #ef444466;animation:pulse 1.5s infinite}@keyframes pulse{50%{border-color:#fca5a5}}button,a{padding:10px 14px;border:0;border-radius:6px;font-weight:bold;margin:6px 6px 0 0}.accept{background:#22c55e}.reject{background:#ef4444;color:white}.kv{display:grid;grid-template-columns:repeat(2,1fr);gap:12px}.kv div{background:#070b14;padding:10px;border-radius:6px}</style></head><body><header><h1>RES<b>Q</b>NET | AMBULANCE OPERATIONS</h1><span id="unit">Loading unit…</span><button onclick="logout()">Logout</button></header><main><div class="card"><h3>UNIT STATUS</h3><div class="kv" id="details"></div></div><section id="alerts"></section></main><script>const token=localStorage.resqnetToken,user=JSON.parse(localStorage.resqnetUser||'null'),H={Authorization:'Bearer '+token,'Content-Type':'application/json'};if(!user||user.role!=='AMBULANCE')location='/login.html';const socket=io({auth:{token}});let unit;const esc=x=>String(x??'UNAVAILABLE');async function load(){unit=await fetch('/api/ambulances/'+user.resourceId,{headers:H}).then(r=>r.json());unitEl=unit;document.querySelector('#unit').textContent=unit.id+' · '+unit.status;details.innerHTML=`<div>Driver/unit<br><b>${esc(unit.code)}</b></div><div>Current status<br><b>${esc(unit.status)}</b></div><div>Location<br><b>${esc(unit.lat)}, ${esc(unit.lng)}</b></div><div>Current assignment<br><b>${esc(unit.currentIncidentId)}</b></div>`;let a=await fetch('/api/incidents/alerts/pending',{headers:H}).then(r=>r.json());a.forEach(show)}function show(a){alerts.innerHTML=`<div class="card alert"><h2>🚨 EMERGENCY DISPATCH</h2><p><b>${a.priority}</b> · Incident ${a.incidentId}</p><div class="kv"><div>Distance<br><b>${esc(a.distanceKm)} km</b></div><div>Response ETA<br><b>${esc(a.etaMinutes)} min</b></div><div>Accident location<br><b>${a.accidentLatitude}, ${a.accidentLongitude}</b></div><div>Help message<br>${esc(a.helpMessage)}</div></div><p><a href="${a.mapUrl}" target="_blank">OPEN ACCIDENT LOCATION</a></p><button class="accept" onclick="act('${a.incidentId}','accept')">ACCEPT DISPATCH</button><button class="reject" onclick="act('${a.incidentId}','reject')">REJECT</button></div>`}async function act(id,x){let body=x==='reject'?{reason:prompt('Rejection reason')}:{};if(x==='reject'&&!body.reason)return;let r=await fetch('/api/incidents/'+id+'/'+x,{method:'POST',headers:H,body:JSON.stringify(body)});if(!r.ok)alert((await r.json()).error);else{alerts.innerHTML='';load()}}function logout(){localStorage.clear();location='/login.html'}socket.on('ambulance:alert',show);socket.on('ambulance:location:update',load);load()</script></body></html>
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>ResQNet — Ambulance Tactical Operations</title>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+  <script src="/socket.io/socket.io.js"></script>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background: #06090e;
+      color: #e2e8f0;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+    header {
+      background: #0b111e;
+      border-bottom: 1px solid #1e293b;
+      padding: 12px 16px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      position: sticky;
+      top: 0;
+      z-index: 50;
+    }
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 15px;
+      font-weight: 800;
+      letter-spacing: 0.5px;
+      color: #fff;
+    }
+    .brand b { color: #38bdf8; }
+    .unit-tag {
+      background: #1e293b;
+      color: #38bdf8;
+      border: 1px solid #38bdf844;
+      padding: 3px 8px;
+      border-radius: 4px;
+      font-size: 11px;
+      font-weight: 700;
+    }
+    .btn-logout {
+      background: #1e293b;
+      color: #94a3b8;
+      border: 1px solid #334155;
+      padding: 5px 10px;
+      border-radius: 6px;
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    main {
+      flex: 1;
+      max-width: 720px;
+      width: 100%;
+      margin: 0 auto;
+      padding: 14px;
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+    }
+    .card {
+      background: #0c1322;
+      border: 1px solid #1e293b;
+      border-radius: 12px;
+      padding: 16px;
+      box-shadow: 0 4px 16px rgba(0,0,0,0.4);
+    }
+    .card-title {
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      color: #64748b;
+      font-weight: 800;
+      margin-bottom: 12px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .grid-2 {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 10px;
+    }
+    .stat-box {
+      background: #070c16;
+      border: 1px solid #1e293b;
+      border-radius: 8px;
+      padding: 10px 12px;
+    }
+    .stat-label {
+      font-size: 10px;
+      color: #64748b;
+      text-transform: uppercase;
+      font-weight: 700;
+      margin-bottom: 4px;
+    }
+    .stat-val {
+      font-size: 13px;
+      font-weight: 700;
+      color: #f1f5f9;
+      word-break: break-all;
+    }
+    .badge {
+      display: inline-block;
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-size: 11px;
+      font-weight: 800;
+    }
+    .badge.available { background: #14532d; color: #4ade80; border: 1px solid #22c55e44; }
+    .badge.en_route { background: #7c2d12; color: #fb923c; border: 1px solid #ea580c44; }
+    .badge.busy { background: #7f1d1d; color: #f87171; border: 1px solid #ef444444; }
+
+    /* Alert Card Styling */
+    .alert-card {
+      background: linear-gradient(180deg, #180909 0%, #0d121f 100%);
+      border: 2px solid #ef4444;
+      border-radius: 12px;
+      padding: 18px;
+      box-shadow: 0 0 30px rgba(239, 68, 68, 0.35);
+      animation: alertPulse 1.8s infinite;
+      margin-bottom: 12px;
+    }
+    @keyframes alertPulse {
+      0% { border-color: #ef4444; box-shadow: 0 0 20px rgba(239, 68, 68, 0.3); }
+      50% { border-color: #fca5a5; box-shadow: 0 0 35px rgba(239, 68, 68, 0.6); }
+      100% { border-color: #ef4444; box-shadow: 0 0 20px rgba(239, 68, 68, 0.3); }
+    }
+    .alert-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 12px;
+    }
+    .alert-headline {
+      font-size: 16px;
+      font-weight: 900;
+      color: #ef4444;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .priority-badge {
+      background: #ef4444;
+      color: #fff;
+      font-size: 10px;
+      font-weight: 900;
+      padding: 3px 8px;
+      border-radius: 4px;
+      letter-spacing: 0.5px;
+    }
+    .alert-desc {
+      font-size: 14px;
+      font-weight: 700;
+      color: #f8fafc;
+      margin-bottom: 12px;
+    }
+    .btn-group {
+      display: flex;
+      gap: 10px;
+      margin-top: 14px;
+      flex-wrap: wrap;
+    }
+    .btn-action {
+      flex: 1;
+      min-width: 130px;
+      padding: 12px 16px;
+      border-radius: 8px;
+      font-size: 13px;
+      font-weight: 800;
+      border: none;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      transition: all 0.15s ease;
+      text-decoration: none;
+      text-align: center;
+    }
+    .btn-accept { background: #22c55e; color: #000; }
+    .btn-accept:hover { background: #16a34a; }
+    .btn-reject { background: #334155; color: #f87171; border: 1px solid #ef444444; }
+    .btn-reject:hover { background: #ef4444; color: #fff; }
+    .btn-nav { background: #0284c7; color: #fff; width: 100%; margin-top: 10px; }
+    .btn-nav:hover { background: #0369a1; }
+    .btn-complete { background: #3b82f6; color: #fff; }
+    .btn-complete:hover { background: #2563eb; }
+
+    .idle-state {
+      text-align: center;
+      padding: 36px 16px;
+      color: #64748b;
+    }
+    .idle-icon {
+      font-size: 36px;
+      color: #22c55e;
+      margin-bottom: 12px;
+      animation: pulseGreen 2s infinite;
+    }
+    @keyframes pulseGreen {
+      0% { opacity: 0.6; transform: scale(0.95); }
+      50% { opacity: 1; transform: scale(1.05); }
+      100% { opacity: 0.6; transform: scale(0.95); }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="brand">
+      <i class="fa-solid fa-truck-medical" style="color:#38bdf8;"></i>
+      <span>RES<b>Q</b>NET</span>
+      <span class="unit-tag" id="unitBadge">AMB-01</span>
+    </div>
+    <div style="display:flex;align-items:center;gap:10px;">
+      <span id="socketDot" style="width:8px;height:8px;border-radius:50%;background:#22c55e;display:inline-block;"></span>
+      <button class="btn-logout" onclick="logout()"><i class="fa-solid fa-arrow-right-from-bracket"></i> Logout</button>
+    </div>
+  </header>
+
+  <main>
+    <!-- Unit Readiness & Telemetry -->
+    <div class="card">
+      <div class="card-title">
+        <span><i class="fa-solid fa-circle-info"></i> Unit Telemetry & Readiness</span>
+        <span id="lastUpdated" style="font-size:9px;color:#475569;">SYNCING...</span>
+      </div>
+      <div class="grid-2" id="unitDetails">
+        <div class="stat-box">
+          <div class="stat-label">Assigned Vehicle</div>
+          <div class="stat-val" id="valCode">Loading...</div>
+        </div>
+        <div class="stat-box">
+          <div class="stat-label">Current Status</div>
+          <div class="stat-val" id="valStatus"><span class="badge available">AVAILABLE</span></div>
+        </div>
+        <div class="stat-box">
+          <div class="stat-label">GPS Position</div>
+          <div class="stat-val" id="valPos">--</div>
+        </div>
+        <div class="stat-box">
+          <div class="stat-label">Active Assignment</div>
+          <div class="stat-val" id="valInc" style="color:#38bdf8;">None</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Active Inbound Alerts Section -->
+    <section id="alertsContainer"></section>
+  </main>
+
+  <script>
+    const token = localStorage.resqnetToken;
+    const user = JSON.parse(localStorage.resqnetUser || 'null');
+    const H = { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' };
+
+    if (!user || user.role !== 'AMBULANCE') {
+      location = '/login.html';
+    }
+
+    const unitId = user.resourceId || 'AMB-01';
+    document.getElementById('unitBadge').textContent = unitId;
+
+    const socket = io({ auth: { token }, transports: ['websocket', 'polling'] });
+    const esc = (x) => String(x ?? 'UNAVAILABLE');
+
+    let currentAlerts = [];
+
+    // Audio chime for emergency alert
+    function playAlertTone() {
+      try {
+        const ctx = new (window.AudioContext || window.webkitAudioContext)();
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = 'sawtooth';
+        osc.frequency.setValueAtTime(880, ctx.currentTime);
+        osc.frequency.exponentialRampToValueAtTime(440, ctx.currentTime + 0.4);
+        gain.gain.setValueAtTime(0.3, ctx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.4);
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.start();
+        osc.stop(ctx.currentTime + 0.45);
+      } catch (e) {}
+    }
+
+    socket.on('connect', () => {
+      document.getElementById('socketDot').style.background = '#22c55e';
+    });
+    socket.on('disconnect', () => {
+      document.getElementById('socketDot').style.background = '#ef4444';
+    });
+
+    async function loadUnit() {
+      try {
+        const res = await fetch('/api/ambulances/' + unitId, { headers: H });
+        if (res.ok) {
+          const amb = await res.json();
+          document.getElementById('valCode').textContent = `${amb.code || amb.id} · ${amb.type || 'ALS'}`;
+          const statusClass = (amb.status === 'EN_ROUTE') ? 'en_route' : (amb.status === 'AVAILABLE') ? 'available' : 'busy';
+          document.getElementById('valStatus').innerHTML = `<span class="badge ${statusClass}">${esc(amb.status)}</span>`;
+          document.getElementById('valPos').textContent = (amb.lat && amb.lng) ? `${Number(amb.lat).toFixed(4)}, ${Number(amb.lng).toFixed(4)}` : 'GPS OFFLINE';
+          document.getElementById('valInc').textContent = amb.currentIncidentId || 'Standby';
+          document.getElementById('lastUpdated').textContent = new Date().toLocaleTimeString();
+        }
+      } catch (e) {
+        console.warn('Unit load error:', e);
+      }
+    }
+
+    async function fetchPendingAlerts() {
+      try {
+        const res = await fetch('/api/incidents/alerts/pending?role=AMBULANCE&resourceId=' + unitId, { headers: H });
+        if (res.ok) {
+          const alerts = await res.json();
+          if (Array.isArray(alerts)) {
+            renderAlerts(alerts);
+          }
+        }
+      } catch (e) {
+        console.warn('Pending alerts error:', e);
+      }
+    }
+
+    function renderAlerts(alerts) {
+      currentAlerts = alerts;
+      const container = document.getElementById('alertsContainer');
+      if (!alerts || alerts.length === 0) {
+        container.innerHTML = `
+          <div class="card idle-state">
+            <div class="idle-icon"><i class="fa-solid fa-tower-broadcast"></i></div>
+            <h3 style="color:#f1f5f9;font-size:15px;margin-bottom:6px;">DISPATCH CHANNEL ARMED</h3>
+            <p style="font-size:12px;">Unit ${unitId} is online and standing by. Inbound emergency dispatch alerts will appear here in real time.</p>
+          </div>`;
+        return;
+      }
+
+      container.innerHTML = alerts.map((a) => {
+        const isAccepted = a.accepted || a.status === 'EN_ROUTE';
+        return `
+        <div class="alert-card">
+          <div class="alert-header">
+            <div class="alert-headline">
+              <i class="fa-solid fa-triangle-exclamation"></i>
+              <span>${isAccepted ? 'ACTIVE MISSION' : 'EMERGENCY DISPATCH'}</span>
+            </div>
+            <span class="priority-badge">${esc(a.priority)}</span>
+          </div>
+
+          <div class="alert-desc">${esc(a.helpMessage)}</div>
+
+          <div class="grid-2">
+            <div class="stat-box">
+              <div class="stat-label">Incident ID</div>
+              <div class="stat-val" style="color:#38bdf8;">${esc(a.incidentId)}</div>
+            </div>
+            <div class="stat-box">
+              <div class="stat-label">Estimated ETA / Distance</div>
+              <div class="stat-val" style="color:#fb923c;">${esc(a.etaMinutes)} MIN · ${esc(a.distanceKm)} KM</div>
+            </div>
+            <div class="stat-box">
+              <div class="stat-label">Accident Scene GPS</div>
+              <div class="stat-val">${esc(a.accidentLatitude)}, ${esc(a.accidentLongitude)}</div>
+            </div>
+            <div class="stat-box">
+              <div class="stat-label">Target Trauma Hospital</div>
+              <div class="stat-val" style="color:#4ade80;">${esc(a.destinationHospital || 'Sahyadri Trauma')}</div>
+            </div>
+          </div>
+
+          <a href="${a.mapUrl}" target="_blank" class="btn-action btn-nav">
+            <i class="fa-solid fa-diamond-turn-right"></i> START GOOGLE MAPS NAVIGATION
+          </a>
+
+          <div class="btn-group">
+            ${!isAccepted ? `
+              <button class="btn-action btn-accept" onclick="acceptDispatch('${a.incidentId}')">
+                <i class="fa-solid fa-circle-check"></i> ACCEPT DISPATCH
+              </button>
+              <button class="btn-action btn-reject" onclick="rejectDispatch('${a.incidentId}')">
+                <i class="fa-solid fa-circle-xmark"></i> REJECT
+              </button>
+            ` : `
+              <button class="btn-action btn-complete" onclick="resolveMission('${a.incidentId}')">
+                <i class="fa-solid fa-flag-checkered"></i> COMPLETE MISSION / ARRIVED AT HOSPITAL
+              </button>
+            `}
+          </div>
+        </div>`;
+      }).join('');
+    }
+
+    async function acceptDispatch(id) {
+      try {
+        const res = await fetch(`/api/incidents/${id}/accept`, {
+          method: 'POST',
+          headers: H,
+          body: JSON.stringify({ ambulanceId: unitId })
+        });
+        const data = await res.json();
+        if (data.success) {
+          loadUnit();
+          fetchPendingAlerts();
+        } else {
+          alert('Error: ' + (data.error || 'Failed to accept dispatch'));
+        }
+      } catch (e) {
+        alert('Network error: ' + e.message);
+      }
+    }
+
+    async function rejectDispatch(id) {
+      const reason = prompt('Please specify rejection reason for automated failover:', 'Delayed by heavy local junction traffic');
+      if (!reason) return;
+      try {
+        const res = await fetch(`/api/incidents/${id}/reject`, {
+          method: 'POST',
+          headers: H,
+          body: JSON.stringify({ reason })
+        });
+        const data = await res.json();
+        loadUnit();
+        fetchPendingAlerts();
+      } catch (e) {
+        alert('Error: ' + e.message);
+      }
+    }
+
+    async function resolveMission(id) {
+      if (!confirm('Confirm patient transfer completed and unit returning to available status?')) return;
+      try {
+        const res = await fetch(`/api/incidents/${id}/resolve`, {
+          method: 'POST',
+          headers: H,
+          body: JSON.stringify({ reason: 'Patient admitted to emergency trauma unit' })
+        });
+        loadUnit();
+        fetchPendingAlerts();
+      } catch (e) {
+        alert('Error: ' + e.message);
+      }
+    }
+
+    function logout() {
+      localStorage.clear();
+      location = '/login.html';
+    }
+
+    // Socket Event Listeners
+    socket.on('ambulance:alert', (alert) => {
+      playAlertTone();
+      fetchPendingAlerts();
+      loadUnit();
+    });
+    socket.on('ambulance:assigned', () => {
+      playAlertTone();
+      fetchPendingAlerts();
+      loadUnit();
+    });
+    socket.on('ambulance:status', loadUnit);
+    socket.on('incident:update', fetchPendingAlerts);
+    socket.on('demo:reset', () => {
+      loadUnit();
+      fetchPendingAlerts();
+    });
+
+    // Bootstrap
+    loadUnit();
+    fetchPendingAlerts();
+    setInterval(loadUnit, 4000);
+    setInterval(fetchPendingAlerts, 3000);
+  </script>
+</body>
+</html>

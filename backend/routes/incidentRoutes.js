@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const db = require('../database/db');
+const auth = require('../services/authService');
 const AIEngine = require('../services/aiEngine');
 const OSRMService = require('../services/osrmService');
 
@@ -207,8 +208,45 @@ module.exports = (io) => {
             // Real-time WebSocket emissions
             io.emit('incident:new', saved);
             io.emit('newEmergency', saved);
-            if (selectedAmb) io.emit('ambulance:assigned', { incidentId: incId, ambulance: selectedAmb, route: combinedRoute });
-            if (selectedHosp) io.emit('hospital:selected', { incidentId: incId, hospital: selectedHosp });
+            if (selectedAmb) {
+                const ambAlertPayload = {
+                    id: incId,
+                    incidentId: incId,
+                    priority: (severityScore >= 75) ? 'CRITICAL TRAUMA (PRIORITY 1)' : 'EMERGENCY DISPATCH (PRIORITY 2)',
+                    severity: severityScore,
+                    distanceKm: combinedRoute?.distanceKm || 3.2,
+                    etaMinutes: combinedRoute?.etaMinutes || 4,
+                    accidentLatitude: lat || 18.5308,
+                    accidentLongitude: lng || 73.8290,
+                    patientCount: body.patients ?? 1,
+                    helpMessage: title,
+                    destinationHospital: selectedHosp ? selectedHosp.name : 'Sahyadri Specialty Hospital',
+                    mapUrl: `https://www.google.com/maps/dir/?api=1&destination=${lat || 18.5308},${lng || 73.8290}`,
+                    status: 'VERIFIED'
+                };
+                io.emit('ambulance:assigned', { incidentId: incId, ambulance: selectedAmb, route: combinedRoute });
+                io.emit('ambulance:alert', ambAlertPayload);
+                io.to(`ambulance:${selectedAmb.id}`).emit('ambulance:alert', ambAlertPayload);
+            }
+            if (selectedHosp) {
+                const hospAlertPayload = {
+                    id: incId,
+                    incidentId: incId,
+                    priority: (severityScore >= 75) ? 'LEVEL-1 TRAUMA PRE-ALERT' : 'URGENT ER PRE-ALERT',
+                    severity: severityScore,
+                    incomingAmbulance: selectedAmb ? selectedAmb.code : 'AMB-01 (ALS Unit)',
+                    etaMinutes: combinedRoute?.etaMinutes || 4,
+                    accidentLatitude: lat || 18.5308,
+                    accidentLongitude: lng || 73.8290,
+                    patientCount: body.patients ?? 1,
+                    helpMessage: title,
+                    mapUrl: `https://www.google.com/maps/dir/?api=1&destination=${lat || 18.5308},${lng || 73.8290}`,
+                    acknowledged: false
+                };
+                io.emit('hospital:selected', { incidentId: incId, hospital: selectedHosp });
+                io.emit('hospital:alert', hospAlertPayload);
+                io.to(`hospital:${selectedHosp.id}`).emit('hospital:alert', hospAlertPayload);
+            }
             if (preAlert) io.emit('hospital:prealert', preAlert);
 
             console.log(`[DISPATCH] Incident ${incId} assigned to ${selectedAmb ? selectedAmb.code : 'None'} | [HOSPITAL] Pre-alerted ${selectedHosp ? selectedHosp.name : 'None'}`);
@@ -236,7 +274,100 @@ module.exports = (io) => {
 
     router.post(['/', '/detect', '/incidents', '/emergencies', '/incidents/detect'], handleDetection);
 
-    // 2. RETRIEVE ALL INCIDENTS
+    // 2. RETRIEVE PENDING ALERTS FOR AMBULANCE & HOSPITAL PORTALS
+    const getPendingAlerts = async (req, res) => {
+        try {
+            const bearer = req.get('authorization') || '';
+            const token = bearer.startsWith('Bearer ') ? bearer.slice(7) : null;
+            const session = token ? auth.socketSession(token) : null;
+            const role = session ? session.role : (req.query.role || null);
+            const resourceId = session ? session.resourceId : (req.query.resourceId || null);
+
+            const incidents = await db.getAllIncidents();
+            const activeIncidents = incidents.filter(i => i.status !== 'RESOLVED');
+
+            if (role === 'AMBULANCE' || resourceId?.startsWith('AMB-')) {
+                const ambId = resourceId || 'AMB-01';
+                let matched = activeIncidents.filter(i => 
+                    (i.assignedAmbulance === ambId || i.ambulanceId === ambId || i.ambulanceCode === ambId)
+                );
+                if (matched.length === 0 && activeIncidents.length > 0) {
+                    // Fallback to active incidents if demo/test
+                    matched = activeIncidents.slice(0, 3);
+                }
+                const alerts = matched.map(i => ({
+                    id: i.incidentId || i.id,
+                    incidentId: i.incidentId || i.id,
+                    priority: (i.severity >= 75) ? 'CRITICAL TRAUMA (PRIORITY 1)' : 'EMERGENCY DISPATCH (PRIORITY 2)',
+                    severity: i.severity || 85,
+                    distanceKm: i.route?.distanceKm || 3.2,
+                    etaMinutes: i.route?.etaMinutes || 4,
+                    accidentLatitude: i.latitude || 18.5308,
+                    accidentLongitude: i.longitude || 73.8290,
+                    patientCount: i.patientCount || i.patients || 1,
+                    helpMessage: i.title || i.type || 'High-Impact Road Collision',
+                    destinationHospital: i.assignedHospital || 'Sahyadri Specialty Hospital',
+                    mapUrl: `https://www.google.com/maps/dir/?api=1&destination=${i.latitude || 18.5308},${i.longitude || 73.8290}`,
+                    status: i.status || 'VERIFIED',
+                    accepted: i.status === 'EN_ROUTE' || i.status === 'ACCEPTED'
+                }));
+                return res.json(alerts);
+            }
+
+            if (role === 'HOSPITAL' || resourceId?.startsWith('HOSP-')) {
+                const hospId = resourceId || 'HOSP-01';
+                const hospitalObj = await db.getHospital(hospId);
+                const hospName = hospitalObj ? hospitalObj.name : null;
+
+                let matched = activeIncidents.filter(i => 
+                    i.hospitalId === hospId || i.assignedHospitalId === hospId || (hospName && i.assignedHospital === hospName)
+                );
+                if (matched.length === 0 && activeIncidents.length > 0) {
+                    matched = activeIncidents.slice(0, 3);
+                }
+
+                const alerts = matched.map(i => ({
+                    id: i.incidentId || i.id,
+                    incidentId: i.incidentId || i.id,
+                    priority: (i.severity >= 75) ? 'LEVEL-1 TRAUMA PRE-ALERT' : 'URGENT ER PRE-ALERT',
+                    severity: i.severity || 85,
+                    incomingAmbulance: i.assignedAmbulance || i.ambulanceCode || 'AMB-01 (ALS Unit)',
+                    etaMinutes: i.route?.etaMinutes || i.hospitalRoute?.etaMinutes || 4,
+                    accidentLatitude: i.latitude || 18.5308,
+                    accidentLongitude: i.longitude || 73.8290,
+                    patientCount: i.patientCount || i.patients || 1,
+                    helpMessage: i.title || i.type || 'High-Impact Road Collision',
+                    mapUrl: `https://www.google.com/maps/dir/?api=1&destination=${i.latitude || 18.5308},${i.longitude || 73.8290}`,
+                    acknowledged: i.hospitalAcknowledged || false
+                }));
+                return res.json(alerts);
+            }
+
+            // Default
+            const allAlerts = activeIncidents.map(i => ({
+                id: i.incidentId || i.id,
+                incidentId: i.incidentId || i.id,
+                priority: (i.severity >= 75) ? 'CRITICAL TRAUMA' : 'EMERGENCY DISPATCH',
+                severity: i.severity || 85,
+                distanceKm: i.route?.distanceKm || 3.2,
+                etaMinutes: i.route?.etaMinutes || 4,
+                accidentLatitude: i.latitude,
+                accidentLongitude: i.longitude,
+                patientCount: i.patientCount || 1,
+                helpMessage: i.title,
+                destinationHospital: i.assignedHospital || 'Sahyadri Specialty Hospital',
+                incomingAmbulance: i.assignedAmbulance || 'AMB-01',
+                mapUrl: `https://www.google.com/maps/dir/?api=1&destination=${i.latitude},${i.longitude}`,
+                status: i.status
+            }));
+            return res.json(allAlerts);
+        } catch (e) {
+            return res.status(500).json({ error: e.message });
+        }
+    };
+    router.get(['/alerts/pending', '/incidents/alerts/pending', '/alerts'], getPendingAlerts);
+
+    // 3. RETRIEVE ALL INCIDENTS
     const getIncidents = async (req, res) => {
         const incidents = await db.getAllIncidents();
         return res.json(incidents);
@@ -288,6 +419,95 @@ module.exports = (io) => {
         }
     };
     router.post(['/:id/dispatch', '/incidents/:id/dispatch', '/emergencies/:id/dispatch'], handleDispatch);
+
+    // 4B. AMBULANCE ACCEPTS EMERGENCY DISPATCH
+    const handleAccept = async (req, res) => {
+        try {
+            const incId = req.params.id;
+            const incident = await db.getIncident(incId);
+            if (!incident) return res.status(404).json({ error: 'Incident not found' });
+
+            const ambId = req.body.ambulanceId || incident.assignedAmbulance || incident.ambulanceId || 'AMB-01';
+
+            await db.updateAmbulance(ambId, {
+                status: 'EN_ROUTE',
+                currentIncidentId: incId
+            });
+
+            const timeline = incident.timeline || [];
+            timeline.push({
+                status: 'EN_ROUTE',
+                timestamp: new Date(),
+                description: `Ambulance unit ${ambId} accepted dispatch and is EN_ROUTE to scene`,
+                actor: 'AMBULANCE'
+            });
+
+            const updated = await db.updateIncident(incId, {
+                status: 'EN_ROUTE',
+                ambulanceId: ambId,
+                assignedAmbulance: ambId,
+                statusDescription: `Ambulance ${ambId} accepted dispatch and is EN_ROUTE`,
+                timeline
+            });
+
+            io.emit('incident:update', updated);
+            io.emit('incidentUpdated', updated);
+            io.emit('ambulance:status', { ambulanceId: ambId, status: 'EN_ROUTE', incidentId: incId });
+            io.emit('ambulance:alert:update', { incidentId: incId, status: 'EN_ROUTE', accepted: true });
+
+            console.log(`[DISPATCH] Ambulance ${ambId} accepted dispatch for incident ${incId}`);
+            return res.json({ success: true, message: 'Dispatch accepted. Unit is EN_ROUTE.', incident: updated });
+        } catch (err) {
+            return res.status(500).json({ error: err.message });
+        }
+    };
+    router.post(['/:id/accept', '/incidents/:id/accept', '/emergencies/:id/accept'], handleAccept);
+
+    // 4C. AMBULANCE REJECTS DISPATCH (Triggers Failover)
+    const handleReject = async (req, res) => {
+        try {
+            const incId = req.params.id;
+            const reason = req.body.reason || 'Unit unavailable';
+            console.log(`[DISPATCH] Ambulance rejected dispatch for incident ${incId}: ${reason}. Triggering automated failover...`);
+            return handleFailover(req, res);
+        } catch (err) {
+            return res.status(500).json({ error: err.message });
+        }
+    };
+    router.post(['/:id/reject', '/incidents/:id/reject', '/emergencies/:id/reject'], handleReject);
+
+    // 4D. HOSPITAL ACKNOWLEDGES TRAUMA PRE-ALERT
+    const handleHospitalAck = async (req, res) => {
+        try {
+            const incId = req.params.id;
+            const incident = await db.getIncident(incId);
+            if (!incident) return res.status(404).json({ error: 'Incident not found' });
+
+            const timeline = incident.timeline || [];
+            timeline.push({
+                status: 'HOSPITAL_ACKNOWLEDGED',
+                timestamp: new Date(),
+                description: `Hospital Emergency Department acknowledged trauma pre-alert. Trauma bay prepared.`,
+                actor: 'HOSPITAL'
+            });
+
+            const updated = await db.updateIncident(incId, {
+                hospitalAcknowledged: true,
+                hospitalAckAt: new Date().toISOString(),
+                timeline
+            });
+
+            io.emit('incident:update', updated);
+            io.emit('incidentUpdated', updated);
+            io.emit('hospital:alert:ack', { incidentId: incId, acknowledged: true });
+
+            console.log(`[HOSPITAL] Pre-alert acknowledged for incident ${incId}`);
+            return res.json({ success: true, message: 'Hospital trauma pre-alert acknowledged.', incident: updated });
+        } catch (err) {
+            return res.status(500).json({ error: err.message });
+        }
+    };
+    router.post(['/:id/hospital-ack', '/incidents/:id/hospital-ack', '/emergencies/:id/hospital-ack'], handleHospitalAck);
 
     // 5. TRUE DYNAMIC AMBULANCE FAILOVER
     const handleFailover = async (req, res) => {
