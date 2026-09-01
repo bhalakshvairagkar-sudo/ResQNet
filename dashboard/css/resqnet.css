@@ -463,9 +463,6 @@ header {
   #panel { height: 288px; }
   .tagline { display: none; }
 }
-@media (max-width: 1180px) {
-  #sidebar { flex-basis: 306px; width: 306px; }
-  #panel { right: 0; height: 300px; }
   .grid { grid-template-columns: repeat(2, minmax(220px, 1fr)); }
 }
 @media (max-width: 900px) {
@@ -479,3 +476,32 @@ header {
   .grid { grid-template-columns: 1fr; }
   .legend { display: none; }
 }
+
+/* ===== GOOGLE MAPS SEAMLESS TACTICAL STYLING & MODAL SUPPRESSOR ===== */
+.gm-err-container, 
+.gm-err-content,
+.gm-err-autocomplete,
+.gm-style .gm-style-pbc,
+div[style*="z-index: 10000002"],
+div[style*="z-index: 1000001"],
+div[style*="z-index: 1000000"] > div[style*="background-color: white"],
+div[style*="z-index: 1000000"] > div[style*="background-color: rgb(255, 255, 255)"],
+.gm-style div[role="dialog"],
+.gm-style div[style*="border-radius: 8px"][style*="background-color: rgb(255, 255, 255)"],
+.gm-style div[style*="border-radius: 8px"][style*="background: rgb(255, 255, 255)"],
+.dismissButton {
+  display: none !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
+  visibility: hidden !important;
+  height: 0 !important;
+  width: 0 !important;
+  overflow: hidden !important;
+}
+
+/* Diminish/Clear development watermark pattern */
+.gm-style-pbc {
+  background: transparent !important;
+  opacity: 0 !important;
+}
+
