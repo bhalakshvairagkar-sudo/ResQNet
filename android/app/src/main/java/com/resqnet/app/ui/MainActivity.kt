@@ -120,6 +120,18 @@ class MainActivity : ComponentActivity(), SensorEventListener {
             }
         }
 
+        // Keep-Alive Background Heartbeat (keeps Render backend awake 24/7)
+        lifecycleScope.launch {
+            while (true) {
+                try {
+                    ApiClient.api.checkHealth()
+                } catch (e: Exception) {
+                    android.util.Log.d("ResQNet", "Render health check ping: ${e.message}")
+                }
+                delay(45000L) // Ping every 45 seconds
+            }
+        }
+
         setContent {
             MaterialTheme(
                 colorScheme = darkColorScheme(
