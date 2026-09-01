@@ -1,224 +1,690 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
 <head>
-<meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>ResQNet — Emergency Command Center</title>
-<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" />
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
-<link rel="stylesheet" href="/css/resqnet.css" />
-<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-<script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
-<script src="/js/config.js"></script>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>ResQNet — Emergency Response Network & Citizen Medical Vault</title>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Archivo:wght@600;700;800;900&family=IBM+Plex+Mono:wght@600;700&family=Inter:wght@400;500;600;700;800&family=Google+Sans:wght@500;700&display=swap" rel="stylesheet">
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background: radial-gradient(circle at 50% 15%, #0f1c30 0%, #03060a 100%);
+      color: #e2e8f0;
+      font-family: 'Inter', -apple-system, sans-serif;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* Top Navigation Bar */
+    header {
+      background: #080e1a;
+      border-bottom: 1px solid #1e293b;
+      padding: 12px 20px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 10px;
+      position: sticky;
+      top: 0;
+      z-index: 100;
+    }
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      text-decoration: none;
+    }
+    .brand-logo {
+      font-family: 'Archivo', sans-serif;
+      font-size: 22px;
+      font-weight: 900;
+      letter-spacing: 0.1em;
+      color: #fff;
+    }
+    .brand-logo b { color: #38bdf8; }
+    .brand-tag {
+      background: #14532d;
+      color: #4ade80;
+      border: 1px solid #22c55e44;
+      padding: 2px 7px;
+      border-radius: 4px;
+      font-size: 10px;
+      font-weight: 800;
+      letter-spacing: 0.5px;
+    }
+
+    .nav-portals {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+    .nav-link {
+      color: #94a3b8;
+      background: #0d1527;
+      border: 1px solid #1e293b;
+      padding: 6px 11px;
+      border-radius: 6px;
+      font-size: 12px;
+      font-weight: 700;
+      text-decoration: none;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      transition: all 0.15s;
+    }
+    .nav-link:hover {
+      color: #fff;
+      border-color: #38bdf8;
+      background: #1e293b;
+    }
+    .nav-link.sos-link {
+      background: #7f1d1d;
+      border-color: #ef444466;
+      color: #fca5a5;
+    }
+    .nav-link.sos-link:hover {
+      background: #ef4444;
+      color: #fff;
+    }
+
+    /* Main Content Container */
+    main {
+      flex: 1;
+      max-width: 660px;
+      width: 100%;
+      margin: 24px auto;
+      padding: 0 14px;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+
+    /* Hero / Header Card */
+    .hero-card {
+      background: linear-gradient(180deg, #0f1c32 0%, #0a1120 100%);
+      border: 1px solid #1e293b;
+      border-radius: 14px;
+      padding: 22px;
+      box-shadow: 0 8px 30px rgba(0,0,0,0.5);
+      text-align: center;
+      position: relative;
+      overflow: hidden;
+    }
+    .hero-card::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 4px;
+      background: linear-gradient(90deg, #38bdf8, #673ab7, #ef4444);
+    }
+    .hero-title {
+      font-family: 'Archivo', sans-serif;
+      font-size: 24px;
+      font-weight: 900;
+      letter-spacing: 0.05em;
+      color: #fff;
+      margin-bottom: 6px;
+    }
+    .hero-sub {
+      font-size: 13px;
+      color: #94a3b8;
+      line-height: 1.5;
+    }
+
+    /* Tab Controller */
+    .tabs-wrap {
+      display: flex;
+      background: #060911;
+      border: 1px solid #1e293b;
+      border-radius: 10px;
+      padding: 4px;
+      gap: 4px;
+    }
+    .tab-btn {
+      flex: 1;
+      padding: 11px 0;
+      text-align: center;
+      background: transparent;
+      border: none;
+      color: #94a3b8;
+      font-size: 13px;
+      font-weight: 800;
+      border-radius: 7px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      transition: all 0.15s;
+    }
+    .tab-btn.active {
+      background: #38bdf8;
+      color: #040810;
+      box-shadow: 0 2px 10px rgba(56, 189, 248, 0.35);
+    }
+
+    /* Card Panels */
+    .card-panel {
+      background: #0b1220;
+      border: 1px solid #1e293b;
+      border-radius: 14px;
+      padding: 24px;
+      box-shadow: 0 10px 40px rgba(0,0,0,0.5);
+    }
+
+    /* Form Elements */
+    .form-group {
+      margin-bottom: 14px;
+    }
+    .form-label {
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      color: #94a3b8;
+      margin-bottom: 6px;
+      display: block;
+    }
+    .form-label span.req { color: #f87171; }
+    .form-input {
+      width: 100%;
+      background: #060a12;
+      border: 1px solid #334155;
+      border-radius: 8px;
+      padding: 10px 12px;
+      color: #fff;
+      font-size: 13px;
+      outline: none;
+      transition: border-color 0.15s;
+      font-family: inherit;
+    }
+    .form-input:focus {
+      border-color: #38bdf8;
+      box-shadow: 0 0 0 2px rgba(56, 189, 248, 0.2);
+    }
+
+    .grid-2 {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 12px;
+    }
+    @media (max-width: 520px) {
+      .grid-2 { grid-template-columns: 1fr; }
+    }
+
+    /* Blood Group Selector Grid */
+    .blood-selector {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 8px;
+      margin-top: 6px;
+    }
+    .blood-option {
+      background: #070c16;
+      border: 1px solid #334155;
+      border-radius: 6px;
+      padding: 9px 4px;
+      text-align: center;
+      font-weight: 800;
+      font-size: 13px;
+      color: #cbd5e1;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    .blood-option:hover { border-color: #38bdf8; }
+    .blood-option.active {
+      background: #ef4444;
+      color: #fff;
+      border-color: #ef4444;
+      box-shadow: 0 2px 8px rgba(239, 68, 68, 0.4);
+    }
+
+    /* Section Subhead */
+    .section-divider {
+      margin: 18px 0 12px;
+      padding-top: 14px;
+      border-top: 1px dashed #1e293b;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 12px;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      color: #38bdf8;
+    }
+
+    /* Checkboxes */
+    .check-list {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 8px;
+      margin-top: 6px;
+    }
+    .check-item {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 12px;
+      color: #cbd5e1;
+      cursor: pointer;
+      background: #070c16;
+      padding: 8px 10px;
+      border-radius: 6px;
+      border: 1px solid #1e293b;
+    }
+    .check-item input {
+      accent-color: #38bdf8;
+      width: 15px;
+      height: 15px;
+    }
+
+    /* Buttons */
+    .btn-submit {
+      width: 100%;
+      background: #38bdf8;
+      color: #040810;
+      border: none;
+      padding: 13px;
+      border-radius: 8px;
+      font-family: 'Archivo', sans-serif;
+      font-size: 14px;
+      font-weight: 900;
+      letter-spacing: 0.5px;
+      cursor: pointer;
+      margin-top: 14px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      transition: background 0.15s;
+    }
+    .btn-submit:hover { background: #0284c7; color: #fff; }
+
+    .msg-feedback {
+      padding: 10px 12px;
+      border-radius: 6px;
+      font-size: 12px;
+      font-weight: 700;
+      margin-bottom: 12px;
+      display: none;
+    }
+    .msg-feedback.err {
+      background: rgba(239, 68, 68, 0.15);
+      color: #f87171;
+      border: 1px solid #ef444455;
+    }
+    .msg-feedback.ok {
+      background: rgba(34, 197, 94, 0.15);
+      color: #4ade80;
+      border: 1px solid #22c55e55;
+    }
+
+    .demo-footer {
+      text-align: center;
+      font-size: 11px;
+      color: #64748b;
+      margin-top: 10px;
+      padding: 10px;
+    }
+  </style>
 </head>
 <body>
 
-<header>
-  <div class="brand">
-    <div class="brand-mark" aria-hidden="true"><i class="fa-solid fa-truck-medical"></i></div>
-    <div>
-      <h1>RES<b>Q</b>NET</h1>
-      <small>COMMAND CENTER</small>
-    </div>
-    <div class="tagline">CAMERA <b>OPTIONAL</b>. RESPONSE INTELLIGENCE ALWAYS.</div>
-  </div>
+  <!-- Top Operational Nav Bar -->
+  <header>
+    <a href="/index.html" class="brand">
+      <i class="fa-solid fa-truck-medical" style="color:#38bdf8;font-size:18px;"></i>
+      <span class="brand-logo">RES<b>Q</b>NET</span>
+      <span class="brand-tag">CITIZEN PORTAL</span>
+    </a>
 
-  <div class="header-right">
-    <button class="pill" id="healthBtn" data-testid="system-health-button" aria-haspopup="true" aria-expanded="false">
-      <span class="dot live online" id="dotSystem"></span><span id="systemLabel">SYSTEM OPERATIONAL</span>
-    </button>
-    <button class="pill demo" id="demoBtn" data-testid="demo-mode-button">
-      <i class="fa-solid fa-bolt"></i> <span id="demoBtnLabel">DEMO MODE</span>
-    </button>
-    <span class="pill ghost clock" id="clock" data-testid="clock">--:--:--</span>
-  </div>
+    <nav class="nav-portals">
+      <a href="/sos.html" class="nav-link sos-link"><i class="fa-solid fa-hand-holding-medical"></i> 1-TAP SOS</a>
+      <a href="/dashboard.html" class="nav-link"><i class="fa-solid fa-desktop"></i> COMMAND CENTER</a>
+      <a href="/ambulance.html" class="nav-link"><i class="fa-solid fa-truck-medical"></i> AMBULANCE</a>
+      <a href="/hospital.html" class="nav-link"><i class="fa-solid fa-hospital"></i> HOSPITAL ER</a>
+    </nav>
+  </header>
 
-  <div class="popover" id="healthPopover" data-testid="system-health-popover" role="dialog" aria-label="System health">
-    <h4>SYSTEM HEALTH</h4>
-    <div class="health-row"><span>Backend API</span><span class="val"><span class="dot online" id="hBackend"></span><i id="tBackend">ONLINE</i></span></div>
-    <div class="health-row"><span>Socket.IO</span><span class="val"><span class="dot online" id="hSocket"></span><i id="tSocket">ONLINE</i></span></div>
-    <div class="health-row"><span>Database</span><span class="val"><span class="dot online" id="hDb"></span><i id="tDb">ONLINE</i></span></div>
-    <div class="health-row"><span>AI Engine</span><span class="val"><span class="dot online" id="hAi"></span><i id="tAi">ONLINE</i></span></div>
-    <div class="health-row"><span>Routing (OSRM)</span><span class="val"><span class="dot online" id="hRouting"></span><i id="tRouting">ONLINE</i></span></div>
-    <p class="note" id="healthNote">Statuses are reported by <span class="mono">GET /api/health</span> and live probes. Components that do not report are shown as UNKNOWN — never assumed online.</p>
-  </div>
-</header>
-
-<section class="kpis" aria-label="Operational key metrics">
-  <div class="kpi"><div><div class="kpi-label">ACTIVE INCIDENTS</div><div class="kpi-value" id="kpiActive" data-testid="kpi-active">0</div><div class="kpi-tag" id="kpiActiveTag">LIVE DATA</div></div><i class="fa-solid fa-triangle-exclamation" style="color:var(--red)"></i></div>
-  <div class="kpi"><div><div class="kpi-label">CRITICAL</div><div class="kpi-value" id="kpiCritical" data-testid="kpi-critical" style="color:var(--red)">0</div><div class="kpi-tag">SEVERITY ≥ 76</div></div><i class="fa-solid fa-radiation" style="color:var(--red)"></i></div>
-  <div class="kpi"><div><div class="kpi-label">AMBULANCES AVAILABLE</div><div class="kpi-value" id="kpiAmbAvail" data-testid="kpi-amb-available" style="color:var(--green)">5</div><div class="kpi-tag">DEMO FLEET</div></div><i class="fa-solid fa-truck-medical" style="color:var(--green)"></i></div>
-  <div class="kpi"><div><div class="kpi-label">AMBULANCES EN ROUTE</div><div class="kpi-value" id="kpiAmbRoute" data-testid="kpi-amb-enroute" style="color:var(--orange)">0</div><div class="kpi-tag">DEMO FLEET</div></div><i class="fa-solid fa-route" style="color:var(--orange)"></i></div>
-  <div class="kpi"><div><div class="kpi-label">HOSPITALS AVAILABLE</div><div class="kpi-value" id="kpiHosp" data-testid="kpi-hospitals" style="color:var(--blue)">4</div><div class="kpi-tag">DEMO REGISTRY</div></div><i class="fa-solid fa-hospital" style="color:var(--blue)"></i></div>
-  <div class="kpi"><div><div class="kpi-label">AVG RESPONSE ETA</div><div class="kpi-value" id="kpiEta" data-testid="kpi-avg-eta">—</div><div class="kpi-tag" id="kpiEtaTag">NO DISPATCHES</div></div><i class="fa-solid fa-stopwatch" style="color:var(--yellow)"></i></div>
-</section>
-
-<div id="main">
-  <div id="mapWrap">
-    <div id="map" data-testid="map"></div>
-
-    <div class="map-topbar">
-      <button class="mbtn on" data-layer="incidents" data-testid="layer-incidents"><i class="fa-solid fa-triangle-exclamation"></i> INCIDENTS</button>
-      <button class="mbtn on" data-layer="ambulances" data-testid="layer-ambulances"><i class="fa-solid fa-truck-medical"></i> AMBULANCES</button>
-      <button class="mbtn on" data-layer="hospitals" data-testid="layer-hospitals"><i class="fa-solid fa-hospital"></i> HOSPITALS</button>
-      <button class="mbtn on" data-layer="routes" data-testid="layer-routes"><i class="fa-solid fa-route"></i> ROUTES</button>
-      <span class="map-spacer"></span>
-      <button class="mbtn" id="fitAllBtn" data-testid="fit-all-button"><i class="fa-solid fa-expand"></i> FIT ALL</button>
-      <button class="mbtn" id="centerIncBtn" data-testid="center-incident-button"><i class="fa-solid fa-location-crosshairs"></i> CENTER INCIDENT</button>
+  <main>
+    <!-- Welcome Header -->
+    <div class="hero-card">
+      <div class="hero-title">Emergency Response & Medical Vault</div>
+      <div class="hero-sub">
+        Sign in or register your citizen account. Save your critical medical profile (blood type, allergies, emergency contacts) so first responders and trauma surgeons receive zero-minute pre-alerts during accidents.
+      </div>
     </div>
 
-    <div class="legend" aria-hidden="true">
-      <h5>LEGEND</h5>
-      <div><span class="lg" style="background:var(--red)"></span> Critical incident</div>
-      <div><span class="lg" style="background:var(--orange)"></span> High</div>
-      <div><span class="lg" style="background:var(--yellow)"></span> Medium</div>
-      <div><span class="lg" style="background:var(--green)"></span> Low</div>
-      <div><span class="lg sq" style="background:var(--blue)"></span> Ambulance</div>
-      <div><span class="lg sq" style="background:var(--green)"></span> Hospital</div>
-      <div><span class="lg line" style="background:var(--orange)"></span> Emergency route</div>
-    </div>
-  </div>
-
-  <aside id="sidebar">
-    <div class="tabs" role="tablist">
-      <button class="tab active" id="tabIncidents" data-testid="tab-incidents" role="tab">INCIDENTS (<span id="sidebarCount">0</span>)</button>
-      <button class="tab" id="tabFeed" data-testid="tab-feed" role="tab">LIVE ACTIVITY</button>
+    <!-- Mode Switcher -->
+    <div class="tabs-wrap">
+      <button class="tab-btn active" id="tabRegisterBtn" onclick="switchMode('register')">
+        <i class="fa-solid fa-user-plus"></i> NEW CITIZEN & MEDICAL FORM
+      </button>
+      <button class="tab-btn" id="tabLoginBtn" onclick="switchMode('login')">
+        <i class="fa-solid fa-right-to-bracket"></i> SIGN IN
+      </button>
     </div>
 
-    <div id="viewIncidents" style="display:flex;flex-direction:column;flex:1;min-height:0">
-      <div class="filters">
-        <div class="search">
-          <i class="fa-solid fa-magnifying-glass"></i>
-          <input id="searchInput" data-testid="search-input" placeholder="Search incident ID, type, source, status…" aria-label="Search incidents" />
+    <div id="feedbackBox" class="msg-feedback"></div>
+
+    <!-- Registration & Medical Intake Form (Default for New Users!) -->
+    <div class="card-panel" id="panelRegister">
+      <form id="formFullRegister">
+        <!-- Account Credentials -->
+        <div style="font-size:12px;font-weight:800;text-transform:uppercase;color:#38bdf8;margin-bottom:12px;display:flex;align-items:center;gap:6px;">
+          <i class="fa-solid fa-user-shield"></i> 1. Choose Login Credentials
         </div>
-        <div class="chips-label">SEVERITY</div>
-        <div class="chips" id="sevChips">
-          <button class="chip on" data-sev="ALL" data-testid="filter-all">ALL</button>
-          <button class="chip" data-sev="CRITICAL" data-testid="filter-critical">🔴 CRITICAL</button>
-          <button class="chip" data-sev="HIGH" data-testid="filter-high">🟠 HIGH</button>
-          <button class="chip" data-sev="MEDIUM" data-testid="filter-medium">🟡 MEDIUM</button>
-          <button class="chip" data-sev="LOW" data-testid="filter-low">🟢 LOW</button>
+
+        <div class="grid-2">
+          <div class="form-group">
+            <label class="form-label">Full Legal Name <span class="req">*</span></label>
+            <input class="form-input" id="regFullName" name="fullName" placeholder="e.g. Aarav Deshmukh" required>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Mobile Phone Number <span class="req">*</span></label>
+            <input class="form-input" id="regPhone" name="phone" type="tel" placeholder="+91 98765 43210" required>
+          </div>
         </div>
-        <div class="chips-label">DETECTION SOURCE</div>
-        <div class="chips" id="srcChips">
-          <button class="chip on" data-src="ALL" data-testid="filter-src-all">ALL</button>
-          <button class="chip" data-src="smartphone" data-testid="filter-src-smartphone">SMARTPHONE</button>
-          <button class="chip" data-src="cctv" data-testid="filter-src-cctv">CCTV</button>
-          <button class="chip" data-src="citizen" data-testid="filter-src-citizen">CITIZEN</button>
-          <button class="chip" data-src="iot" data-testid="filter-src-iot">IOT</button>
+
+        <div class="grid-2">
+          <div class="form-group">
+            <label class="form-label">Choose Username <span class="req">*</span></label>
+            <input class="form-input" id="regUsername" name="username" placeholder="e.g. aarav26" required>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Create Password <span class="req">*</span></label>
+            <input class="form-input" id="regPassword" name="password" type="password" placeholder="Min 4 characters" required>
+          </div>
         </div>
-      </div>
-      <div class="list" id="incidentList" data-testid="incident-list"></div>
+
+        <!-- Medical Details Section -->
+        <div class="section-divider">
+          <i class="fa-solid fa-file-medical" style="color:#ef4444;"></i> 2. Complete Emergency Medical Intake
+        </div>
+
+        <!-- Blood Group -->
+        <div class="form-group">
+          <label class="form-label">Blood Group / Type <span class="req">*</span></label>
+          <input type="hidden" id="regBlood" value="O+">
+          <div class="blood-selector">
+            <div class="blood-option active" onclick="setBlood('O+')">O+</div>
+            <div class="blood-option" onclick="setBlood('O-')">O-</div>
+            <div class="blood-option" onclick="setBlood('A+')">A+</div>
+            <div class="blood-option" onclick="setBlood('A-')">A-</div>
+            <div class="blood-option" onclick="setBlood('B+')">B+</div>
+            <div class="blood-option" onclick="setBlood('B-')">B-</div>
+            <div class="blood-option" onclick="setBlood('AB+')">AB+</div>
+            <div class="blood-option" onclick="setBlood('AB-')">AB-</div>
+          </div>
+        </div>
+
+        <!-- Demographics -->
+        <div class="grid-2">
+          <div class="form-group">
+            <label class="form-label">Date of Birth</label>
+            <input class="form-input" id="regDob" type="date">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Gender</label>
+            <select class="form-input" id="regGender">
+              <option value="Male">Male</option>
+              <option value="Female">Female</option>
+              <option value="Non-Binary">Non-Binary</option>
+              <option value="Other">Prefer not to say</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- Critical Drug Allergies -->
+        <div class="form-group">
+          <label class="form-label">Critical Drug & Environmental Allergies</label>
+          <div class="check-list">
+            <label class="check-item"><input type="checkbox" name="allergy" value="Penicillin / Amoxicillin"> Penicillin / Beta-Lactam Antibiotics</label>
+            <label class="check-item"><input type="checkbox" name="allergy" value="Aspirin / NSAIDs"> Aspirin / NSAID Analgesics</label>
+            <label class="check-item"><input type="checkbox" name="allergy" value="Latex"> Medical Latex</label>
+            <label class="check-item"><input type="checkbox" name="allergy" value="Sulfa Drugs"> Sulfonamide Antibiotics</label>
+          </div>
+          <input class="form-input" id="regCustomAllergies" placeholder="Other specific allergies (e.g. Peanuts, Contrast Dye)" style="margin-top:8px;">
+        </div>
+
+        <!-- Pre-existing Conditions -->
+        <div class="form-group">
+          <label class="form-label">Pre-Existing Conditions & Medications</label>
+          <div class="check-list">
+            <label class="check-item"><input type="checkbox" name="condition" value="Diabetes (Type 1 or 2)"> Diabetes Mellitus</label>
+            <label class="check-item"><input type="checkbox" name="condition" value="Cardiovascular / Hypertension"> Cardiovascular / Hypertension / Pacemaker</label>
+            <label class="check-item"><input type="checkbox" name="condition" value="Asthma / Respiratory"> Asthma / Respiratory</label>
+            <label class="check-item"><input type="checkbox" name="condition" value="Epilepsy / Seizures"> Epilepsy / Seizure Disorder</label>
+          </div>
+          <input class="form-input" id="regMeds" placeholder="Current daily prescriptions (e.g. Insulin, Metoprolol)" style="margin-top:8px;">
+        </div>
+
+        <!-- Emergency Contact -->
+        <div class="section-divider">
+          <i class="fa-solid fa-phone-volume" style="color:#4ade80;"></i> 3. Next-of-Kin Emergency Contact
+        </div>
+
+        <div class="grid-2">
+          <div class="form-group">
+            <label class="form-label">Contact Full Name <span class="req">*</span></label>
+            <input class="form-input" id="regContactName" placeholder="e.g. Pooja Deshmukh" required>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Contact Phone Number <span class="req">*</span></label>
+            <input class="form-input" id="regContactPhone" type="tel" placeholder="+91 98765 43210" required>
+          </div>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Relationship</label>
+          <input class="form-input" id="regContactRel" placeholder="e.g. Spouse, Mother, Sibling">
+        </div>
+
+        <!-- Organ Donor -->
+        <div class="form-group" style="margin-top:10px;">
+          <label class="check-item"><input type="checkbox" id="regOrganDonor"> Registered Organ Donor</label>
+        </div>
+
+        <button type="submit" class="btn-submit" id="btnSubmitReg">
+          <i class="fa-solid fa-shield-heart"></i> REGISTER & ACTIVATE EMERGENCY VAULT
+        </button>
+      </form>
     </div>
 
-    <div id="viewFeed" style="display:none;flex:1;min-height:0;flex-direction:column">
-      <div class="feed" id="activityFeed" data-testid="activity-feed"></div>
-    </div>
-  </aside>
-
-  <section id="panel" class="collapsed" data-testid="details-panel" aria-label="Selected incident intelligence">
-    <div class="panel-bar">
-      <div class="panel-title">
-        <i class="fa-solid fa-microchip" style="color:var(--blue)"></i>
-        <span>SELECTED INCIDENT</span>
-        <span class="sub" id="panelSub" data-testid="panel-subtitle">no incident selected</span>
-      </div>
-      <div class="panel-acts">
-        <button class="pbtn" id="btnCenter" data-testid="panel-center-button"><i class="fa-solid fa-crosshairs"></i> CENTER INCIDENT</button>
-        <button class="pbtn" id="btnRoute" data-testid="panel-route-button"><i class="fa-solid fa-route"></i> SHOW ROUTE</button>
-        <button class="pbtn" id="btnCollapse" data-testid="panel-toggle-button" aria-label="Toggle panel"><i class="fa-solid fa-chevron-up" id="collapseIcon"></i></button>
-      </div>
-    </div>
-    <div class="grid" id="panelGrid" data-testid="panel-grid">
-      <div class="panel-empty" id="panelEmpty">
-        <div>
-          <b>RESQNET MONITORING ACTIVE</b>
-          Select an incident to open its full response chain:<br />
-          verification → severity → ambulance optimisation → route → hospital pre-alert.
+    <!-- Sign In Panel -->
+    <div class="card-panel" id="panelLogin" style="display:none;">
+      <form id="formSignIn">
+        <div style="font-size:12px;font-weight:800;text-transform:uppercase;color:#38bdf8;margin-bottom:14px;display:flex;align-items:center;gap:6px;">
+          <i class="fa-solid fa-right-to-bracket"></i> Sign in to Your Account
         </div>
-      </div>
-      <div class="col" id="colWorkflow" style="display:none">
-        <div class="col-t"><span>RESPONSE PIPELINE</span></div>
-        <div class="stepper" id="stepper"></div>
-        <div class="meter">
-          <div class="row"><span>AI CONFIDENCE <i class="fa-solid fa-circle-question help" id="confHelp" tabindex="0" title="Confidence represents the system's estimated confidence that the detected event represents a genuine emergency. It is not a medically validated probability."></i></span><b id="confVal" data-testid="confidence-value">N/A</b></div>
-          <div class="bar"><i id="confBar" style="background:var(--green)"></i></div>
+
+        <div class="form-group">
+          <label class="form-label">Username</label>
+          <input class="form-input" name="username" placeholder="Enter username" required autofocus>
         </div>
-        <div class="meter">
-          <div class="row"><span>SEVERITY INDEX</span><b id="sevVal" data-testid="severity-value">NOT ASSESSED</b></div>
-          <div class="bar"><i id="sevBar" style="background:var(--red)"></i></div>
-          <div class="kv" style="margin-top:6px"><span>Classification</span><b id="sevClass">—</b></div>
+        <div class="form-group">
+          <label class="form-label">Password</label>
+          <input class="form-input" name="password" type="password" placeholder="Enter password" required>
         </div>
-        <div class="kv"><span>Patients</span><b id="patVal">—</b></div>
-        <div class="kv"><span>Location</span><b id="locVal">—</b></div>
-        <div class="kv"><span>Status</span><b id="statVal">—</b></div>
-      </div>
 
-      <div class="col" id="colSources" style="display:none">
-        <div class="col-t"><span>DETECTION SOURCES</span></div>
-        <div id="sourcesBox" style="display:flex;flex-direction:column;gap:6px"></div>
-        <div class="fused"><span class="lbl">FUSED CONFIDENCE</span><b id="fusedVal">N/A</b></div>
-        <div class="hint" style="margin-top:auto"><b>Camera optional.</b> Every detection channel enters the identical downstream response pipeline — CCTV strengthens detection when present, it is never required.</div>
-      </div>
+        <button type="submit" class="btn-submit" id="btnSubmitLogin">
+          <i class="fa-solid fa-arrow-right"></i> SIGN IN TO RESQNET
+        </button>
+      </form>
 
-      <div class="col" id="colDispatch" style="display:none">
-        <div class="col-t"><span>AMBULANCE OPTIMISATION</span><span class="badge-demo">DEMO FLEET</span></div>
-        <div id="ambBox" style="display:flex;flex-direction:column;gap:6px"></div>
-        <div class="hint" id="ambReason">Selection score = feasible ETA (road distance via OSRM) weighted by demo traffic factor and trauma capability. Not an ML model.</div>
-        <div class="col-t" style="margin-top:4px"><span>EMERGENCY ROUTE</span><span id="routeBadge" class="badge-demo">PENDING</span></div>
-        <div class="kv"><span>Distance</span><b id="routeDist">—</b></div>
-        <div class="kv"><span>ETA</span><b id="routeEta">—</b></div>
-        <div class="kv"><span>Geometry</span><b id="routeGeom">—</b></div>
-      </div>
-
-      <div class="col" id="colHospital" style="display:none">
-        <div class="col-t"><span>HOSPITAL PRE-ALERT</span></div>
-        <div id="hospBox" style="display:flex;flex-direction:column;gap:6px"></div>
-        <div class="col-t" style="margin-top:4px"><span>RESPONSE PERFORMANCE</span></div>
-        <div id="perfBox" style="display:flex;flex-direction:column;gap:4px"></div>
-      </div>
-
-      <div class="col" id="colTimeline" style="display:none">
-        <div class="col-t"><span>INCIDENT TIMELINE</span></div>
-        <div class="timeline" id="timelineBox"></div>
+      <div style="margin-top:20px;padding:12px;background:#070c16;border:1px dashed #334155;border-radius:8px;font-size:11px;color:#64748b;line-height:1.5;">
+        <b>💡 Operational Demo Logins:</b><br>
+        • Command Center: <code>operator</code><br>
+        • Ambulance Unit: <code>ambulance1</code> to <code>ambulance5</code><br>
+        • Hospital ER: <code>hospital1</code> to <code>hospital4</code><br>
+        • Password: <code>configurable-demo-password</code>
       </div>
     </div>
-  </section>
-</div>
 
-<div id="toasts" data-testid="toasts" aria-live="polite"></div>
-
-<div id="demoModal" data-testid="demo-modal">
-  <div class="modal">
-    <div class="modal-h">
-      <div>
-        <h3><i class="fa-solid fa-bolt" style="color:var(--orange)"></i> DEMO SIMULATION SUITE</h3>
-      </div>
-      <button class="x" id="demoClose" data-testid="demo-close" aria-label="Close">✕</button>
+    <div class="demo-footer">
+      ResQNet Emergency Network · Secure 256-Bit Encrypted Patient Trauma Vault
     </div>
-    <p>Every simulated event below is written to the backend flagged <span class="mono">isDemo</span> and is labelled DEMO across the UI. Routes use real OSRM road geometry; ambulance and hospital fleets are demo assets.</p>
-    <button class="dbtn" id="demoSmartphone" data-testid="demo-smartphone">
-      <div><div class="t"><i class="fa-solid fa-mobile-screen" style="color:var(--blue)"></i> SMARTPHONE CRASH</div><div class="s">No CCTV in the area — IMU + acoustic signature</div></div>
-      <i class="fa-solid fa-arrow-right" style="color:var(--text-3)"></i>
-    </button>
-    <button class="dbtn" id="demoCctv" data-testid="demo-cctv">
-      <div><div class="t"><i class="fa-solid fa-video" style="color:var(--violet)"></i> CCTV DETECTION</div><div class="s">YOLO accident event on a monitored junction</div></div>
-      <i class="fa-solid fa-arrow-right" style="color:var(--text-3)"></i>
-    </button>
-    <button class="dbtn" id="demoCitizen" data-testid="demo-citizen">
-      <div><div class="t"><i class="fa-solid fa-user-shield" style="color:var(--orange)"></i> CITIZEN REPORT</div><div class="s">Human SOS with location and patient count</div></div>
-      <i class="fa-solid fa-arrow-right" style="color:var(--text-3)"></i>
-    </button>
-    <div class="flowline"><span class="f"></span> SAME DOWNSTREAM PIPELINE <span class="f"></span></div>
-    <button class="dbtn" id="demoReset" data-testid="demo-reset" style="margin-top:10px">
-      <div><div class="t"><i class="fa-solid fa-rotate-left" style="color:var(--red)"></i> RESET DEMO</div><div class="s">Clears demo incidents, routes, markers, feed and fleet</div></div>
-      <i class="fa-solid fa-arrow-right" style="color:var(--text-3)"></i>
-    </button>
-  </div>
-</div>
+  </main>
 
-<script src="/js/app.js"></script>
+  <script>
+    function switchMode(mode) {
+      const isReg = mode === 'register';
+      document.getElementById('tabRegisterBtn').classList.toggle('active', isReg);
+      document.getElementById('tabLoginBtn').classList.toggle('active', !isReg);
+      document.getElementById('panelRegister').style.display = isReg ? 'block' : 'none';
+      document.getElementById('panelLogin').style.display = isReg ? 'none' : 'block';
+      hideFeedback();
+    }
+
+    function setBlood(bg) {
+      document.getElementById('regBlood').value = bg;
+      document.querySelectorAll('.blood-option').forEach(el => {
+        el.classList.toggle('active', el.textContent.trim() === bg);
+      });
+    }
+
+    function showFeedback(msg, isErr = false) {
+      const el = document.getElementById('feedbackBox');
+      el.textContent = msg;
+      el.className = 'msg-feedback ' + (isErr ? 'err' : 'ok');
+      el.style.display = 'block';
+    }
+
+    function hideFeedback() {
+      document.getElementById('feedbackBox').style.display = 'none';
+    }
+
+    // 1. Full Registration + Medical Intake Handler
+    document.getElementById('formFullRegister').onsubmit = async (e) => {
+      e.preventDefault();
+      hideFeedback();
+      const btn = document.getElementById('btnSubmitReg');
+      btn.disabled = true;
+      btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> ENCRYPTING & REGISTERING...';
+
+      const allergies = Array.from(document.querySelectorAll('input[name="allergy"]:checked')).map(c => c.value);
+      const customAll = document.getElementById('regCustomAllergies').value.trim();
+      if (customAll) allergies.push(customAll);
+
+      const conditions = Array.from(document.querySelectorAll('input[name="condition"]:checked')).map(c => c.value);
+
+      const registerPayload = {
+        fullName: document.getElementById('regFullName').value.trim(),
+        username: document.getElementById('regUsername').value.trim(),
+        password: document.getElementById('regPassword').value.trim(),
+        phone: document.getElementById('regPhone').value.trim(),
+        role: 'USER',
+        bloodGroup: document.getElementById('regBlood').value,
+        allergies,
+        chronicConditions: conditions,
+        currentMedications: document.getElementById('regMeds').value.trim(),
+        emergencyContactName: document.getElementById('regContactName').value.trim(),
+        emergencyContactPhone: document.getElementById('regContactPhone').value.trim(),
+        emergencyContactRelation: document.getElementById('regContactRel').value.trim() || 'Primary Contact'
+      };
+
+      try {
+        // Step 1: Register User
+        const regRes = await fetch('/api/auth/register', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(registerPayload)
+        });
+        const regData = await regRes.json();
+        if (!regRes.ok) {
+          showFeedback(regData.error || 'Registration failed', true);
+          btn.disabled = false;
+          btn.innerHTML = '<i class="fa-solid fa-shield-heart"></i> REGISTER & ACTIVATE EMERGENCY VAULT';
+          return;
+        }
+
+        const token = regData.token;
+        localStorage.resqnetToken = token;
+        localStorage.resqnetUser = JSON.stringify(regData.user);
+
+        // Step 2: Save Complete Medical Profile Intake
+        const medicalPayload = {
+          fullName: registerPayload.fullName,
+          dateOfBirth: document.getElementById('regDob').value,
+          gender: document.getElementById('regGender').value,
+          bloodGroup: registerPayload.bloodGroup,
+          allergies,
+          chronicConditions: conditions,
+          currentMedications: registerPayload.currentMedications,
+          primaryContact: {
+            name: registerPayload.emergencyContactName,
+            phone: registerPayload.emergencyContactPhone,
+            relation: registerPayload.emergencyContactRelation
+          },
+          organDonor: document.getElementById('regOrganDonor').checked
+        };
+
+        await fetch('/api/auth/medical-profile', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: 'Bearer ' + token
+          },
+          body: JSON.stringify(medicalPayload)
+        });
+
+        showFeedback('✓ Account registered and Emergency Medical Vault active! Redirecting to SOS beacon...');
+        setTimeout(() => { location.href = '/sos.html'; }, 1000);
+      } catch (err) {
+        showFeedback('Network error: ' + err.message, true);
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fa-solid fa-shield-heart"></i> REGISTER & ACTIVATE EMERGENCY VAULT';
+      }
+    };
+
+    // 2. Sign In Handler
+    document.getElementById('formSignIn').onsubmit = async (e) => {
+      e.preventDefault();
+      hideFeedback();
+      const btn = document.getElementById('btnSubmitLogin');
+      btn.disabled = true;
+      btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> AUTHENTICATING...';
+
+      const formData = new FormData(e.target);
+      try {
+        const res = await fetch('/api/auth/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(Object.fromEntries(formData))
+        });
+        const data = await res.json();
+        if (!res.ok) {
+          showFeedback(data.error || 'Invalid username or password', true);
+          btn.disabled = false;
+          btn.innerHTML = '<i class="fa-solid fa-arrow-right"></i> SIGN IN TO RESQNET';
+          return;
+        }
+
+        localStorage.resqnetToken = data.token;
+        localStorage.resqnetUser = JSON.stringify(data.user);
+
+        if (data.user.role === 'USER') {
+          location.href = '/sos.html';
+        } else if (data.user.role === 'AMBULANCE') {
+          location.href = '/ambulance.html';
+        } else if (data.user.role === 'HOSPITAL') {
+          location.href = '/hospital.html';
+        } else {
+          location.href = '/dashboard.html';
+        }
+      } catch (err) {
+        showFeedback('Network error: ' + err.message, true);
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fa-solid fa-arrow-right"></i> SIGN IN TO RESQNET';
+      }
+    };
+  </script>
 </body>
 </html>
