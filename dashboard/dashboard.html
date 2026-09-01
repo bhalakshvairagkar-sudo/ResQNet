@@ -4,14 +4,31 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>ResQNet — Emergency Command Center</title>
-<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 <link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
 <link rel="stylesheet" href="/css/resqnet.css" />
-<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-<script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
 <script src="/js/config.js"></script>
+<script>
+  /* Real-Time Google Maps JavaScript API Dynamic Loader */
+  (function() {
+    const key = (window.RESQNET_CONFIG && window.RESQNET_CONFIG.GOOGLE_MAPS_API_KEY) ? `&key=${window.RESQNET_CONFIG.GOOGLE_MAPS_API_KEY}` : '';
+    const script = document.createElement('script');
+    script.src = `https://maps.googleapis.com/maps/api/js?v=weekly${key}&libraries=geometry`;
+    script.async = true;
+    script.defer = true;
+    script.onerror = function() {
+      console.warn("[Google Maps] Failed to load Google Maps script.");
+      const banner = document.getElementById("mapTileErrorBanner");
+      if (banner) {
+        banner.style.display = "flex";
+        banner.innerHTML = '<i class="fa-solid fa-triangle-exclamation"></i> <span>GOOGLE MAPS INITIALIZING — OPERATING IN ACTIVE TELEMETRY MODE</span>';
+      }
+    };
+    document.head.appendChild(script);
+  })();
+</script>
+<script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
 </head>
 <body>
 
@@ -72,12 +89,11 @@
       <!-- CLUSTER 1: MAP PROVIDER SELECTOR -->
       <div class="ctrl-group">
         <label for="mapStyleSelect" class="sr-only">Map View Style</label>
-        <select id="mapStyleSelect" class="mselect" data-testid="map-style-select" title="Change Map Provider / Style">
-          <option value="dark">🗺️ Dark Matter</option>
-          <option value="standard">🛣️ Standard Roads</option>
-          <option value="light">🏙️ Light Positron</option>
+        <select id="mapStyleSelect" class="mselect" data-testid="map-style-select" title="Change Google Map Style">
+          <option value="dark">🗺️ Tactical Dark Mode</option>
+          <option value="roadmap">🛣️ Standard Roadmap</option>
           <option value="satellite">🛰️ Satellite Imagery</option>
-          <option value="hybrid">🛰️ Hybrid (Sat+Roads)</option>
+          <option value="hybrid">🛰️ Hybrid (Sat + Roads)</option>
           <option value="terrain">⛰️ Topo Terrain</option>
         </select>
       </div>

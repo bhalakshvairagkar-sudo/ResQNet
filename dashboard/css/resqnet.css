@@ -122,18 +122,21 @@ header {
 #main { flex: 1; display: flex; min-height: 0; position: relative; }
 #mapWrap { flex: 1; position: relative; min-width: 0; }
 #map { position: absolute; inset: 0; background: var(--bg-inset); }
-.leaflet-container { background: #0A0E15; font-family: var(--font-ui); }
-.leaflet-popup-content-wrapper {
-  background: rgba(12,17,25,.97); color: var(--text); border: 1px solid var(--border-bright);
-  border-radius: 8px; box-shadow: 0 16px 40px rgba(0,0,0,.6);
-}
-.leaflet-popup-tip { background: rgba(12,17,25,.97); }
-.leaflet-popup-content { margin: 11px 13px; font-size: 11.5px; line-height: 1.6; }
+.custom-map-overlay { position: absolute; transform: translate(-50%, -50%); pointer-events: auto; user-select: none; z-index: 100; }
+.custom-map-overlay:hover { z-index: 200; }
+.gmap-infowindow { font-family: var(--font-ui); font-size: 11.5px; line-height: 1.6; color: var(--text); min-width: 220px; }
 .pop-t { font-family: var(--font-mono); font-weight: 600; letter-spacing: .06em; margin-bottom: 4px; }
-.leaflet-bar a { background: var(--bg-surface); color: var(--text); border-color: var(--border); }
-.leaflet-bar a:hover { background: var(--bg-card-hover); color: #fff; }
-.leaflet-control-attribution { background: rgba(5,7,11,.7) !important; color: var(--text-3) !important; font-size: 9px !important; }
-.leaflet-control-attribution a { color: var(--text-2) !important; }
+
+/* Google Maps Dark Infowindow Overrides */
+.gm-style-iw-c {
+  background-color: rgba(12, 17, 25, 0.98) !important; color: var(--text) !important;
+  border: 1px solid var(--border-bright) !important; border-radius: 8px !important;
+  box-shadow: 0 16px 40px rgba(0,0,0,0.8) !important; padding: 12px 14px !important;
+}
+.gm-style-iw-d { overflow: auto !important; max-height: none !important; }
+.gm-style-iw-tc::after { background: rgba(12, 17, 25, 0.98) !important; border-top: 1px solid var(--border-bright) !important; }
+.gm-ui-hover-effect { filter: invert(1); opacity: 0.7; }
+.gm-ui-hover-effect:hover { opacity: 1; }
 
 .map-topbar {
   position: absolute; top: 14px; left: 14px; right: 14px; z-index: 600;

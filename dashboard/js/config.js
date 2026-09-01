@@ -5,8 +5,9 @@ window.RESQNET_CONFIG = {
   // Active Socket.IO push
   SOCKET_URL: window.location.origin.startsWith('http') ? window.location.origin : 'http://localhost:5000',
   DEFAULT_CENTER: [18.5204, 73.8567],
-  DEFAULT_ZOOM: 12,
+  DEFAULT_ZOOM: 13,
   OSRM_URL: "https://router.project-osrm.org",
+  GOOGLE_MAPS_API_KEY: "", // Provide your Google Maps API key here or via env
   HEALTH_POLL_MS: 5000,
-  INCIDENT_POLL_MS: 4000
+  INCIDENT_POLL_MS: 3000
 };

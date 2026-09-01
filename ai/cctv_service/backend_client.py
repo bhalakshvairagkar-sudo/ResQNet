@@ -11,7 +11,10 @@ from config import CCTVConfig
 
 class BackendClient:
     def __init__(self, backend_url: Optional[str] = None, auth_token: Optional[str] = None):
-        self.backend_url = backend_url or CCTVConfig.BACKEND_URL
+        raw_url = (backend_url or CCTVConfig.BACKEND_URL).strip().rstrip('/')
+        if raw_url.endswith('/api'):
+            raw_url = raw_url[:-4].rstrip('/')
+        self.backend_url = raw_url
         self.auth_token = auth_token or CCTVConfig.CCTV_AUTH_TOKEN
         self.headers = {
             "Content-Type": "application/json",

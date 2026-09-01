@@ -117,71 +117,182 @@ function haversine(a, b) {
 }
 const maskPhone = (p) => (p ? String(p).slice(0, 3) + "•••••" + String(p).slice(-2) : null);
 
-/* ---------- MAP & LAYER MANAGEMENT ---------- */
-let map, currentBaseLayer = null, currentOverlayLayer = null;
-let L_inc, L_resolved, L_amb, L_hosp, L_route, L_cctv, L_cctvFov, L_hotspots, L_traffic;
-const incMarkers = {}, ambMarkers = {}, hospMarkers = {}, cctvMarkers = {}, fovLayers = {};
-let ambAnim = null;
+/* ---------- GOOGLE MAPS PLATFORM & OVERLAY ARCHITECTURE ---------- */
+let map = null;
+let googleTrafficLayer = null;
+let activeInfoWindow = null;
+const incMarkers = {}, ambMarkers = {}, hospMarkers = {}, cctvMarkers = {};
+const fovPolygons = {}, hotspotCircles = {}, trafficPolylines = [];
+let routePolylines = [];
 let testMapTarget = null;
 
+const GOOGLE_DARK_STYLE = [
+  { elementType: "geometry", stylers: [{ color: "#0b101b" }] },
+  { elementType: "labels.text.stroke", stylers: [{ color: "#0b101b" }] },
+  { elementType: "labels.text.fill", stylers: [{ color: "#8fa0b8" }] },
+  { featureType: "administrative.locality", elementType: "labels.text.fill", stylers: [{ color: "#38bdf8" }] },
+  { featureType: "poi", elementType: "labels.text.fill", stylers: [{ color: "#475569" }] },
+  { featureType: "poi.park", elementType: "geometry", stylers: [{ color: "#0f172a" }] },
+  { featureType: "poi.park", elementType: "labels.text.fill", stylers: [{ color: "#334155" }] },
+  { featureType: "road", elementType: "geometry", stylers: [{ color: "#1e293b" }] },
+  { featureType: "road", elementType: "geometry.stroke", stylers: [{ color: "#0f172a" }] },
+  { featureType: "road", elementType: "labels.text.fill", stylers: [{ color: "#94a3b8" }] },
+  { featureType: "road.highway", elementType: "geometry", stylers: [{ color: "#334155" }] },
+  { featureType: "road.highway", elementType: "geometry.stroke", stylers: [{ color: "#1e293b" }] },
+  { featureType: "road.highway", elementType: "labels.text.fill", stylers: [{ color: "#cbd5e1" }] },
+  { featureType: "transit", elementType: "geometry", stylers: [{ color: "#1e293b" }] },
+  { featureType: "transit.station", elementType: "labels.text.fill", stylers: [{ color: "#38bdf8" }] },
+  { featureType: "water", elementType: "geometry", stylers: [{ color: "#060a12" }] },
+  { featureType: "water", elementType: "labels.text.fill", stylers: [{ color: "#1e293b" }] },
+  { featureType: "water", elementType: "labels.text.stroke", stylers: [{ color: "#060a12" }] }
+];
+
+/* Custom HTML overlay marker using Google Maps OverlayView */
+class CustomHtmlOverlay {
+  constructor(position, htmlContent, onClick, className = "") {
+    this.lat = Number(position.lat || position[0]);
+    this.lng = Number(position.lng || position[1]);
+    this.htmlContent = htmlContent;
+    this.onClick = onClick;
+    this.className = className;
+    this.div = null;
+    this.visible = true;
+    this.overlayView = null;
+    this.initOverlay();
+  }
+
+  initOverlay() {
+    if (!window.google || !window.google.maps || !map) return;
+    const self = this;
+    class InternalOverlay extends google.maps.OverlayView {
+      onAdd() {
+        self.div = document.createElement("div");
+        self.div.className = "custom-map-overlay " + self.className;
+        self.div.innerHTML = self.htmlContent;
+        if (self.onClick) {
+          self.div.addEventListener("click", (e) => {
+            e.stopPropagation();
+            self.onClick();
+          });
+        }
+        const panes = this.getPanes();
+        panes.overlayMouseTarget.appendChild(self.div);
+      }
+      draw() {
+        const projection = this.getProjection();
+        if (!projection || !self.div) return;
+        const pos = new google.maps.LatLng(self.lat, self.lng);
+        const point = projection.fromLatLngToDivPixel(pos);
+        if (point) {
+          self.div.style.left = point.x + "px";
+          self.div.style.top = point.y + "px";
+          self.div.style.display = self.visible ? "block" : "none";
+        }
+      }
+      onRemove() {
+        if (self.div && self.div.parentNode) {
+          self.div.parentNode.removeChild(self.div);
+          self.div = null;
+        }
+      }
+    }
+    this.overlayView = new InternalOverlay();
+    this.overlayView.setMap(map);
+  }
+
+  setPosition(lat, lng) {
+    this.lat = Number(lat);
+    this.lng = Number(lng);
+    if (this.overlayView) this.overlayView.draw();
+  }
+
+  setContent(html) {
+    this.htmlContent = html;
+    if (this.div) this.div.innerHTML = html;
+  }
+
+  setVisible(vis) {
+    this.visible = vis;
+    if (this.div) this.div.style.display = vis ? "block" : "none";
+  }
+
+  remove() {
+    if (this.overlayView) {
+      this.overlayView.setMap(null);
+      this.overlayView = null;
+    }
+  }
+}
+
+function showInfoWindow(lat, lng, html) {
+  if (!map || !window.google || !window.google.maps) return;
+  if (activeInfoWindow) activeInfoWindow.close();
+  activeInfoWindow = new google.maps.InfoWindow({
+    content: `<div class="gmap-infowindow">${html}</div>`,
+    position: { lat: Number(lat), lng: Number(lng) }
+  });
+  activeInfoWindow.open(map);
+}
+
 function setMapStyle(styleKey) {
-  const provider = MAP_PROVIDERS[styleKey] || MAP_PROVIDERS.dark;
   state.mapStyle = styleKey;
   localStorage.setItem("resqnet_map_style", styleKey);
-
   if ($("mapStyleSelect")) $("mapStyleSelect").value = styleKey;
 
-  // Cleanly remove previous tile layers
-  if (currentBaseLayer) { map.removeLayer(currentBaseLayer); currentBaseLayer = null; }
-  if (currentOverlayLayer) { map.removeLayer(currentOverlayLayer); currentOverlayLayer = null; }
-
-  const errorBanner = $("mapTileErrorBanner");
-
-  currentBaseLayer = L.tileLayer(provider.url, {
-    attribution: provider.attribution,
-    maxZoom: provider.maxZoom || 19,
-    subdomains: provider.subdomains || "abc"
-  });
-
-  currentBaseLayer.on("tileerror", () => {
-    if (errorBanner) errorBanner.style.display = "flex";
-  });
-  currentBaseLayer.on("load", () => {
-    if (errorBanner) errorBanner.style.display = "none";
-  });
-
-  currentBaseLayer.addTo(map);
-
-  // Hybrid overlay if configured
-  if (provider.overlayUrl) {
-    currentOverlayLayer = L.tileLayer(provider.overlayUrl, {
-      subdomains: provider.subdomains || "abcd",
-      maxZoom: provider.maxZoom || 19,
-      pane: "overlayPane"
-    }).addTo(map);
+  if (!map || !window.google || !window.google.maps) return;
+  if (styleKey === "dark") {
+    map.setMapTypeId("roadmap");
+    map.setOptions({ styles: GOOGLE_DARK_STYLE });
+  } else if (styleKey === "roadmap" || styleKey === "standard" || styleKey === "light") {
+    map.setMapTypeId("roadmap");
+    map.setOptions({ styles: [] });
+  } else if (styleKey === "satellite") {
+    map.setMapTypeId("satellite");
+    map.setOptions({ styles: [] });
+  } else if (styleKey === "hybrid") {
+    map.setMapTypeId("hybrid");
+    map.setOptions({ styles: [] });
+  } else if (styleKey === "terrain") {
+    map.setMapTypeId("terrain");
+    map.setOptions({ styles: [] });
   }
 }
 
 function initMap() {
-  map = L.map("map", { zoomControl: false, preferCanvas: true }).setView(CENTER, CFG.DEFAULT_ZOOM || 12);
-  L.control.zoom({ position: "bottomleft" }).addTo(map);
+  const checkGoogle = () => {
+    if (window.google && window.google.maps) {
+      startGoogleMap();
+    } else {
+      setTimeout(checkGoogle, 100);
+    }
+  };
+  checkGoogle();
+}
+
+function startGoogleMap() {
+  const mapEl = $("map");
+  if (!mapEl || map) return;
+
+  map = new google.maps.Map(mapEl, {
+    center: { lat: CENTER[0], lng: CENTER[1] },
+    zoom: CFG.DEFAULT_ZOOM || 13,
+    disableDefaultUI: true,
+    zoomControl: true,
+    zoomControlOptions: { position: google.maps.ControlPosition.LEFT_BOTTOM },
+    backgroundColor: "#0b101b"
+  });
 
   setMapStyle(state.mapStyle);
 
-  // Operational layer groups
-  L_traffic = L.layerGroup();
-  L_hotspots = L.layerGroup().addTo(map);
-  L_cctvFov = L.layerGroup().addTo(map);
-  L_cctv = L.layerGroup().addTo(map);
-  L_route = L.layerGroup().addTo(map);
-  L_hosp = L.layerGroup().addTo(map);
-  L_amb = L.layerGroup().addTo(map);
-  L_resolved = L.layerGroup();
-  L_inc = L.layerGroup().addTo(map);
+  googleTrafficLayer = new google.maps.TrafficLayer();
+  if (state.layers.traffic) {
+    googleTrafficLayer.setMap(map);
+  }
 
-  map.on("click", (event) => {
+  map.addListener("click", (e) => {
     if (!testMapTarget) return;
-    setTestCoordinates(testMapTarget, event.latlng.lat, event.latlng.lng);
+    const lat = e.latLng.lat(), lng = e.latLng.lng();
+    setTestCoordinates(testMapTarget, lat, lng);
     $("testModeResult").textContent = `${testMapTarget === "inc" ? "Accident" : testMapTarget === "amb" ? "Ambulance" : "Hospital"} coordinates set from map click.`;
     testMapTarget = null;
   });
@@ -191,66 +302,48 @@ function initMap() {
 }
 
 /* ---------- MARKER FACTORIES ---------- */
-function makeIncIcon(sev, selected, resolved) {
+function makeIncHtml(sev, selected, resolved) {
   const b = band(sev);
-  const c = b.color;
   const isCrit = b.k === "critical";
   const sevKey = b.k || "medium";
 
-  return L.divIcon({
-    className: "",
-    html: `<div class="inc-marker sev-${sevKey} ${selected ? "sel" : ""} ${resolved ? "resolved" : ""}">
-      ${isCrit && !resolved ? `<div class="ring"></div>` : ""}
-      <div class="core">${resolved ? "✓" : (sev !== null ? Math.min(99, Math.round(sev)) : "!")}</div>
-    </div>`,
-    iconSize: [34, 34],
-    iconAnchor: [17, 17]
-  });
+  return `<div class="inc-marker sev-${sevKey} ${selected ? "sel" : ""} ${resolved ? "resolved" : ""}">
+    ${isCrit && !resolved ? `<div class="ring"></div>` : ""}
+    <div class="core">${resolved ? "✓" : (sev !== null ? Math.min(99, Math.round(sev)) : "!")}</div>
+  </div>`;
 }
 
-function makeAmbIcon(status, sel) {
+function makeAmbHtml(status, sel) {
   const s = String(status || "available").toLowerCase();
-  return L.divIcon({
-    className: "",
-    html: `<div class="amb-marker ${s} ${sel ? "sel" : ""}"><i class="fa-solid fa-truck-medical"></i></div>`,
-    iconSize: [30, 30],
-    iconAnchor: [15, 15]
-  });
+  return `<div class="amb-marker ${s} ${sel ? "sel" : ""}"><i class="fa-solid fa-truck-medical"></i></div>`;
 }
 
-function makeHospIcon(capacity, trauma, sel) {
+function makeHospHtml(capacity, trauma, sel) {
   const cap = String(capacity || "available").toLowerCase();
-  return L.divIcon({
-    className: "",
-    html: `<div class="hosp-marker ${trauma ? "trauma" : ""} ${cap} ${sel ? "sel" : ""}"><i class="fa-solid ${trauma ? "fa-house-medical" : "fa-hospital"}"></i></div>`,
-    iconSize: [30, 30],
-    iconAnchor: [15, 15]
-  });
+  return `<div class="hosp-marker ${trauma ? "trauma" : ""} ${cap} ${sel ? "sel" : ""}"><i class="fa-solid ${trauma ? "fa-house-medical" : "fa-hospital"}"></i></div>`;
 }
 
-function makeCctvIcon(status) {
+function makeCctvHtml(status) {
   const s = String(status || "ONLINE").toLowerCase();
-  return L.divIcon({
-    className: "",
-    html: `<div class="cctv-marker ${s}"><i class="fa-solid fa-video"></i></div>`,
-    iconSize: [26, 26],
-    iconAnchor: [13, 13]
-  });
+  return `<div class="cctv-marker ${s}"><i class="fa-solid fa-video"></i></div>`;
 }
 
 /* ---------- CCTV FOV CONE GEOMETRY ---------- */
-function createFovPolygon(lat, lng, headingDeg, fovDeg, radiusMeters) {
-  const points = [[lat, lng]];
-  const R = 6378137; // Earth radius in meters
+function createFovPolygonPoints(lat, lng, headingDeg, fovDeg, radiusMeters) {
+  const points = [{ lat, lng }];
+  const R = 6378137;
   const startAng = (headingDeg - fovDeg / 2) * (Math.PI / 180);
   const endAng = (headingDeg + fovDeg / 2) * (Math.PI / 180);
-  const steps = 10;
+  const steps = 12;
 
   for (let i = 0; i <= steps; i++) {
     const angle = startAng + (i / steps) * (endAng - startAng);
     const dLat = (radiusMeters * Math.cos(angle)) / R;
     const dLng = (radiusMeters * Math.sin(angle)) / (R * Math.cos((lat * Math.PI) / 180));
-    points.push([lat + (dLat * 180) / Math.PI, lng + (dLng * 180) / Math.PI]);
+    points.push({
+      lat: lat + (dLat * 180) / Math.PI,
+      lng: lng + (dLng * 180) / Math.PI
+    });
   }
   return points;
 }
@@ -267,7 +360,7 @@ async function seedFleet() {
     if (Array.isArray(ambs)) ambs.forEach(updateAmbulance);
     if (Array.isArray(hosps)) hosps.forEach(updateHospital);
   } catch (e) {
-    toast("OPERATIONS DATA UNAVAILABLE", "Fleet and hospital positions will appear when the backend reconnects.", "warn");
+    toast("OPERATIONS DATA UNAVAILABLE", "Fleet and hospital positions will appear when backend reconnects.", "warn");
   }
   renderKPIs();
   if ($("testAmbulanceId")) populateTestResources();
@@ -281,7 +374,7 @@ async function loadInfrastructure() {
     if (Array.isArray(cams)) {
       cams.forEach((cam) => {
         state.cctv[cam.id] = cam;
-        const pos = [cam.lat, cam.lng];
+        const pos = { lat: cam.lat, lng: cam.lng };
         const popup = `<div class="pop-t" style="color:#38BDF8"><i class="fa-solid fa-video"></i> ${esc(cam.cameraId || cam.id)}</div>
           Name: <b>${esc(cam.cameraName || "Junction Cam")}</b><br/>
           Status: <b>${esc(cam.status)}</b><br/>
@@ -290,21 +383,26 @@ async function loadInfrastructure() {
           <div style="margin-top:8px"><button onclick="openCctvModal('${esc(cam.cameraId || cam.id)}')" style="width:100%;padding:4px 8px;background:#38BDF8;color:#000;border:none;border-radius:4px;font-weight:bold;cursor:pointer;font-size:10px;"><i class="fa-solid fa-play"></i> PREVIEW CAMERA FEED</button></div>`;
 
         if (!cctvMarkers[cam.id]) {
-          cctvMarkers[cam.id] = L.marker(pos, { icon: makeCctvIcon(cam.status) }).bindPopup(popup).addTo(L_cctv);
+          cctvMarkers[cam.id] = new CustomHtmlOverlay(pos, makeCctvHtml(cam.status), () => showInfoWindow(cam.lat, cam.lng, popup), "cctv-overlay");
+          cctvMarkers[cam.id].setVisible(state.layers.cctv);
         } else {
-          cctvMarkers[cam.id].setLatLng(pos).setIcon(makeCctvIcon(cam.status)).setPopupContent(popup);
+          cctvMarkers[cam.id].setPosition(cam.lat, cam.lng);
+          cctvMarkers[cam.id].setContent(makeCctvHtml(cam.status));
         }
 
-        if (cam.fovAngle && cam.heading !== undefined) {
-          const cone = createFovPolygon(cam.lat, cam.lng, cam.heading, cam.fovAngle, cam.coverageRadiusMeters || 200);
-          if (fovLayers[cam.id]) L_cctvFov.removeLayer(fovLayers[cam.id]);
-          fovLayers[cam.id] = L.polygon(cone, {
-            color: "#38BDF8",
-            weight: 1,
-            dashArray: "3, 4",
+        if (cam.fovAngle && cam.heading !== undefined && map && window.google && window.google.maps) {
+          const cone = createFovPolygonPoints(cam.lat, cam.lng, cam.heading, cam.fovAngle, cam.coverageRadiusMeters || 200);
+          if (fovPolygons[cam.id]) fovPolygons[cam.id].setMap(null);
+          fovPolygons[cam.id] = new google.maps.Polygon({
+            paths: cone,
+            strokeColor: "#38BDF8",
+            strokeOpacity: 0.8,
+            strokeWeight: 1,
             fillColor: "#38BDF8",
-            fillOpacity: 0.12
-          }).bindPopup(`<b>${esc(cam.cameraId)}</b> Detection Zone (Approximate camera coverage)`).addTo(L_cctvFov);
+            fillOpacity: 0.12,
+            map: state.layers.cctv ? map : null
+          });
+          fovPolygons[cam.id].addListener("click", () => showInfoWindow(cam.lat, cam.lng, `<b>${esc(cam.cameraId)}</b> Detection Zone`));
         }
       });
     }
@@ -312,37 +410,51 @@ async function loadInfrastructure() {
     // 2. Crash Blackspot Hotspots
     const hotRes = await fetch(API + "/fleet/hotspots");
     const hotspots = await hotRes.json();
-    if (Array.isArray(hotspots)) {
+    if (Array.isArray(hotspots) && map && window.google && window.google.maps) {
       state.hotspots = hotspots;
-      L_hotspots.clearLayers();
-      hotspots.forEach((h) => {
-        L.circle([h.lat, h.lng], {
+      Object.values(hotspotCircles).forEach((c) => c.setMap(null));
+      hotspots.forEach((h, idx) => {
+        const circle = new google.maps.Circle({
+          center: { lat: h.lat, lng: h.lng },
           radius: h.radiusMeters || 300,
-          color: "var(--red)",
-          weight: 1.5,
-          fillColor: "var(--red)",
-          fillOpacity: 0.16
-        }).bindPopup(`<div class="pop-t" style="color:var(--red)"><i class="fa-solid fa-fire"></i> ${esc(h.name)}</div>
-          Risk Score: <b>${h.riskScore}/100</b><br/>
-          Category: <b>${esc(h.category)}</b><br/>
-          Historical Incidents: <b>${h.historicalIncidents}</b>`).addTo(L_hotspots);
+          strokeColor: "#EF4444",
+          strokeOpacity: 0.8,
+          strokeWeight: 1.5,
+          fillColor: "#EF4444",
+          fillOpacity: 0.16,
+          map: state.layers.hotspots ? map : null
+        });
+        circle.addListener("click", () => {
+          showInfoWindow(h.lat, h.lng, `<div class="pop-t" style="color:var(--red)"><i class="fa-solid fa-fire"></i> ${esc(h.name)}</div>
+            Risk Score: <b>${h.riskScore}/100</b><br/>
+            Category: <b>${esc(h.category)}</b><br/>
+            Historical Incidents: <b>${h.historicalIncidents}</b>`);
+        });
+        hotspotCircles[h.id || idx] = circle;
       });
     }
 
-    // 3. Traffic Corridors (Configured traffic context)
+    // 3. Configured Traffic Context Corridors
     const trafficRes = await fetch(API + "/fleet/traffic");
     const corridors = await trafficRes.json();
-    if (Array.isArray(corridors)) {
+    if (Array.isArray(corridors) && map && window.google && window.google.maps) {
       state.trafficCorridors = corridors;
-      L_traffic.clearLayers();
+      trafficPolylines.forEach((p) => p.setMap(null));
+      trafficPolylines.length = 0;
       corridors.forEach((c) => {
-        const color = c.congestionLevel === "MODERATE" ? "var(--orange)" : "var(--green)";
-        const latLngs = c.coordinates.map((pt) => [pt[1], pt[0]]);
-        L.polyline(latLngs, {
-          color: color,
-          weight: 4,
-          opacity: 0.7
-        }).bindPopup(`<b>${esc(c.name)}</b><br/>Status: <b>${esc(c.trafficLabel)}</b>`).addTo(L_traffic);
+        const color = c.congestionLevel === "MODERATE" ? "#F97316" : "#22C55E";
+        const poly = new google.maps.Polyline({
+          path: c.coordinates.map((pt) => ({ lat: pt[1], lng: pt[0] })),
+          strokeColor: color,
+          strokeOpacity: 0.75,
+          strokeWeight: 4,
+          map: state.layers.traffic ? map : null
+        });
+        poly.addListener("click", () => {
+          const mid = c.coordinates[Math.floor(c.coordinates.length / 2)];
+          showInfoWindow(mid[1], mid[0], `<b>${esc(c.name)}</b><br/>Status: <b>${esc(c.trafficLabel)}</b>`);
+        });
+        trafficPolylines.push(poly);
       });
     }
   } catch (e) {
@@ -357,7 +469,7 @@ function updateAmbulance(a) {
   state.ambulances[amb.id] = amb;
   if (num(amb.lat) === null || num(amb.lng) === null) return;
   const sel = state.selectedIncidentId && state.routes[state.selectedIncidentId]?.ambulanceId === amb.id;
-  const pos = [amb.lat, amb.lng];
+  const pos = { lat: amb.lat, lng: amb.lng };
   const popup = `<div class="pop-t" style="color:var(--blue)">${esc(amb.id)} · ${esc(amb.type || "ALS")}</div>
     Status: <b>${esc(String(amb.status || "AVAILABLE").toUpperCase())}</b><br/>
     Location: <b>${amb.lat}, ${amb.lng}</b><br/>
@@ -367,9 +479,12 @@ function updateAmbulance(a) {
     ${amb.eta ? "<br/>ETA: <b>" + amb.eta + " min</b>" : ""}`;
 
   if (ambMarkers[amb.id]) {
-    ambMarkers[amb.id].setLatLng(pos).setIcon(makeAmbIcon(amb.status, sel)).setPopupContent(popup);
+    ambMarkers[amb.id].setPosition(amb.lat, amb.lng);
+    ambMarkers[amb.id].setContent(makeAmbHtml(amb.status, sel));
+    ambMarkers[amb.id].setVisible(state.layers.ambulances);
   } else {
-    ambMarkers[amb.id] = L.marker(pos, { icon: makeAmbIcon(amb.status, sel) }).bindPopup(popup).addTo(L_amb);
+    ambMarkers[amb.id] = new CustomHtmlOverlay(pos, makeAmbHtml(amb.status, sel), () => showInfoWindow(amb.lat, amb.lng, popup), "amb-overlay");
+    ambMarkers[amb.id].setVisible(state.layers.ambulances);
   }
   renderKPIs();
 }
@@ -380,6 +495,7 @@ function updateHospital(h) {
   const hh = state.hospitals[h.id];
   if (num(hh.lat) === null || num(hh.lng) === null) return;
   const sel = state.selectedIncidentId && state.routes[state.selectedIncidentId]?.hospitalId === hh.id;
+  const pos = { lat: hh.lat, lng: hh.lng };
   const popup = `<div class="pop-t" style="color:var(--green)">${esc(hh.name)}</div>
     Category: <b>${sel ? "SELECTED TRAUMA HOSPITAL" : "ALTERNATIVE HOSPITAL"}</b><br/>
     Status: <b>${esc(hh.status || "UNAVAILABLE")}</b><br/>
@@ -388,9 +504,12 @@ function updateHospital(h) {
     Last update: <b>${hh.locationUpdatedAt ? hhmmss(hh.locationUpdatedAt) : "UNAVAILABLE"}</b>`;
 
   if (hospMarkers[hh.id]) {
-    hospMarkers[hh.id].setIcon(makeHospIcon(hh.capacity, hh.trauma, sel)).setPopupContent(popup);
+    hospMarkers[hh.id].setPosition(hh.lat, hh.lng);
+    hospMarkers[hh.id].setContent(makeHospHtml(hh.capacity, hh.trauma, sel));
+    hospMarkers[hh.id].setVisible(state.layers.hospitals);
   } else {
-    hospMarkers[hh.id] = L.marker([hh.lat, hh.lng], { icon: makeHospIcon(hh.capacity, hh.trauma, sel) }).bindPopup(popup).addTo(L_hosp);
+    hospMarkers[hh.id] = new CustomHtmlOverlay(pos, makeHospHtml(hh.capacity, hh.trauma, sel), () => showInfoWindow(hh.lat, hh.lng, popup), "hosp-overlay");
+    hospMarkers[hh.id].setVisible(state.layers.hospitals);
   }
 }
 
@@ -398,8 +517,7 @@ function updateHospital(h) {
 function upsertIncidentMarker(inc) {
   if (num(inc.latitude) === null || num(inc.longitude) === null) {
     if (incMarkers[inc._id]) {
-      L_inc.removeLayer(incMarkers[inc._id]);
-      L_resolved.removeLayer(incMarkers[inc._id]);
+      incMarkers[inc._id].remove();
       delete incMarkers[inc._id];
     }
     return;
@@ -407,8 +525,8 @@ function upsertIncidentMarker(inc) {
 
   const isResolved = inc.status === "RESOLVED";
   const isSelected = state.selectedIncidentId === inc._id;
-  const icon = makeIncIcon(inc.severity, isSelected, isResolved);
-  const pos = [inc.latitude, inc.longitude];
+  const html = makeIncHtml(inc.severity, isSelected, isResolved);
+  const pos = { lat: inc.latitude, lng: inc.longitude };
 
   const popup = `<div class="pop-t" style="color:${band(inc.severity).color}">
       ${isResolved ? "✓ RESOLVED" : "🚨 EMERGENCY"} · ${esc(inc.id || inc.incidentId || shortId(inc._id))}
@@ -425,20 +543,15 @@ function upsertIncidentMarker(inc) {
     Destination: <b>${esc(inc.assignedHospital || "None")}</b>`;
 
   if (incMarkers[inc._id]) {
-    incMarkers[inc._id].setLatLng(pos).setIcon(icon).setPopupContent(popup);
+    incMarkers[inc._id].setPosition(inc.latitude, inc.longitude);
+    incMarkers[inc._id].setContent(html);
+    incMarkers[inc._id].setVisible(state.layers.incidents && (!isResolved || state.layers.incidents));
   } else {
-    const marker = L.marker(pos, { icon }).bindPopup(popup);
-    marker.on("click", () => selectIncident(inc._id));
-    incMarkers[inc._id] = marker;
-  }
-
-  const marker = incMarkers[inc._id];
-  if (isResolved) {
-    if (L_inc.hasLayer(marker)) L_inc.removeLayer(marker);
-    if (!L_resolved.hasLayer(marker)) L_resolved.addLayer(marker);
-  } else {
-    if (L_resolved.hasLayer(marker)) L_resolved.removeLayer(marker);
-    if (!L_inc.hasLayer(marker)) L_inc.addLayer(marker);
+    incMarkers[inc._id] = new CustomHtmlOverlay(pos, html, () => {
+      selectIncident(inc._id);
+      showInfoWindow(inc.latitude, inc.longitude, popup);
+    }, "inc-overlay");
+    incMarkers[inc._id].setVisible(state.layers.incidents);
   }
 }
 
@@ -450,45 +563,63 @@ function focusIncident(id) {
     return toast("NO GPS POSITION", "Selected incident has unavailable GPS coordinates.", "info");
   }
 
-  const boundsCoords = [[inc.latitude, inc.longitude]];
+  if (!map || !window.google || !window.google.maps) return;
+  const bounds = new google.maps.LatLngBounds();
+  bounds.extend(new google.maps.LatLng(inc.latitude, inc.longitude));
 
   const r = state.routes[targetId];
   if (r) {
     if (r.ambulanceId && state.ambulances[r.ambulanceId]) {
       const a = state.ambulances[r.ambulanceId];
-      if (a.lat && a.lng) boundsCoords.push([a.lat, a.lng]);
+      if (a.lat && a.lng) bounds.extend(new google.maps.LatLng(a.lat, a.lng));
     }
     if (r.hospitalId && state.hospitals[r.hospitalId]) {
       const h = state.hospitals[r.hospitalId];
-      if (h.lat && h.lng) boundsCoords.push([h.lat, h.lng]);
+      if (h.lat && h.lng) bounds.extend(new google.maps.LatLng(h.lat, h.lng));
     }
     if (r.coords && r.coords.length > 0) {
-      r.coords.forEach((pt) => boundsCoords.push(pt));
+      r.coords.forEach((pt) => bounds.extend(new google.maps.LatLng(pt[0], pt[1])));
     }
   }
 
-  map.fitBounds(L.latLngBounds(boundsCoords), {
-    padding: [60, 60],
-    maxZoom: 16,
-    animate: true,
-    duration: 0.8
-  });
-
-  if (incMarkers[targetId]) incMarkers[targetId].openPopup();
+  map.fitBounds(bounds, { top: 60, right: 60, bottom: 60, left: 60 });
 }
 
 function fitAll() {
-  const layers = [];
-  [L_inc, L_amb, L_hosp, L_cctv].forEach((g) => g && g.eachLayer((l) => layers.push(l)));
-  if (!layers.length) return map.flyTo(CENTER, CFG.DEFAULT_ZOOM || 12);
-  map.fitBounds(L.featureGroup(layers).getBounds().pad(0.15));
+  if (!map || !window.google || !window.google.maps) return;
+  const bounds = new google.maps.LatLngBounds();
+  let count = 0;
+
+  Object.values(state.incidents).forEach((i) => {
+    if (i.latitude && i.longitude) { bounds.extend(new google.maps.LatLng(i.latitude, i.longitude)); count++; }
+  });
+  Object.values(state.ambulances).forEach((a) => {
+    if (a.lat && a.lng) { bounds.extend(new google.maps.LatLng(a.lat, a.lng)); count++; }
+  });
+  Object.values(state.hospitals).forEach((h) => {
+    if (h.lat && h.lng) { bounds.extend(new google.maps.LatLng(h.lat, h.lng)); count++; }
+  });
+  Object.values(state.cctv).forEach((c) => {
+    if (c.lat && c.lng) { bounds.extend(new google.maps.LatLng(c.lat, c.lng)); count++; }
+  });
+
+  if (!count) {
+    map.setCenter({ lat: CENTER[0], lng: CENTER[1] });
+    map.setZoom(CFG.DEFAULT_ZOOM || 13);
+    return;
+  }
+  map.fitBounds(bounds, { top: 50, right: 50, bottom: 50, left: 50 });
 }
 
 function fitFleet() {
-  const layers = [];
-  L_amb.eachLayer((l) => layers.push(l));
-  if (!layers.length) return toast("NO AMBULANCES", "No ambulances on map.", "info");
-  map.fitBounds(L.featureGroup(layers).getBounds().pad(0.2));
+  if (!map || !window.google || !window.google.maps) return;
+  const bounds = new google.maps.LatLngBounds();
+  let count = 0;
+  Object.values(state.ambulances).forEach((a) => {
+    if (a.lat && a.lng) { bounds.extend(new google.maps.LatLng(a.lat, a.lng)); count++; }
+  });
+  if (!count) return toast("NO AMBULANCES", "No ambulances on map.", "info");
+  map.fitBounds(bounds, { top: 60, right: 60, bottom: 60, left: 60 });
 }
 
 function toggleFullscreen() {
@@ -509,25 +640,24 @@ function toggleLayer(name, btn) {
   state.layers[name] = !state.layers[name];
   btn.classList.toggle("on", state.layers[name]);
 
-  const groups = {
-    incidents: L_inc,
-    ambulances: L_amb,
-    hospitals: L_hosp,
-    routes: L_route,
-    cctv: L_cctv,
-    hotspots: L_hotspots,
-    traffic: L_traffic
-  };
-
-  const g = groups[name];
-  if (g) {
-    if (state.layers[name]) {
-      g.addTo(map);
-      if (name === "cctv") L_cctvFov.addTo(map);
-    } else {
-      map.removeLayer(g);
-      if (name === "cctv") map.removeLayer(L_cctvFov);
+  if (name === "traffic") {
+    if (googleTrafficLayer && map) {
+      googleTrafficLayer.setMap(state.layers.traffic ? map : null);
     }
+    trafficPolylines.forEach((p) => p.setMap(state.layers.traffic ? map : null));
+  } else if (name === "incidents") {
+    Object.values(incMarkers).forEach((m) => m.setVisible(state.layers.incidents));
+  } else if (name === "ambulances") {
+    Object.values(ambMarkers).forEach((m) => m.setVisible(state.layers.ambulances));
+  } else if (name === "hospitals") {
+    Object.values(hospMarkers).forEach((m) => m.setVisible(state.layers.hospitals));
+  } else if (name === "cctv") {
+    Object.values(cctvMarkers).forEach((m) => m.setVisible(state.layers.cctv));
+    Object.values(fovPolygons).forEach((p) => p.setMap(state.layers.cctv ? map : null));
+  } else if (name === "hotspots") {
+    Object.values(hotspotCircles).forEach((c) => c.setMap(state.layers.hotspots ? map : null));
+  } else if (name === "routes") {
+    routePolylines.forEach((p) => p.setMap(state.layers.routes ? map : null));
   }
 }
 
@@ -550,10 +680,33 @@ async function drawRoute(id) {
 
   state.routes[id] = { ...r, coords, hospCoords, distKm, etaMin, geometrySource };
 
-  L_route.clearLayers();
-  if (coords) L.polyline(coords, { color: "#FF9F0A", weight: 5, opacity: 0.9, lineCap: "round" }).addTo(L_route);
-  if (hospCoords) {
-    L.polyline(hospCoords, { color: "#409CFF", weight: 4, opacity: 0.8, dashArray: "9,9" }).addTo(L_route);
+  // Clear previous route polylines
+  routePolylines.forEach((p) => p.setMap(null));
+  routePolylines = [];
+
+  if (map && window.google && window.google.maps) {
+    if (coords && coords.length > 0) {
+      const line = new google.maps.Polyline({
+        path: coords.map((c) => ({ lat: c[0], lng: c[1] })),
+        geodesic: true,
+        strokeColor: "#FF9F0A",
+        strokeOpacity: 0.92,
+        strokeWeight: 6,
+        map: state.layers.routes ? map : null
+      });
+      routePolylines.push(line);
+    }
+    if (hospCoords && hospCoords.length > 0) {
+      const line2 = new google.maps.Polyline({
+        path: hospCoords.map((c) => ({ lat: c[0], lng: c[1] })),
+        geodesic: true,
+        strokeColor: "#409CFF",
+        strokeOpacity: 0.85,
+        strokeWeight: 5,
+        map: state.layers.routes ? map : null
+      });
+      routePolylines.push(line2);
+    }
   }
 
   const amb = state.ambulances[r.ambulanceId];
@@ -1031,7 +1184,7 @@ function initSocket() {
       if (state.cctv[id]) {
         Object.assign(state.cctv[id], cam);
         if (cctvMarkers[id]) {
-          cctvMarkers[id].setIcon(makeCctvIcon(state.cctv[id].status));
+          cctvMarkers[id].setContent(makeCctvHtml(state.cctv[id].status));
         }
       }
     });
@@ -1105,7 +1258,8 @@ async function resolveIncident() {
     const d = await res.json();
     if (d.success) {
       inc.status = "RESOLVED";
-      L_route.clearLayers();
+      routePolylines.forEach((p) => p.setMap(null));
+      routePolylines = [];
       upsertIncidentMarker(inc);
       pushTimeline(inc._id, "Incident resolved and archived to response audit vault");
       renderIncidentDetails();
@@ -1209,9 +1363,10 @@ async function resetDemo() {
     state.routes = {};
     state.timelines = {};
     state.selectedIncidentId = null;
-    L_inc.clearLayers();
-    L_route.clearLayers();
-    L_resolved.clearLayers();
+    Object.values(incMarkers).forEach((m) => m.remove());
+    Object.keys(incMarkers).forEach((k) => delete incMarkers[k]);
+    routePolylines.forEach((p) => p.setMap(null));
+    routePolylines = [];
     renderIncidentList();
     renderIncidentDetails();
     renderKPIs();
@@ -1336,7 +1491,7 @@ function wireTestMode() {
   $("testAmbulanceForm").onsubmit = async (e) => { e.preventDefault(); const lat = Number($("testAmbLat").value), lng = Number($("testAmbLng").value); if (!validTestCoordinates(lat, lng)) return result.textContent = "Enter valid ambulance coordinates."; try { const data = await securedTestRequest(`/ambulances/${$("testAmbulanceId").value}/location`, { latitude: lat, longitude: lng, status: $("testAmbStatus").value }, "PATCH"); updateAmbulance(data.ambulance); result.textContent = `${data.ambulance.id} location updated in DEMO / TEST MODE.`; } catch (error) { result.textContent = error.message; } };
   $("testHospitalForm").onsubmit = async (e) => { e.preventDefault(); const lat = Number($("testHospLat").value), lng = Number($("testHospLng").value); if (!validTestCoordinates(lat, lng)) return result.textContent = "Enter valid hospital coordinates."; try { const data = await securedTestRequest(`/hospitals/${$("testHospitalId").value}/location`, { latitude: lat, longitude: lng, status: $("testHospStatus").value }, "PATCH"); updateHospital(data.hospital); result.textContent = `${data.hospital.id} location updated in DEMO / TEST MODE.`; } catch (error) { result.textContent = error.message; } };
   $("testIncidentForm").onsubmit = async (e) => { e.preventDefault(); const lat = Number($("testIncLat").value), lng = Number($("testIncLng").value); if (!validTestCoordinates(lat, lng)) return result.textContent = "Enter valid accident coordinates."; try { const data = await securedTestRequest("/incidents/test/incidents", { latitude: lat, longitude: lng, severity: Number($("testSeverity").value), patientCount: Number($("testPatients").value) || undefined, peakGForce: Number($("testGForce").value) || undefined, incidentType: $("testAccidentType").value, helpMessage: $("testHelpMessage").value || undefined }); result.textContent = `Emergency ${data.incidentId || data.id} created — targeted dispatch initiated.`; closeDemo(); } catch (error) { result.textContent = error.message; } };
-  document.querySelectorAll("[data-center]").forEach(button => button.onclick = () => { const target = button.dataset.center; const c = map.getCenter(); setTestCoordinates(target, c.lat, c.lng); result.textContent = "Coordinates copied from current map center."; });
+  document.querySelectorAll("[data-center]").forEach(button => button.onclick = () => { if (!map) return; const c = map.getCenter(); setTestCoordinates(target, c.lat(), c.lng()); result.textContent = "Coordinates copied from current map center."; });
   populateTestResources();
 }
 
