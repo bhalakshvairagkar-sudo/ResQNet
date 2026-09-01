@@ -405,44 +405,6 @@ fun ResQNetAppUI(
             }
         }
 
-        Spacer(modifier = Modifier.height(10.dp))
-
-        // CITIZEN MEDICAL VAULT BADGE
-        val session = UserSessionManager.getSessionData(androidx.compose.ui.platform.LocalContext.current)
-        Card(
-            modifier = Modifier.fillMaxWidth(),
-            colors = CardDefaults.cardColors(containerColor = Color(0xFF0C192E)),
-            shape = RoundedCornerShape(12.dp)
-        ) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 14.dp, vertical = 10.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Column {
-                    Text(
-                        text = if (!session.fullName.isNullOrBlank()) "👤 ${session.fullName}" else "👤 Citizen (${session.username ?: "Protected"})",
-                        color = Color.White,
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 12.sp
-                    )
-                    Text(
-                        text = "Blood: ${session.bloodGroup ?: "O+"} • Medical Vault Active",
-                        color = Color(0xFF38BDF8),
-                        fontSize = 10.sp
-                    )
-                }
-                TextButton(
-                    onClick = onOpenCitizenWebPortal,
-                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp)
-                ) {
-                    Text("EDIT VAULT ✎", fontSize = 10.sp, color = Color(0xFF38BDF8), fontWeight = FontWeight.Bold)
-                }
-            }
-        }
-
         Spacer(modifier = Modifier.height(14.dp))
 
         // SENSOR TEST MODE & MEASURED FREQUENCY HUD
@@ -657,19 +619,6 @@ fun ResQNetAppUI(
             Icon(Icons.Default.LocalHospital, contentDescription = null)
             Spacer(modifier = Modifier.width(6.dp))
             Text("AMBULANCE / HOSPITAL OPERATIONS PORTAL", fontWeight = FontWeight.Bold, fontSize = 11.sp)
-        }
-
-        Spacer(modifier = Modifier.height(10.dp))
-
-        Button(
-            onClick = onOpenCitizenWebPortal,
-            modifier = Modifier.fillMaxWidth().height(48.dp),
-            shape = RoundedCornerShape(12.dp),
-            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF0284C7))
-        ) {
-            Icon(Icons.Default.AccountBox, contentDescription = null)
-            Spacer(modifier = Modifier.width(8.dp))
-            Text("CITIZEN MEDICAL VAULT & REGISTRATION", fontWeight = FontWeight.Bold, fontSize = 11.sp)
         }
 
         Spacer(modifier = Modifier.height(14.dp))

@@ -16,13 +16,10 @@ class CitizenWebPortalActivity : ComponentActivity() {
 
     private lateinit var webView: WebView
     private lateinit var progressBar: ProgressBar
-    private var isFirstLaunch: Boolean = false
 
     @SuppressLint("SetJavaScriptEnabled")
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-
-        isFirstLaunch = intent.getBooleanExtra(EXTRA_IS_FIRST_LAUNCH, false)
 
         // Programmatic tactical dark container layout
         val rootLayout = android.widget.LinearLayout(this).apply {
@@ -44,32 +41,15 @@ class CitizenWebPortalActivity : ComponentActivity() {
             )
         }
 
-        val backButton = android.widget.TextView(this).apply {
-            text = if (isFirstLaunch) "RESQNET AI" else "← BACK"
-            setTextColor(android.graphics.Color.parseColor("#38BDF8"))
-            textSize = 13f
-            setTypeface(null, android.graphics.Typeface.BOLD)
-            if (!isFirstLaunch) {
-                setOnClickListener { finish() }
-            }
-        }
-
-        val titleView = android.widget.TextView(this).apply {
-            text = if (isFirstLaunch) "NEW USER ONBOARDING" else "CITIZEN MEDICAL PORTAL"
+        val logoTitle = android.widget.TextView(this).apply {
+            text = "RESQNET AI"
             setTextColor(android.graphics.Color.WHITE)
-            textSize = 13f
+            textSize = 14f
             setTypeface(android.graphics.Typeface.MONOSPACE, android.graphics.Typeface.BOLD)
-            val params = android.widget.RelativeLayout.LayoutParams(
-                android.widget.RelativeLayout.LayoutParams.WRAP_CONTENT,
-                android.widget.RelativeLayout.LayoutParams.WRAP_CONTENT
-            ).apply {
-                addRule(android.widget.RelativeLayout.CENTER_IN_PARENT)
-            }
-            layoutParams = params
         }
 
         val actionButton = android.widget.TextView(this).apply {
-            text = "SENSOR SHIELD →"
+            text = "ENTER APP →"
             setTextColor(android.graphics.Color.parseColor("#38BDF8"))
             textSize = 12f
             setTypeface(null, android.graphics.Typeface.BOLD)
@@ -81,25 +61,14 @@ class CitizenWebPortalActivity : ComponentActivity() {
             }
             layoutParams = params
             setOnClickListener {
+                UserSessionManager.setOnboardingCompleted(this@CitizenWebPortalActivity, true)
                 startActivity(Intent(this@CitizenWebPortalActivity, MainActivity::class.java))
+                finish()
             }
         }
 
-        header.addView(backButton)
-        header.addView(titleView)
+        header.addView(logoTitle)
         header.addView(actionButton)
-
-        // First Launch Instruction Banner
-        if (isFirstLaunch) {
-            val banner = android.widget.TextView(this).apply {
-                text = "💡 Please create your citizen account and save your medical details below to arm your emergency crash shield."
-                setBackgroundColor(android.graphics.Color.parseColor("#0F1C32"))
-                setTextColor(android.graphics.Color.parseColor("#93C5FD"))
-                textSize = 11f
-                setPadding(20, 16, 20, 16)
-            }
-            rootLayout.addView(banner)
-        }
 
         progressBar = ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal).apply {
             max = 100
@@ -140,7 +109,7 @@ class CitizenWebPortalActivity : ComponentActivity() {
         settings.useWideViewPort = true
         settings.cacheMode = WebSettings.LOAD_DEFAULT
 
-        // Attach Android Native Bridge
+        // Attach Android Native Bridge for auto registration & login sync
         webView.addJavascriptInterface(AndroidWebAppBridge(), "AndroidBridge")
 
         webView.webChromeClient = object : WebChromeClient() {
@@ -164,6 +133,13 @@ class CitizenWebPortalActivity : ComponentActivity() {
         webView.webViewClient = object : WebViewClient() {
             override fun shouldOverrideUrlLoading(view: WebView?, request: WebResourceRequest?): Boolean {
                 val url = request?.url?.toString() ?: return false
+                // Intercept any redirection to sos.html or dashboard and open the native MainActivity (Image 1) instead!
+                if (url.contains("sos.html") || url.contains("dashboard.html")) {
+                    UserSessionManager.setOnboardingCompleted(this@CitizenWebPortalActivity, true)
+                    startActivity(Intent(this@CitizenWebPortalActivity, MainActivity::class.java))
+                    finish()
+                    return true
+                }
                 if (url.startsWith("http://") || url.startsWith("https://")) {
                     return false
                 }
@@ -207,10 +183,8 @@ class CitizenWebPortalActivity : ComponentActivity() {
                     emergencyContact = emergencyContact
                 )
                 Toast.makeText(this@CitizenWebPortalActivity, "✓ Account Created & Medical Vault Active!", Toast.LENGTH_LONG).show()
-                if (isFirstLaunch) {
-                    startActivity(Intent(this@CitizenWebPortalActivity, MainActivity::class.java))
-                    finish()
-                }
+                startActivity(Intent(this@CitizenWebPortalActivity, MainActivity::class.java))
+                finish()
             }
         }
 
@@ -232,10 +206,8 @@ class CitizenWebPortalActivity : ComponentActivity() {
                     phone = phone
                 )
                 Toast.makeText(this@CitizenWebPortalActivity, "✓ Welcome back, $username", Toast.LENGTH_SHORT).show()
-                if (isFirstLaunch) {
-                    startActivity(Intent(this@CitizenWebPortalActivity, MainActivity::class.java))
-                    finish()
-                }
+                startActivity(Intent(this@CitizenWebPortalActivity, MainActivity::class.java))
+                finish()
             }
         }
     }
@@ -254,4 +226,3 @@ class CitizenWebPortalActivity : ComponentActivity() {
         const val EXTRA_IS_FIRST_LAUNCH = "extra_is_first_launch"
     }
 }
-
