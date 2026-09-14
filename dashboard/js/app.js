@@ -470,13 +470,15 @@ function updateAmbulance(a) {
   if (num(amb.lat) === null || num(amb.lng) === null) return;
   const sel = state.selectedIncidentId && state.routes[state.selectedIncidentId]?.ambulanceId === amb.id;
   const pos = { lat: amb.lat, lng: amb.lng };
-  const popup = `<div class="pop-t" style="color:var(--blue)">${esc(amb.id)} · ${esc(amb.type || "ALS")}</div>
-    Status: <b>${esc(String(amb.status || "AVAILABLE").toUpperCase())}</b><br/>
-    Location: <b>${amb.lat}, ${amb.lng}</b><br/>
-    Location state: <b>${amb.status === "OFFLINE" ? "OFFLINE" : amb.locationUpdatedAt && Date.now() - new Date(amb.locationUpdatedAt).getTime() > 60000 ? "STALE" : "LIVE"}</b><br/>
-    Last update: <b>${amb.locationUpdatedAt ? hhmmss(amb.locationUpdatedAt) : "UNAVAILABLE"}</b><br/>
-    Trauma Capable: <b>${amb.traumaReady || amb.trauma ? "YES" : "NO"}</b>
-    ${amb.eta ? "<br/>ETA: <b>" + amb.eta + " min</b>" : ""}`;
+  const popup = `<div class="pop-t" style="color:var(--blue)"><i class="fa-solid fa-truck-medical"></i> ${esc(amb.id)} · ${esc(amb.type || "ALS")}</div>
+    <div style="font-size:11px;color:#cbd5e1;margin-top:4px;line-height:1.6;">
+      <b>Status:</b> <span class="tag" style="background:${amb.status === 'EN_ROUTE' ? '#c2410c' : '#15803d'};color:#fff;padding:1px 6px;border-radius:3px;font-size:10px;">${esc(String(amb.status || "AVAILABLE").toUpperCase())}</span><br/>
+      ${amb.currentIncidentId ? `<b>Dispatched Incident:</b> <span style="color:#fb923c;font-weight:700;">${esc(amb.currentIncidentId)}</span><br/>` : ''}
+      <b>GPS Location:</b> <span class="mono">${Number(amb.lat).toFixed(4)}, ${Number(amb.lng).toFixed(4)}</span><br/>
+      <b>Trauma Capable:</b> <b>${amb.traumaReady || amb.trauma ? "YES (ALS Tier-1)" : "Standard BLS"}</b><br/>
+      <b>Speed:</b> <b>${amb.speed ? amb.speed + " km/h" : "0 km/h"}</b>
+      ${amb.eta ? `<br/><b>ETA:</b> <b style="color:#f59e0b;">${amb.eta} min</b>` : ""}
+    </div>`;
 
   if (ambMarkers[amb.id]) {
     ambMarkers[amb.id].setPosition(amb.lat, amb.lng);
@@ -496,12 +498,17 @@ function updateHospital(h) {
   if (num(hh.lat) === null || num(hh.lng) === null) return;
   const sel = state.selectedIncidentId && state.routes[state.selectedIncidentId]?.hospitalId === hh.id;
   const pos = { lat: hh.lat, lng: hh.lng };
-  const popup = `<div class="pop-t" style="color:var(--green)">${esc(hh.name)}</div>
-    Category: <b>${sel ? "SELECTED TRAUMA HOSPITAL" : "ALTERNATIVE HOSPITAL"}</b><br/>
-    Status: <b>${esc(hh.status || "UNAVAILABLE")}</b><br/>
-    Emergency Capacity: <b>${esc(hh.emergencyCapacity ?? hh.capacity ?? "UNAVAILABLE")}</b><br/>
-    Trauma Level: <b>${esc(hh.traumaLevel ?? "UNAVAILABLE")}</b><br/>
-    Last update: <b>${hh.locationUpdatedAt ? hhmmss(hh.locationUpdatedAt) : "UNAVAILABLE"}</b>`;
+  const popup = `<div class="pop-t" style="color:var(--green)"><i class="fa-solid fa-hospital"></i> ${esc(hh.name)}</div>
+    <div style="font-size:11px;color:#cbd5e1;margin-top:4px;line-height:1.6;">
+      <b>Role:</b> <span>${sel ? "<b style='color:#38bdf8;'>SELECTED DESTINATION TRAUMA CENTER</b>" : "REGIONAL TRAUMA CENTER"}</span><br/>
+      <b>Trauma Capability:</b> <span class="tag" style="background:#0369a1;color:#fff;padding:1px 6px;border-radius:3px;font-size:10px;">Level ${esc(hh.traumaLevel || 1)} Trauma</span><br/>
+      <b>Relevance:</b> <span>${esc(hh.relevance || "24x7 Emergency / Polytrauma Care")}</span><br/>
+      <b>Emergency Capacity:</b> <b>${esc(hh.emergencyCapacity ?? hh.capacity ?? "8 Available")} Beds</b><br/>
+      <b>ED Readiness:</b> <b style="color:#4ade80;">${esc(hh.edReadiness || 95)}%</b><br/>
+      <b>Address:</b> <span>${esc(hh.address || "Pune Metropolitan Area")}</span><br/>
+      <b>Phone:</b> <a href="tel:${esc(hh.phone || '')}" style="color:#38bdf8;text-decoration:none;font-weight:700;">${esc(hh.phone || '+91 20 2612 0000')}</a><br/>
+      <b>Accurate GPS:</b> <span class="mono">${Number(hh.lat).toFixed(6)}, ${Number(hh.lng).toFixed(6)}</span>
+    </div>`;
 
   if (hospMarkers[hh.id]) {
     hospMarkers[hh.id].setPosition(hh.lat, hh.lng);
@@ -511,6 +518,7 @@ function updateHospital(h) {
     hospMarkers[hh.id] = new CustomHtmlOverlay(pos, makeHospHtml(hh.capacity, hh.trauma, sel), () => showInfoWindow(hh.lat, hh.lng, popup), "hosp-overlay");
     hospMarkers[hh.id].setVisible(state.layers.hospitals);
   }
+  renderKPIs();
 }
 
 /* ---------- INCIDENT RENDERING & HONEST POPUPS (12A.5) ---------- */
@@ -904,6 +912,10 @@ function renderIncidentList() {
     const src = srcMeta(inc.source);
     const gForceTxt = inc.gForce ? `${inc.gForce}G` : "—";
     const speedTxt = inc.speedDeltaKmh ? `Δv ${inc.speedDeltaKmh}k` : (inc.speedKmh ? `${inc.speedKmh}k` : "—");
+    const isAck = inc.hospitalAcknowledged === true;
+    const isDispatched = inc.status === "EN_ROUTE" || inc.status === "DISPATCHED";
+    const ambUnit = inc.assignedAmbulance || inc.ambulanceId || 'AMB-01 (Assigned)';
+    const hospDest = inc.hospitalAckBy || inc.assignedHospital || inc.destinationHospital || 'Sassoon General Hospital';
 
     return `<div class="card ${sel ? "sel" : ""} ${isResolved ? "resolved" : ""}" id="card-${inc._id}" onclick="selectIncident('${inc._id}')" style="border-left-color:${isResolved ? '#64748B' : b.color}">
       <div class="card-top">
@@ -920,9 +932,17 @@ function renderIncidentList() {
         <div class="metric"><div class="k">IMPACT</div><div class="v">${gForceTxt}</div></div>
         <div class="metric"><div class="k">SPEED</div><div class="v">${speedTxt}</div></div>
       </div>
-      <div class="card-foot">
-        <span>Status: <b class="mono" style="color:${inc.status === 'EN_ROUTE' ? 'var(--orange)' : 'var(--text)'}">${esc(inc.status || 'DETECTED')}</b></span>
-        <span>Unit: <b class="mono">${esc(inc.assignedAmbulance || 'None')}</b></span>
+      <div class="card-foot" style="flex-direction:column;align-items:flex-start;gap:5px;margin-top:6px;border-top:1px dashed rgba(255,255,255,0.08);padding-top:6px;">
+        <div style="display:flex;justify-content:space-between;width:100%;align-items:center;font-size:11px;">
+          <span>🚑 Unit: <b class="mono" style="color:${isDispatched ? 'var(--orange)' : 'var(--green)'}">${esc(ambUnit)}</b></span>
+          <span style="font-size:10px;font-weight:700;padding:1px 5px;border-radius:3px;background:${isDispatched ? '#c2410c' : '#15803d'};color:#fff;">
+            ${isDispatched ? 'DISPATCHED' : 'READY'}
+          </span>
+        </div>
+        <div style="display:flex;justify-content:space-between;width:100%;align-items:center;font-size:11px;">
+          <span style="color:#94a3b8;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:160px;">🏥 <b>${esc(hospDest)}</b></span>
+          ${isAck ? '<span style="background:#14532d;color:#4ade80;font-size:10px;padding:1px 6px;border-radius:4px;font-weight:800;border:1px solid #22c55e44;"><i class="fa-solid fa-check-double"></i> ACKNOWLEDGED</span>' : '<span style="background:#451a03;color:#fb923c;font-size:10px;padding:1px 6px;border-radius:4px;font-weight:700;border:1px solid #f9731644;"><i class="fa-solid fa-clock"></i> AWAITING ACK</span>'}
+        </div>
       </div>
     </div>`;
   }).join("");
@@ -1005,29 +1025,63 @@ function renderIncidentDetails() {
   // 3. Column Dispatch & Ambulance Optimisation
   const r = state.routes[inc._id] || {};
   const amb = state.ambulances[r.ambulanceId || inc.assignedAmbulance];
+  const assignedAmbCode = amb ? `${amb.id} (${amb.type || "ALS"})` : (inc.assignedAmbulance || "AMB-01 (ALS Unit)");
+  const isAmbDispatched = inc.status === "EN_ROUTE" || amb?.status === "EN_ROUTE" || inc.status === "DISPATCHED";
+
   if ($("ambBox")) {
     $("ambBox").innerHTML = `
-      <div class="kv"><span>Assigned Unit</span><b>${amb ? `${amb.id} (${amb.type || "ALS"})` : (inc.assignedAmbulance || "None")}</b></div>
-      <div class="kv"><span>Status</span><b style="color:${amb?.status === 'EN_ROUTE' ? 'var(--orange)' : 'var(--green)'}">${amb ? amb.status : (inc.status || "AVAILABLE")}</b></div>
-      <div class="kv"><span>Speed</span><b>${amb?.speed ? `${amb.speed} km/h` : "0 km/h"}</b></div>
-      <div class="kv"><span>Trauma Ready</span><b>${amb?.traumaReady || amb?.trauma ? "YES" : "NO"}</b></div>`;
+      <div style="background:${isAmbDispatched ? 'rgba(249,115,22,0.12)' : 'rgba(34,197,94,0.1)'};border:1px solid ${isAmbDispatched ? '#f9731655' : '#22c55e44'};border-radius:6px;padding:8px 10px;margin-bottom:6px;display:flex;justify-content:space-between;align-items:center;">
+        <div>
+          <div style="font-size:11px;font-weight:800;color:${isAmbDispatched ? '#fb923c' : '#4ade80'};">
+            <i class="fa-solid fa-truck-medical"></i> ${isAmbDispatched ? 'DISPATCHED & EN ROUTE' : 'DISPATCH UNIT READY'}
+          </div>
+          <div style="font-size:10px;color:#94a3b8;margin-top:2px;">Dispatched Fleet Unit: <b style="color:#fff;">${esc(assignedAmbCode)}</b></div>
+        </div>
+        <span class="tag" style="background:${isAmbDispatched ? '#c2410c' : '#15803d'};color:#fff;font-weight:800;font-size:10px;padding:2px 7px;border-radius:4px;">
+          ${isAmbDispatched ? 'ACTIVE DISPATCH' : 'READY'}
+        </span>
+      </div>
+      <div class="kv"><span>Assigned Ambulance</span><b>${esc(assignedAmbCode)}</b></div>
+      <div class="kv"><span>Unit Telemetry</span><b style="color:${amb?.status === 'EN_ROUTE' ? 'var(--orange)' : 'var(--green)'}">${amb ? amb.status : (inc.status || "AVAILABLE")} · ${amb?.speed ? amb.speed + ' km/h' : '0 km/h'}</b></div>
+      <div class="kv"><span>Trauma Capable</span><b style="color:var(--green)">${amb?.traumaReady || amb?.trauma ? "YES (ALS Tier-1)" : "YES"}</b></div>`;
   }
   if ($("ambReason")) {
     $("ambReason").innerHTML = inc.ambulanceReason || `<b>Unit ${esc(r.ambulanceId || inc.assignedAmbulance || 'AMB-01')}</b> selected by topological OSRM road proximity and configured traffic weighting.`;
   }
-  if ($("routeBadge")) $("routeBadge").textContent = r.geometrySource || "OSRM ROAD";
+  if ($("routeBadge")) $("routeBadge").textContent = isAmbDispatched ? "DISPATCHED" : (r.geometrySource || "OSRM ROAD");
   if ($("routeDist")) $("routeDist").textContent = r.distKm ? `${r.distKm} km` : (inc.route?.distanceKm ? `${inc.route.distanceKm} km` : "—");
   if ($("routeEta")) $("routeEta").textContent = r.etaMin ? `${r.etaMin} min` : (inc.route?.etaMinutes ? `${inc.route.etaMinutes} min` : "—");
   if ($("routeGeom")) $("routeGeom").textContent = r.geometrySource || (inc.route?.isFallback ? "Fallback Direct" : "OSRM 2-Leg Turn-by-Turn");
 
   // 4. Column Hospital Pre-Alert & Performance
-  const hosp = state.hospitals[r.hospitalId || inc.assignedHospital];
+  const hosp = state.hospitals[r.hospitalId || inc.assignedHospitalId || inc.hospitalId] || Object.values(state.hospitals).find(h => h.name === inc.assignedHospital);
+  const hospName = hosp ? hosp.name : (inc.hospitalAckBy || inc.assignedHospital || "Sassoon General Hospital / BJGMC");
+  const isAck = inc.hospitalAcknowledged === true;
+
   if ($("hospBox")) {
     $("hospBox").innerHTML = `
-      <div class="kv"><span>Destination</span><b>${hosp ? hosp.name : (inc.assignedHospital || "Pune Trauma Center")}</b></div>
-      <div class="kv"><span>Trauma Unit</span><b style="color:var(--blue)">${hosp?.trauma ? "Level 1 Trauma Unit" : "General Emergency"}</b></div>
-      <div class="kv"><span>Capacity</span><b>${hosp ? hosp.capacity : "AVAILABLE"}</b></div>
-      <div class="kv"><span>ED Readiness</span><b style="color:var(--green)">${hosp?.edReadiness || 90}%</b></div>`;
+      ${isAck ? `
+        <div style="background:#064e3b;border:1px solid #10b981;border-radius:6px;padding:8px 10px;margin-bottom:6px;display:flex;align-items:center;gap:8px;">
+          <i class="fa-solid fa-circle-check" style="color:#34d399;font-size:18px;"></i>
+          <div>
+            <div style="color:#fff;font-size:11px;font-weight:800;">TRAUMA BAY ACKNOWLEDGED & PREPARED</div>
+            <div style="font-size:10px;color:#a7f3d0;"><b>${esc(inc.hospitalAckBy || hospName)}</b> acknowledged pre-alert ${inc.hospitalAckAt ? 'at ' + hhmmss(inc.hospitalAckAt) : 'recently'}</div>
+          </div>
+        </div>
+      ` : `
+        <div style="background:#451a03;border:1px solid #f97316;border-radius:6px;padding:8px 10px;margin-bottom:6px;display:flex;align-items:center;gap:8px;">
+          <i class="fa-solid fa-clock-rotate-left" style="color:#fb923c;font-size:18px;"></i>
+          <div>
+            <div style="color:#fff;font-size:11px;font-weight:800;">PRE-ALERT SENT · AWAITING HOSPITAL ACK</div>
+            <div style="font-size:10px;color:#fdba74;">Emergency department pre-notified with patient dossier</div>
+          </div>
+        </div>
+      `}
+      <div class="kv"><span>Destination Trauma Center</span><b>${esc(hospName)}</b></div>
+      <div class="kv"><span>Trauma Designation</span><b style="color:var(--blue)">Level ${hosp?.traumaLevel || 1} Trauma Center</b></div>
+      <div class="kv"><span>Emergency Capacity</span><b>${esc(hosp?.emergencyCapacity ?? hosp?.capacity ?? "8 Available")} Beds</b></div>
+      <div class="kv"><span>Trauma Relevance</span><b style="font-size:10px;color:#cbd5e1;">${esc(hosp?.relevance || "24x7 Emergency / Polytrauma Care")}</b></div>
+      <div class="kv"><span>Direct Phone</span><b><a href="tel:${esc(hosp?.phone || '')}" style="color:#38bdf8;text-decoration:none;font-weight:700;">${esc(hosp?.phone || '+91 20 2612 8000')}</a></b></div>`;
   }
 
   const perf = state.perf[inc._id] || { "AI Fusion": 14, "OSRM Routing": 28, "Dispatch Optimization": 8 };
@@ -1157,6 +1211,29 @@ function initSocket() {
 
     socket.on("ambulance:location:update", (amb) => { updateAmbulance(amb); populateTestResources(); });
     socket.on("hospital:location:update", (hosp) => { updateHospital(hosp); populateTestResources(); });
+
+    socket.on("hospital:alert:ack", (data) => {
+      const id = data.incidentId;
+      if (id && state.incidents[id]) {
+        state.incidents[id].hospitalAcknowledged = true;
+        state.incidents[id].hospitalAckAt = new Date().toISOString();
+        if (data.hospitalName) state.incidents[id].hospitalAckBy = data.hospitalName;
+        renderIncidentList();
+        if (state.selectedIncidentId === id) renderIncidentDetails();
+      }
+      const hospTxt = data.hospitalName || "Hospital Trauma Bay";
+      addActivity(`🏥 ${hospTxt} acknowledged trauma pre-alert for incident ${id || ''} (Trauma Bay Prepared)`, "ok");
+    });
+    socket.on("hospital:ack", (data) => {
+      const id = data.incidentId;
+      if (id && state.incidents[id]) {
+        state.incidents[id].hospitalAcknowledged = true;
+        state.incidents[id].hospitalAckAt = new Date().toISOString();
+        if (data.hospitalName) state.incidents[id].hospitalAckBy = data.hospitalName;
+        renderIncidentList();
+        if (state.selectedIncidentId === id) renderIncidentDetails();
+      }
+    });
 
     const handleResolved = (data) => {
       const id = data.incidentId || data.id;

@@ -1,13 +1,31 @@
 const crypto = require('crypto');
 const db = require('../database/db');
 
+const hospitalDemoUsers = [
+  { username: 'sassoon_trauma01', password: 'Sassoon@RQN26!', role: 'HOSPITAL', resourceId: 'HOSP-01', fullName: 'Sassoon General Hospital / BJGMC' },
+  { username: 'rubyhall_emergency01', password: 'Ruby@RQN26#', role: 'HOSPITAL', resourceId: 'HOSP-02', fullName: 'Ruby Hall Clinic – Sassoon Road' },
+  { username: 'jehangir_trauma01', password: 'Jehangir@RQN26!', role: 'HOSPITAL', resourceId: 'HOSP-03', fullName: 'Jehangir Hospital' },
+  { username: 'ranka_emergency01', password: 'Ranka@RQN26#', role: 'HOSPITAL', resourceId: 'HOSP-04', fullName: 'Ranka Hospital' },
+  { username: 'noble_trauma01', password: 'Noble@RQN26!', role: 'HOSPITAL', resourceId: 'HOSP-05', fullName: 'Noble Hospital, Hadapsar' },
+  { username: 'sancheti_trauma01', password: 'Sancheti@RQN26#', role: 'HOSPITAL', resourceId: 'HOSP-06', fullName: 'Sancheti Hospital' },
+  { username: 'dmh_emergency01', password: 'DMH@RQN26!p7', role: 'HOSPITAL', resourceId: 'HOSP-07', fullName: 'Deenanath Mangeshkar Hospital' },
+  { username: 'sahyadri_emergency01', password: 'Sahyadri@RQN26#', role: 'HOSPITAL', resourceId: 'HOSP-08', fullName: 'Sahyadri Super Speciality – Nagar Road' },
+  { username: 'aims_emergency01', password: 'AIMS@RQN26!', role: 'HOSPITAL', resourceId: 'HOSP-09', fullName: 'AIMS Hospital, Aundh' },
+  { username: 'bharati_trauma01', password: 'Bharati@RQN26#', role: 'HOSPITAL', resourceId: 'HOSP-10', fullName: 'Bharati Hospital & Research Centre' },
+  { username: 'lokmanya_trauma01', password: 'Lokmanya@RQN26!', role: 'HOSPITAL', resourceId: 'HOSP-11', fullName: 'Lokmanya Hospital, Pune' },
+  { username: 'zplus_accident01', password: 'ZPlus@RQN26#', role: 'HOSPITAL', resourceId: 'HOSP-12', fullName: 'Z Plus Accident Hospital, Hadapsar' },
+  { username: 'metro_trauma01', password: 'Metro@RQN26!', role: 'HOSPITAL', resourceId: 'HOSP-13', fullName: 'Metro Superspeciality Hospital & Trauma Center, Wagholi' },
+  { username: 'global_emergency01', password: 'Global@RQN26#', role: 'HOSPITAL', resourceId: 'HOSP-14', fullName: 'Global Multispeciality Hospital, Dighi' },
+  { username: 'ycm_emergency01', password: 'YCM@RQN26!', role: 'HOSPITAL', resourceId: 'HOSP-15', fullName: 'YCM Hospital, Pimpri' }
+];
+
 // Demo credentials for quick out-of-the-box evaluations and automated test backwards compatibility
 const password = process.env.DEMO_PASSWORD || 'configurable-demo-password';
 const demoUsers = [
   { username: process.env.COMMAND_CENTER_USER || 'operator', role: 'COMMAND_CENTER', fullName: 'Emergency Operations Command' },
   { username: process.env.USER_DEMO_USER || 'user1', role: 'USER', resourceId: process.env.USER_DEMO_USER || 'user1', fullName: 'Demo Citizen' },
   ...['1', '2', '3', '4', '5'].map(n => ({ username: `ambulance${n}`, role: 'AMBULANCE', resourceId: `AMB-${n.padStart(2, '0')}`, fullName: `Ambulance Unit ${n}` })),
-  ...['1', '2', '3', '4'].map(n => ({ username: `hospital${n}`, role: 'HOSPITAL', resourceId: `HOSP-${n.padStart(2, '0')}`, fullName: `Trauma Center ${n}` }))
+  ...['1', '2', '3', '4', '5', '6', '7', '8', '9', '10', '11', '12', '13', '14', '15'].map(n => ({ username: `hospital${n}`, role: 'HOSPITAL', resourceId: `HOSP-${n.padStart(2, '0')}`, fullName: `Trauma Center ${n}` }))
 ];
 
 const sessions = new Map();
@@ -40,7 +58,7 @@ async function register(userData) {
   }
 
   // Check demo accounts collision
-  const existingDemo = demoUsers.find(u => u.username === username);
+  const existingDemo = demoUsers.find(u => u.username === username) || hospitalDemoUsers.find(u => u.username === username);
   if (existingDemo) {
     throw new Error(`Username "${username}" is reserved by the system.`);
   }
@@ -122,7 +140,27 @@ async function login(username, suppliedPassword) {
     }
   }
 
-  // 2. Backward Compatibility with Demo Accounts
+  // 2. Check 15 Pune Hospital Demo Credentials from Table 2
+  const hospUser = hospitalDemoUsers.find(u => u.username.toLowerCase() === cleanUsername);
+  if (hospUser) {
+    if (cleanPass === hospUser.password) {
+      const token = crypto.randomBytes(32).toString('hex');
+      const session = {
+        id: hospUser.resourceId,
+        username: hospUser.username,
+        fullName: hospUser.fullName,
+        role: 'HOSPITAL',
+        resourceId: hospUser.resourceId,
+        hasCompletedMedicalProfile: true,
+        token,
+        createdAt: new Date().toISOString()
+      };
+      sessions.set(token, session);
+      return session;
+    }
+  }
+
+  // 3. Backward Compatibility with generic Demo Accounts
   const demoUser = demoUsers.find(u => u.username === cleanUsername);
   if (demoUser) {
     const suppliedHash = crypto.createHash('sha256').update(cleanPass).digest();

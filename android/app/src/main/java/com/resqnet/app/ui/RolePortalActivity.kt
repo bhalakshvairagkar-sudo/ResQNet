@@ -67,6 +67,32 @@ class RolePortalActivity : ComponentActivity() {
     }
 }
 
+data class DemoHospitalCredential(
+    val id: String,
+    val name: String,
+    val username: String,
+    val pass: String,
+    val traumaLevel: String
+)
+
+val PUNE_HOSPITALS = listOf(
+    DemoHospitalCredential("HOSP-01", "Sassoon General Hospital / BJGMC", "sassoon_trauma01", "Sassoon@RQN26!", "Level 1 Trauma"),
+    DemoHospitalCredential("HOSP-02", "Ruby Hall Clinic – Sassoon Road", "rubyhall_emergency01", "Ruby@RQN26#", "Level 1 Trauma"),
+    DemoHospitalCredential("HOSP-03", "Jehangir Hospital", "jehangir_trauma01", "Jehangir@RQN26!", "Level 1 Trauma"),
+    DemoHospitalCredential("HOSP-04", "Ranka Hospital", "ranka_emergency01", "Ranka@RQN26#", "Level 2 Trauma"),
+    DemoHospitalCredential("HOSP-05", "Noble Hospital, Hadapsar", "noble_trauma01", "Noble@RQN26!", "Level 1 Trauma"),
+    DemoHospitalCredential("HOSP-06", "Sancheti Hospital", "sancheti_trauma01", "Sancheti@RQN26#", "Level 1 Trauma"),
+    DemoHospitalCredential("HOSP-07", "Deenanath Mangeshkar Hospital", "dmh_emergency01", "DMH@RQN26!p7", "Level 1 Trauma"),
+    DemoHospitalCredential("HOSP-08", "Sahyadri Super Speciality – Nagar Rd", "sahyadri_emergency01", "Sahyadri@RQN26#", "Level 1 Trauma"),
+    DemoHospitalCredential("HOSP-09", "AIMS Hospital, Aundh", "aims_emergency01", "AIMS@RQN26!", "Level 2 Trauma"),
+    DemoHospitalCredential("HOSP-10", "Bharati Hospital & Research Centre", "bharati_trauma01", "Bharati@RQN26#", "Level 1 Trauma"),
+    DemoHospitalCredential("HOSP-11", "Lokmanya Hospital, Pune", "lokmanya_trauma01", "Lokmanya@RQN26!", "Level 2 Trauma"),
+    DemoHospitalCredential("HOSP-12", "Z Plus Accident Hospital, Hadapsar", "zplus_accident01", "ZPlus@RQN26#", "Level 1 Trauma"),
+    DemoHospitalCredential("HOSP-13", "Metro Superspeciality & Trauma, Wagholi", "metro_trauma01", "Metro@RQN26!", "Level 1 Trauma"),
+    DemoHospitalCredential("HOSP-14", "Global Multispeciality Hospital, Dighi", "global_emergency01", "Global@RQN26#", "Level 2 Trauma"),
+    DemoHospitalCredential("HOSP-15", "YCM Hospital, Pimpri", "ycm_emergency01", "YCM@RQN26!", "Level 1 Trauma")
+)
+
 @Composable
 private fun Portal(
     openMap: (String?) -> Unit,
@@ -75,6 +101,8 @@ private fun Portal(
 ) {
     var username by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
+    var selectedHospName by remember { mutableStateOf<String?>(null) }
+    var showHospSheet by remember { mutableStateOf(false) }
     var token by remember { mutableStateOf<String?>(null) }
     var user by remember { mutableStateOf<SessionUser?>(null) }
     var alerts by remember { mutableStateOf<List<EmergencyAlertDto>>(emptyList()) }
@@ -99,7 +127,7 @@ private fun Portal(
                         } ?: "Unit Active & Standing By"
                     } else {
                         ApiClient.api.getHospital(user!!.resourceId ?: "HOSP-01", auth).body()?.let {
-                            "${it.name ?: "Trauma Center"}\nStatus: ${it.status ?: "AVAILABLE"} · Level ${it.traumaLevel ?: 1} Trauma\nED Capacity: ${it.emergencyCapacity ?: "Ready"}"
+                            "${it.name ?: "Trauma Center"}\nLevel ${it.traumaLevel ?: 1} Trauma Center · Status: ${it.status ?: "AVAILABLE"}\nCapacity: ${it.emergencyCapacity ?: "8"} Available Bays\nAddress: ${it.address ?: "Pune"}\nPhone: ${it.phone ?: "+91 20 2612 8000"}"
                         } ?: "Hospital Trauma Center Online"
                     }
                 }
@@ -163,6 +191,15 @@ private fun Portal(
 
         Spacer(Modifier.height(16.dp))
 
+        if (error != null) {
+            Card(
+                colors = CardDefaults.cardColors(containerColor = Color(0xFF450A0A)),
+                modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp)
+            ) {
+                Text(error!!, color = Color(0xFFFCA5A5), fontSize = 12.sp, modifier = Modifier.padding(10.dp))
+            }
+        }
+
         if (user == null) {
             Card(
                 colors = CardDefaults.cardColors(containerColor = Color(0xFF0C1220)),
@@ -172,6 +209,74 @@ private fun Portal(
                 Column(Modifier.padding(18.dp)) {
                     Text("Portal Sign-In", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 16.sp)
                     Spacer(Modifier.height(12.dp))
+
+                    // Quick Pune Hospital Auto-Fill Selector
+                    Card(
+                        colors = CardDefaults.cardColors(containerColor = Color(0xFF070C16)),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF1E293B)),
+                        shape = RoundedCornerShape(8.dp),
+                        modifier = Modifier.fillMaxWidth().padding(bottom = 14.dp)
+                    ) {
+                        Column(Modifier.padding(10.dp)) {
+                            Text(
+                                "⚡ QUICK PUNE HOSPITAL LOGIN (15 CENTERS)",
+                                color = Color(0xFF38BDF8),
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.ExtraBold
+                            )
+                            Spacer(Modifier.height(6.dp))
+                            Button(
+                                onClick = { showHospSheet = !showHospSheet },
+                                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1E293B)),
+                                modifier = Modifier.fillMaxWidth(),
+                                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp)
+                            ) {
+                                Text(
+                                    selectedHospName ?: "Select Hospital to Auto-Fill Credentials ▼",
+                                    fontSize = 11.sp,
+                                    color = Color.White,
+                                    maxLines = 1
+                                )
+                            }
+
+                            if (showHospSheet) {
+                                Spacer(Modifier.height(8.dp))
+                                Column(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .heightIn(max = 220.dp)
+                                        .verticalScroll(rememberScrollState())
+                                ) {
+                                    PUNE_HOSPITALS.forEach { h ->
+                                        Surface(
+                                            onClick = {
+                                                username = h.username
+                                                password = h.pass
+                                                selectedHospName = h.name
+                                                showHospSheet = false
+                                            },
+                                            color = if (username == h.username) Color(0xFF0369A1) else Color(0xFF0F172A),
+                                            shape = RoundedCornerShape(6.dp),
+                                            modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp)
+                                        ) {
+                                            Row(
+                                                modifier = Modifier.padding(8.dp),
+                                                horizontalArrangement = Arrangement.SpaceBetween,
+                                                verticalAlignment = Alignment.CenterVertically
+                                            ) {
+                                                Column(modifier = Modifier.weight(1f)) {
+                                                    Text(h.name, color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                                    Text("${h.username} · ${h.traumaLevel}", color = Color(0xFF94A3B8), fontSize = 10.sp)
+                                                }
+                                                Text("FILL", color = Color(0xFF38BDF8), fontSize = 10.sp, fontWeight = FontWeight.ExtraBold)
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+
                     OutlinedTextField(
                         value = username,
                         onValueChange = { username = it },
@@ -214,7 +319,7 @@ private fun Portal(
                     }
                     Spacer(Modifier.height(10.dp))
                     Text(
-                        "Demo credentials: ambulance1 / hospital1 / user1",
+                        "Demo credentials: ambulance1 / operator / user1",
                         color = Color(0xFF64748B),
                         fontSize = 11.sp
                     )

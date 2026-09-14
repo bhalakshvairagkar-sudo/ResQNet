@@ -145,10 +145,261 @@ class DataStore {
         ];
 
         const initialHospitals = [
-            { id: 'HOSP-01', name: 'Pune Trauma Center', lat: 18.5280, lng: 73.8720, location: { type: 'Point', coordinates: [73.8720, 18.5280] }, trauma: true, traumaLevel: 1, capacity: 'PRE-ALERT READY', emergencyCapacity: 8, edReadiness: 95, status: 'AVAILABLE', address: 'Station Road, Sangamvadi, Pune', phone: '+91 20 2612 0000', bloodBankStock: { "O+": 12, "O-": 4, "A+": 8, "B+": 10 } },
-            { id: 'HOSP-02', name: 'Ruby Hall General', lat: 18.5350, lng: 73.8780, location: { type: 'Point', coordinates: [73.8780, 18.5350] }, trauma: true, traumaLevel: 2, capacity: 'STANDBY', emergencyCapacity: 4, edReadiness: 85, status: 'AVAILABLE', address: '40 Sassoon Road, Pune', phone: '+91 20 6645 5100', bloodBankStock: { "O+": 6, "A+": 4, "B+": 5 } },
-            { id: 'HOSP-03', name: 'City Emergency Care', lat: 18.5050, lng: 73.8350, location: { type: 'Point', coordinates: [73.8350, 18.5050] }, trauma: false, traumaLevel: 3, capacity: 'LIMITED', emergencyCapacity: 2, edReadiness: 60, status: 'LIMITED', address: 'Karve Road, Deccan, Pune', phone: '+91 20 2544 3300', bloodBankStock: { "O+": 2, "A+": 1 } },
-            { id: 'HOSP-04', name: 'Sahyadri Specialty Hospital', lat: 18.5120, lng: 73.8340, location: { type: 'Point', coordinates: [73.8340, 18.5120] }, trauma: true, traumaLevel: 1, capacity: 'PRE-ALERT READY', emergencyCapacity: 6, edReadiness: 90, status: 'AVAILABLE', address: 'Plot No. 30-C, Erandwane, Karve Road, Pune', phone: '+91 20 6721 3000', bloodBankStock: { "O+": 8, "O-": 2, "A+": 6, "B+": 7 } }
+            {
+                id: 'HOSP-01',
+                name: 'Sassoon General Hospital / BJGMC',
+                lat: 18.5253295,
+                lng: 73.8705450,
+                location: { type: 'Point', coordinates: [73.8705450, 18.5253295] },
+                trauma: true,
+                traumaLevel: 1,
+                relevance: 'Major trauma centre; accident & polytrauma',
+                capacity: 'PRE-ALERT READY',
+                emergencyCapacity: 12,
+                edReadiness: 98,
+                status: 'AVAILABLE',
+                address: 'Near Pune Railway Station, Sassoon Road, Pune - 411001',
+                phone: '+91 20 2612 8000',
+                bloodBankStock: { "O+": 16, "O-": 6, "A+": 10, "B+": 12, "AB+": 8 }
+            },
+            {
+                id: 'HOSP-02',
+                name: 'Ruby Hall Clinic – Sassoon Road',
+                lat: 18.5335374,
+                lng: 73.8771538,
+                location: { type: 'Point', coordinates: [73.8771538, 18.5335374] },
+                trauma: true,
+                traumaLevel: 1,
+                relevance: '24×7 accident/emergency; RTA/polytrauma',
+                capacity: 'PRE-ALERT READY',
+                emergencyCapacity: 8,
+                edReadiness: 94,
+                status: 'AVAILABLE',
+                address: '40, Sassoon Road, Sangamvadi, Pune - 411001',
+                phone: '+91 20 6645 5100',
+                bloodBankStock: { "O+": 10, "O-": 4, "A+": 8, "B+": 8, "AB+": 4 }
+            },
+            {
+                id: 'HOSP-03',
+                name: 'Jehangir Hospital',
+                lat: 18.5303811,
+                lng: 73.8766572,
+                location: { type: 'Point', coordinates: [73.8766572, 18.5303811] },
+                trauma: true,
+                traumaLevel: 1,
+                relevance: 'Emergency/tertiary hospital',
+                capacity: 'PRE-ALERT READY',
+                emergencyCapacity: 7,
+                edReadiness: 90,
+                status: 'AVAILABLE',
+                address: '32, Sassoon Road, Central Railway Station, Pune - 411001',
+                phone: '+91 20 6681 1000',
+                bloodBankStock: { "O+": 8, "O-": 2, "A+": 6, "B+": 6, "AB+": 3 }
+            },
+            {
+                id: 'HOSP-04',
+                name: 'Ranka Hospital',
+                lat: 18.4950117,
+                lng: 73.8618860,
+                location: { type: 'Point', coordinates: [73.8618860, 18.4950117] },
+                trauma: true,
+                traumaLevel: 2,
+                relevance: 'Emergency/orthopaedic & trauma care',
+                capacity: 'PRE-ALERT READY',
+                emergencyCapacity: 6,
+                edReadiness: 88,
+                status: 'AVAILABLE',
+                address: 'Mukund Nagar, Swargate, Pune - 411037',
+                phone: '+91 20 2426 1600',
+                bloodBankStock: { "O+": 6, "A+": 4, "B+": 5, "AB+": 2 }
+            },
+            {
+                id: 'HOSP-05',
+                name: 'Noble Hospital, Hadapsar',
+                lat: 18.5049366,
+                lng: 73.9271433,
+                location: { type: 'Point', coordinates: [73.9271433, 18.5049366] },
+                trauma: true,
+                traumaLevel: 1,
+                relevance: '24×7 emergency; accident-related care',
+                capacity: 'PRE-ALERT READY',
+                emergencyCapacity: 9,
+                edReadiness: 92,
+                status: 'AVAILABLE',
+                address: '169, Magarpatta City Road, Hadapsar, Pune - 411013',
+                phone: '+91 20 6628 5000',
+                bloodBankStock: { "O+": 12, "O-": 3, "A+": 7, "B+": 9, "AB+": 4 }
+            },
+            {
+                id: 'HOSP-06',
+                name: 'Sancheti Hospital',
+                lat: 18.5299514,
+                lng: 73.8528812,
+                location: { type: 'Point', coordinates: [73.8528812, 18.5299514] },
+                trauma: true,
+                traumaLevel: 1,
+                relevance: 'Orthopaedic/emergency; trauma relevance',
+                capacity: 'PRE-ALERT READY',
+                emergencyCapacity: 8,
+                edReadiness: 95,
+                status: 'AVAILABLE',
+                address: '16, Shivajinagar, Pune - 411005',
+                phone: '+91 20 2899 9999',
+                bloodBankStock: { "O+": 10, "O-": 4, "A+": 6, "B+": 8, "AB+": 3 }
+            },
+            {
+                id: 'HOSP-07',
+                name: 'Deenanath Mangeshkar Hospital',
+                lat: 18.5020099,
+                lng: 73.8328426,
+                location: { type: 'Point', coordinates: [73.8328426, 18.5020099] },
+                trauma: true,
+                traumaLevel: 1,
+                relevance: 'Emergency care; major tertiary hospital',
+                capacity: 'PRE-ALERT READY',
+                emergencyCapacity: 10,
+                edReadiness: 96,
+                status: 'AVAILABLE',
+                address: 'Erandwane, Near Mhatre Bridge, Pune - 411004',
+                phone: '+91 20 4015 1000',
+                bloodBankStock: { "O+": 14, "O-": 5, "A+": 9, "B+": 11, "AB+": 5 }
+            },
+            {
+                id: 'HOSP-08',
+                name: 'Sahyadri Super Speciality – Nagar Road',
+                lat: 18.5543086,
+                lng: 73.8971383,
+                location: { type: 'Point', coordinates: [73.8971383, 18.5543086] },
+                trauma: true,
+                traumaLevel: 1,
+                relevance: 'Emergency/tertiary care',
+                capacity: 'PRE-ALERT READY',
+                emergencyCapacity: 7,
+                edReadiness: 91,
+                status: 'AVAILABLE',
+                address: 'Plot No. 30C, Nagar Road, Shastri Nagar, Yerawada, Pune - 411006',
+                phone: '+91 20 6721 5000',
+                bloodBankStock: { "O+": 8, "O-": 2, "A+": 6, "B+": 7, "AB+": 3 }
+            },
+            {
+                id: 'HOSP-09',
+                name: 'AIMS Hospital, Aundh',
+                lat: 18.5625409,
+                lng: 73.8106962,
+                location: { type: 'Point', coordinates: [73.8106962, 18.5625409] },
+                trauma: true,
+                traumaLevel: 2,
+                relevance: 'Emergency department',
+                capacity: 'PRE-ALERT READY',
+                emergencyCapacity: 5,
+                edReadiness: 85,
+                status: 'AVAILABLE',
+                address: 'Near Bremen Chowk, Aundh, Pune - 411007',
+                phone: '+91 20 6740 0000',
+                bloodBankStock: { "O+": 5, "A+": 4, "B+": 4, "AB+": 2 }
+            },
+            {
+                id: 'HOSP-10',
+                name: 'Bharati Hospital & Research Centre',
+                lat: 18.45969,
+                lng: 73.85678,
+                location: { type: 'Point', coordinates: [73.85678, 18.45969] },
+                trauma: true,
+                traumaLevel: 1,
+                relevance: 'Dedicated Emergency Medicine Department',
+                capacity: 'PRE-ALERT READY',
+                emergencyCapacity: 11,
+                edReadiness: 94,
+                status: 'AVAILABLE',
+                address: 'Pune-Satara Road, Dhankawadi, Pune - 411043',
+                phone: '+91 20 4055 5555',
+                bloodBankStock: { "O+": 12, "O-": 4, "A+": 8, "B+": 10, "AB+": 4 }
+            },
+            {
+                id: 'HOSP-11',
+                name: 'Lokmanya Hospital, Pune',
+                lat: 18.5089079,
+                lng: 73.8341050,
+                location: { type: 'Point', coordinates: [73.8341050, 18.5089079] },
+                trauma: true,
+                traumaLevel: 2,
+                relevance: 'Emergency/orthopaedic care',
+                capacity: 'PRE-ALERT READY',
+                emergencyCapacity: 6,
+                edReadiness: 87,
+                status: 'AVAILABLE',
+                address: 'Paud Road, Kothrud, Pune - 411038',
+                phone: '+91 20 2544 0404',
+                bloodBankStock: { "O+": 6, "A+": 4, "B+": 5, "AB+": 2 }
+            },
+            {
+                id: 'HOSP-12',
+                name: 'Z Plus Accident Hospital, Hadapsar',
+                lat: 18.5017,
+                lng: 73.9260,
+                location: { type: 'Point', coordinates: [73.9260, 18.5017] },
+                trauma: true,
+                traumaLevel: 1,
+                relevance: 'Accident/trauma hospital; 24×7 trauma services',
+                capacity: 'PRE-ALERT READY',
+                emergencyCapacity: 7,
+                edReadiness: 90,
+                status: 'AVAILABLE',
+                address: 'Solapur Road, Gadital, Hadapsar, Pune - 411028',
+                phone: '+91 20 2687 0055',
+                bloodBankStock: { "O+": 8, "O-": 2, "A+": 5, "B+": 6, "AB+": 3 }
+            },
+            {
+                id: 'HOSP-13',
+                name: 'Metro Superspeciality Hospital & Trauma Center, Wagholi',
+                lat: 18.5790,
+                lng: 73.9830,
+                location: { type: 'Point', coordinates: [73.9830, 18.5790] },
+                trauma: true,
+                traumaLevel: 1,
+                relevance: 'Trauma centre / emergency',
+                capacity: 'PRE-ALERT READY',
+                emergencyCapacity: 8,
+                edReadiness: 92,
+                status: 'AVAILABLE',
+                address: 'Pune-Nagar Highway, Wagholi, Pune - 412207',
+                phone: '+91 20 6733 1111',
+                bloodBankStock: { "O+": 9, "O-": 3, "A+": 6, "B+": 7, "AB+": 3 }
+            },
+            {
+                id: 'HOSP-14',
+                name: 'Global Multispeciality Hospital, Dighi',
+                lat: 18.6200,
+                lng: 73.8750,
+                location: { type: 'Point', coordinates: [73.8750, 18.6200] },
+                trauma: true,
+                traumaLevel: 2,
+                relevance: '24×7 emergency + fracture/trauma care',
+                capacity: 'PRE-ALERT READY',
+                emergencyCapacity: 5,
+                edReadiness: 86,
+                status: 'AVAILABLE',
+                address: 'Dighi - Alandi Road, Dighi, Pune - 411015',
+                phone: '+91 20 2715 0000',
+                bloodBankStock: { "O+": 6, "A+": 4, "B+": 4, "AB+": 2 }
+            },
+            {
+                id: 'HOSP-15',
+                name: 'YCM Hospital, Pimpri',
+                lat: 18.6220146,
+                lng: 73.8210657,
+                location: { type: 'Point', coordinates: [73.8210657, 18.6220146] },
+                trauma: true,
+                traumaLevel: 1,
+                relevance: 'Major public hospital/emergency facility',
+                capacity: 'PRE-ALERT READY',
+                emergencyCapacity: 14,
+                edReadiness: 97,
+                status: 'AVAILABLE',
+                address: 'Sant Tukaram Nagar, Pimpri Colony, Pimpri-Chinchwad, Pune - 411018',
+                phone: '+91 20 2742 0555',
+                bloodBankStock: { "O+": 18, "O-": 6, "A+": 12, "B+": 14, "AB+": 6 }
+            }
         ];
 
         initialAmbulances.forEach(a => this.ambulances.set(a.id, a));
@@ -192,16 +443,12 @@ class DataStore {
                 dbAmbs.forEach(a => this.ambulances.set(a.id, a.toObject()));
             }
 
-            // Seed hospitals if collection is empty
-            const hospCount = await Hospital.countDocuments();
-            if (hospCount === 0) {
-                for (const hosp of this.hospitals.values()) {
-                    await Hospital.findOneAndUpdate({ id: hosp.id }, hosp, { upsert: true });
-                }
-            } else {
-                const dbHosps = await Hospital.find();
-                dbHosps.forEach(h => this.hospitals.set(h.id, h.toObject()));
+            // Sync / Upsert all 15 Pune hospitals into MongoDB
+            for (const hosp of this.hospitals.values()) {
+                await Hospital.findOneAndUpdate({ id: hosp.id }, hosp, { upsert: true, new: true });
             }
+            const dbHosps = await Hospital.find();
+            dbHosps.forEach(h => this.hospitals.set(h.id, h.toObject()));
 
             // Seed / Update CCTV cameras with FOV metadata
             for (const cam of this.cctvCameras.values()) {

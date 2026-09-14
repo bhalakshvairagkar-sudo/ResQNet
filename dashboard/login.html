@@ -223,16 +223,46 @@
     </button>
   </form>
 
-  <div class="demo-info">
-    <b>💡 Quick Demo Credentials:</b><br>
-    • Dispatch: <code>operator</code><br>
-    • Ambulance: <code>ambulance1</code> to <code>ambulance5</code><br>
-    • Hospital: <code>hospital1</code> to <code>hospital4</code><br>
-    • Password: <code>configurable-demo-password</code>
+  <div class="demo-info" style="margin-top:16px;">
+    <div style="font-weight:800;color:#38bdf8;margin-bottom:6px;display:flex;align-items:center;gap:6px;">
+      <i class="fa-solid fa-hospital"></i> QUICK PUNE HOSPITAL LOGIN (15 FACILITIES)
+    </div>
+    <select id="quickHospSelect" class="input-box" style="padding:7px 10px;font-size:11px;margin-bottom:8px;background:#030712;color:#f8fafc;border-color:#334155;" onchange="fillHospCredentials(this.value)">
+      <option value="">-- Select a Pune Hospital to Auto-Fill --</option>
+      <option value="sassoon_trauma01|Sassoon@RQN26!">1. Sassoon General Hospital / BJGMC (Level-1 Trauma)</option>
+      <option value="rubyhall_emergency01|Ruby@RQN26#">2. Ruby Hall Clinic – Sassoon Road (Level-1 Trauma)</option>
+      <option value="jehangir_trauma01|Jehangir@RQN26!">3. Jehangir Hospital (Tertiary / Emergency)</option>
+      <option value="ranka_emergency01|Ranka@RQN26#">4. Ranka Hospital (Orthopaedic & Trauma)</option>
+      <option value="noble_trauma01|Noble@RQN26!">5. Noble Hospital, Hadapsar (24x7 Emergency)</option>
+      <option value="sancheti_trauma01|Sancheti@RQN26#">6. Sancheti Hospital (Trauma & Orthopaedic)</option>
+      <option value="dmh_emergency01|DMH@RQN26!p7">7. Deenanath Mangeshkar Hospital (Major Tertiary)</option>
+      <option value="sahyadri_emergency01|Sahyadri@RQN26#">8. Sahyadri Super Speciality – Nagar Road</option>
+      <option value="aims_emergency01|AIMS@RQN26!">9. AIMS Hospital, Aundh (Emergency Dept)</option>
+      <option value="bharati_trauma01|Bharati@RQN26#">10. Bharati Hospital & Research Centre</option>
+      <option value="lokmanya_trauma01|Lokmanya@RQN26!">11. Lokmanya Hospital, Pune (Orthopaedic / ER)</option>
+      <option value="zplus_accident01|ZPlus@RQN26#">12. Z Plus Accident Hospital, Hadapsar (24x7 Trauma)</option>
+      <option value="metro_trauma01|Metro@RQN26!">13. Metro Superspeciality & Trauma, Wagholi</option>
+      <option value="global_emergency01|Global@RQN26#">14. Global Multispeciality Hospital, Dighi</option>
+      <option value="ycm_emergency01|YCM@RQN26!">15. YCM Hospital, Pimpri (Major Public Hospital)</option>
+    </select>
+    <div style="font-size:10px;color:#94a3b8;line-height:1.4;">
+      <b>Other Portal Logins:</b><br>
+      • Command Center Dispatch: <code>operator</code> / <code>configurable-demo-password</code><br>
+      • Field Ambulance Fleet: <code>ambulance1</code> to <code>ambulance5</code>
+    </div>
   </div>
 </div>
 
 <script>
+  function fillHospCredentials(val) {
+    if (!val) return;
+    const [u, p] = val.split('|');
+    setTab('login');
+    const uInput = document.querySelector('#formLogin input[name="username"]');
+    const pInput = document.querySelector('#formLogin input[name="password"]');
+    if (uInput) uInput.value = u;
+    if (pInput) pInput.value = p;
+  }
   function setTab(mode) {
     const isLogin = mode === 'login';
     document.getElementById('tabLoginBtn').classList.toggle('active', isLogin);

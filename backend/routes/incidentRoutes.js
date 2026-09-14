@@ -554,26 +554,33 @@ module.exports = (io) => {
             const incident = await db.getIncident(incId);
             if (!incident) return res.status(404).json({ error: 'Incident not found' });
 
+            const hospId = req.user?.resourceId || req.body?.hospitalId || incident.assignedHospitalId || incident.hospitalId;
+            const hospitalObj = hospId ? await db.getHospital(hospId) : null;
+            const hospName = hospitalObj ? hospitalObj.name : (req.user?.fullName || incident.assignedHospital || 'Trauma Center');
+
             const timeline = incident.timeline || [];
             timeline.push({
                 status: 'HOSPITAL_ACKNOWLEDGED',
                 timestamp: new Date(),
-                description: `Hospital Emergency Department acknowledged trauma pre-alert. Trauma bay prepared.`,
+                description: `${hospName} acknowledged trauma pre-alert. Trauma bay prepared.`,
                 actor: 'HOSPITAL'
             });
 
             const updated = await db.updateIncident(incId, {
                 hospitalAcknowledged: true,
                 hospitalAckAt: new Date().toISOString(),
+                hospitalAckBy: hospName,
+                assignedHospital: hospName,
+                assignedHospitalId: hospId || incident.assignedHospitalId,
                 timeline
             });
 
             io.emit('incident:update', updated);
             io.emit('incidentUpdated', updated);
-            io.emit('hospital:alert:ack', { incidentId: incId, acknowledged: true });
+            io.emit('hospital:alert:ack', { incidentId: incId, acknowledged: true, hospitalName: hospName, hospitalId: hospId });
 
-            console.log(`[HOSPITAL] Pre-alert acknowledged for incident ${incId}`);
-            return res.json({ success: true, message: 'Hospital trauma pre-alert acknowledged.', incident: updated });
+            console.log(`[HOSPITAL] Pre-alert acknowledged by ${hospName} for incident ${incId}`);
+            return res.json({ success: true, message: `Trauma pre-alert acknowledged by ${hospName}.`, incident: updated });
         } catch (err) {
             return res.status(500).json({ error: err.message });
         }
