@@ -322,8 +322,19 @@
 
       container.innerHTML = alerts.map((a) => {
         const isAck = a.acknowledged === true;
+        const p = a.patientProfile || {};
+        const patName = p.fullName || 'Registered Citizen';
+        const blood = p.bloodGroup || 'O+ POSITIVE';
+        const iceName = p.primaryContact?.name || 'Emergency Next-of-Kin';
+        const icePhone = p.primaryContact?.phone || '+91 9876543210';
+        const iceRel = p.primaryContact?.relation || 'Family';
+        const allergies = (p.allergies && p.allergies.length > 0) ? p.allergies.join(', ') : 'None Reported';
+        const conditions = (p.chronicConditions && p.chronicConditions.length > 0) ? p.chronicConditions.join(', ') : 'None Reported';
+        const meds = p.currentMedications || 'None Reported';
+        const notes = p.specialNotes || 'Intake profile armed in ResQNet vault';
+
         return `
-        <div class="alert-card">
+        <div class="alert-card" style="border-left: 5px solid ${isAck ? '#10b981' : '#ef4444'};">
           <div class="alert-header">
             <div class="alert-headline">
               <i class="fa-solid fa-truck-medical"></i>
@@ -350,6 +361,39 @@
             <div class="stat-box">
               <div class="stat-label">Trauma Bay Readiness</div>
               <div class="stat-val">${isAck ? '<span class="badge prepped">BAY PREPARED</span>' : '<span class="badge critical">ACTION NEEDED</span>'}</div>
+            </div>
+          </div>
+
+          <!-- PATIENT CLINICAL DOSSIER FROM INTAKE FORM -->
+          <div style="margin-top:14px;background:#0b1324;border:1px solid #1e293b;border-radius:8px;padding:12px 14px;">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+              <span style="font-size:12px;font-weight:700;color:#38bdf8;letter-spacing:0.5px;">
+                <i class="fa-solid fa-clipboard-user"></i> PATIENT CLINICAL DOSSIER (INTAKE FORM)
+              </span>
+              <span style="background:#dc2626;color:#fff;font-size:11px;font-weight:800;padding:2px 8px;border-radius:4px;">
+                BLOOD: ${esc(blood)}
+              </span>
+            </div>
+
+            <div style="font-size:12px;color:#f8fafc;margin-bottom:6px;">
+              <b>Patient:</b> ${esc(patName)} ${p.gender ? `• <b>Gender:</b> ${esc(p.gender)}` : ''} ${p.dateOfBirth ? `• <b>DOB:</b> ${esc(p.dateOfBirth)}` : ''}
+            </div>
+
+            <div style="background:#070c16;padding:8px 10px;border-radius:6px;margin-bottom:8px;display:flex;justify-content:space-between;align-items:center;font-size:11px;">
+              <div>
+                <span style="color:#94a3b8;"><b>Next-of-Kin (ICE):</b></span> 
+                <span style="color:#f8fafc;">${esc(iceName)} (${esc(iceRel)}) — ${esc(icePhone)}</span>
+              </div>
+              <a href="tel:${esc(icePhone)}" style="background:#38bdf8;color:#060911;padding:3px 8px;border-radius:4px;text-decoration:none;font-weight:700;font-size:10px;">
+                <i class="fa-solid fa-phone"></i> CALL ICE
+              </a>
+            </div>
+
+            <div style="font-size:11px;color:#cbd5e1;line-height:1.6;">
+              <div><b style="color:#f87171;">⚠️ Allergies:</b> ${esc(allergies)}</div>
+              <div><b style="color:#38bdf8;">🏥 Chronic Conditions:</b> ${esc(conditions)}</div>
+              <div><b style="color:#94a3b8;">💊 Current Medications:</b> ${esc(meds)}</div>
+              <div><b style="color:#fbbf24;">📝 Clinical Notes:</b> ${esc(notes)}</div>
             </div>
           </div>
 

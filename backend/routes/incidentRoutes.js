@@ -155,6 +155,30 @@ module.exports = (io) => {
             const preAlert = (selectedAmb && selectedHosp) ? 
                 AIEngine.buildHospitalPreAlert(incidentTemp, selectedAmb, selectedHosp) : null;
 
+            // Resolve Citizen Medical Profile (from intake / google form registration)
+            let citizenProfile = body.patientProfile || body.medicalProfile || null;
+            if (!citizenProfile && body.userId) {
+                try { citizenProfile = await db.getMedicalProfile(body.userId); } catch (e) {}
+            }
+            if (!citizenProfile) {
+                // Check if user1 has registered profile as baseline
+                try {
+                    const defaultUser = await db.getUserByUsername('user1');
+                    if (defaultUser?.medicalProfile) citizenProfile = defaultUser.medicalProfile;
+                } catch (e) {}
+            }
+            if (!citizenProfile && body.userMedicalInfo) {
+                citizenProfile = {
+                    fullName: 'Registered App User',
+                    bloodGroup: 'O+ POSITIVE',
+                    allergies: ['Penicillin'],
+                    chronicConditions: ['Asthma'],
+                    currentMedications: 'Standard Prescriptions',
+                    primaryContact: { name: 'Emergency Next-of-Kin', phone: '+91 9876543210', relation: 'Family' },
+                    specialNotes: body.userMedicalInfo
+                };
+            }
+
             // Construct state-machine compliant Incident record
             const incidentRecord = {
                 id: incId,
@@ -178,10 +202,16 @@ module.exports = (io) => {
                 hospitalId: selectedHosp ? selectedHosp.id : null,
                 assignedHospital: selectedHosp ? selectedHosp.name : null,
                 hospitalReason: hospOptimization.reason,
+                hospitalLatitude: selectedHosp ? (selectedHosp.lat || 18.5280) : 18.5280,
+                hospitalLongitude: selectedHosp ? (selectedHosp.lng || 73.8720) : 73.8720,
+                hospitalAddress: selectedHosp ? (selectedHosp.address || 'Station Road, Sangamvadi, Pune') : 'Station Road, Sangamvadi, Pune',
+                hospitalPhone: selectedHosp ? (selectedHosp.phone || '+91 20 2612 0000') : '+91 20 2612 0000',
+                hospitalTraumaLevel: selectedHosp ? (selectedHosp.traumaLevel || 1) : 1,
                 route: combinedRoute,
                 hospitalRoute: hospOptimization.route,
                 hospitalPreAlert: preAlert,
                 patientCount: body.patients ?? body.patientCount ?? 1,
+                patientProfile: citizenProfile,
                 userMedicalInfo: body.userMedicalInfo ?? null,
                 isDemo: body.isDemo ?? false,
                 sources: sources,
@@ -219,9 +249,17 @@ module.exports = (io) => {
                     accidentLatitude: lat || 18.5308,
                     accidentLongitude: lng || 73.8290,
                     patientCount: body.patients ?? 1,
+                    patientProfile: citizenProfile,
                     helpMessage: title,
-                    destinationHospital: selectedHosp ? selectedHosp.name : 'Sahyadri Specialty Hospital',
+                    destinationHospital: selectedHosp ? selectedHosp.name : 'Pune Trauma Center',
+                    assignedHospital: selectedHosp ? selectedHosp.name : 'Pune Trauma Center',
+                    hospitalLatitude: selectedHosp ? (selectedHosp.lat || 18.5280) : 18.5280,
+                    hospitalLongitude: selectedHosp ? (selectedHosp.lng || 73.8720) : 73.8720,
+                    hospitalAddress: selectedHosp ? (selectedHosp.address || 'Station Road, Sangamvadi, Pune') : 'Station Road, Sangamvadi, Pune',
+                    hospitalPhone: selectedHosp ? (selectedHosp.phone || '+91 20 2612 0000') : '+91 20 2612 0000',
+                    hospitalTraumaLevel: selectedHosp ? (selectedHosp.traumaLevel || 1) : 1,
                     mapUrl: `https://www.google.com/maps/dir/?api=1&destination=${lat || 18.5308},${lng || 73.8290}`,
+                    hospitalMapUrl: selectedHosp ? `https://www.google.com/maps/dir/?api=1&destination=${selectedHosp.lat || 18.5280},${selectedHosp.lng || 73.8720}` : `https://www.google.com/maps/dir/?api=1&destination=18.5280,73.8720`,
                     status: 'VERIFIED'
                 };
                 io.emit('ambulance:assigned', { incidentId: incId, ambulance: selectedAmb, route: combinedRoute });
@@ -239,6 +277,7 @@ module.exports = (io) => {
                     accidentLatitude: lat || 18.5308,
                     accidentLongitude: lng || 73.8290,
                     patientCount: body.patients ?? 1,
+                    patientProfile: citizenProfile,
                     helpMessage: title,
                     mapUrl: `https://www.google.com/maps/dir/?api=1&destination=${lat || 18.5308},${lng || 73.8290}`,
                     acknowledged: false
@@ -295,22 +334,40 @@ module.exports = (io) => {
                     // Fallback to active incidents if demo/test
                     matched = activeIncidents.slice(0, 3);
                 }
-                const alerts = matched.map(i => ({
-                    id: i.incidentId || i.id,
-                    incidentId: i.incidentId || i.id,
-                    priority: (i.severity >= 75) ? 'CRITICAL TRAUMA (PRIORITY 1)' : 'EMERGENCY DISPATCH (PRIORITY 2)',
-                    severity: i.severity || 85,
-                    distanceKm: i.route?.distanceKm || 3.2,
-                    etaMinutes: i.route?.etaMinutes || 4,
-                    accidentLatitude: i.latitude || 18.5308,
-                    accidentLongitude: i.longitude || 73.8290,
-                    patientCount: i.patientCount || i.patients || 1,
-                    helpMessage: i.title || i.type || 'High-Impact Road Collision',
-                    destinationHospital: i.assignedHospital || 'Sahyadri Specialty Hospital',
-                    mapUrl: `https://www.google.com/maps/dir/?api=1&destination=${i.latitude || 18.5308},${i.longitude || 73.8290}`,
-                    status: i.status || 'VERIFIED',
-                    accepted: i.status === 'EN_ROUTE' || i.status === 'ACCEPTED'
-                }));
+                const alerts = matched.map(i => {
+                    const hospLat = i.hospitalLatitude || 18.5280;
+                    const hospLng = i.hospitalLongitude || 73.8720;
+                    const hospName = i.assignedHospital || i.destinationHospital || 'Pune Trauma Center';
+                    const hospAddress = i.hospitalAddress || 'Station Road, Sangamvadi, Pune';
+                    const hospPhone = i.hospitalPhone || '+91 20 2612 0000';
+                    const hospTraumaLevel = i.hospitalTraumaLevel || 1;
+
+                    return {
+                        id: i.incidentId || i.id,
+                        incidentId: i.incidentId || i.id,
+                        priority: (i.severity >= 75) ? 'CRITICAL TRAUMA (PRIORITY 1)' : 'EMERGENCY DISPATCH (PRIORITY 2)',
+                        severity: i.severity || 85,
+                        distanceKm: i.route?.distanceKm || 3.2,
+                        etaMinutes: i.route?.etaMinutes || 4,
+                        accidentLatitude: i.latitude || 18.5308,
+                        accidentLongitude: i.longitude || 73.8290,
+                        patientCount: i.patientCount || i.patients || 1,
+                        patientProfile: i.patientProfile || null,
+                        patientMedicalInfo: i.userMedicalInfo || null,
+                        helpMessage: i.title || i.type || 'High-Impact Road Collision',
+                        destinationHospital: hospName,
+                        assignedHospital: hospName,
+                        hospitalLatitude: hospLat,
+                        hospitalLongitude: hospLng,
+                        hospitalAddress: hospAddress,
+                        hospitalPhone: hospPhone,
+                        hospitalTraumaLevel: hospTraumaLevel,
+                        mapUrl: `https://www.google.com/maps/dir/?api=1&destination=${i.latitude || 18.5308},${i.longitude || 73.8290}`,
+                        hospitalMapUrl: `https://www.google.com/maps/dir/?api=1&destination=${hospLat},${hospLng}`,
+                        status: i.status || 'VERIFIED',
+                        accepted: i.status === 'EN_ROUTE' || i.status === 'ACCEPTED'
+                    };
+                });
                 return res.json(alerts);
             }
 
@@ -326,6 +383,18 @@ module.exports = (io) => {
                     matched = activeIncidents.slice(0, 3);
                 }
 
+                // Baseline fallback patient profile if none attached
+                const defaultUser = await db.getUserByUsername('user1');
+                const baselineProfile = defaultUser?.medicalProfile || {
+                    fullName: 'Registered Citizen Patient',
+                    bloodGroup: 'O+ POSITIVE',
+                    allergies: ['Penicillin'],
+                    chronicConditions: ['Asthma'],
+                    currentMedications: 'Salbutamol Inhaler (PRN)',
+                    primaryContact: { name: 'Emergency Next-of-Kin', phone: '+91 9876543210', relation: 'Family' },
+                    specialNotes: 'Emergency Profile Armed'
+                };
+
                 const alerts = matched.map(i => ({
                     id: i.incidentId || i.id,
                     incidentId: i.incidentId || i.id,
@@ -336,6 +405,8 @@ module.exports = (io) => {
                     accidentLatitude: i.latitude || 18.5308,
                     accidentLongitude: i.longitude || 73.8290,
                     patientCount: i.patientCount || i.patients || 1,
+                    patientProfile: i.patientProfile || baselineProfile,
+                    patientMedicalInfo: i.userMedicalInfo || `Blood: ${baselineProfile.bloodGroup} | ICE: ${baselineProfile.primaryContact?.name}`,
                     helpMessage: i.title || i.type || 'High-Impact Road Collision',
                     mapUrl: `https://www.google.com/maps/dir/?api=1&destination=${i.latitude || 18.5308},${i.longitude || 73.8290}`,
                     acknowledged: i.hospitalAcknowledged || false

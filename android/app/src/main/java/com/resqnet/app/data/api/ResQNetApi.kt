@@ -79,12 +79,63 @@ data class LoginRequest(val username: String, val password: String)
 data class SessionUser(val username: String, val role: String, val resourceId: String? = null)
 data class LoginResponse(val token: String, val user: SessionUser)
 data class EmergencyAlertDto(
-    val id: String, val incidentId: String, val recipientType: String, val recipientId: String,
-    val priority: String? = null, val severity: Int? = null, val helpMessage: String? = null,
-    val accidentLatitude: Double? = null, val accidentLongitude: Double? = null, val mapUrl: String? = null,
-    val distanceKm: Double? = null, val etaMinutes: Int? = null, val incomingAmbulance: String? = null,
-    val patientCount: Any? = null, val createdAt: String? = null, val status: String? = null
+    val id: String,
+    val incidentId: String,
+    val recipientType: String? = null,
+    val recipientId: String? = null,
+    val priority: String? = null,
+    val severity: Int? = null,
+    val confidence: Float? = null,
+    val accidentType: String? = null,
+    val accidentTime: String? = null,
+    val helpMessage: String? = null,
+    val accidentLatitude: Double? = null,
+    val accidentLongitude: Double? = null,
+    val locationQuality: String? = null,
+    val gpsAccuracy: Float? = null,
+    val gForce: Float? = null,
+    val speedDeltaKmh: Float? = null,
+    val rollover: Boolean? = null,
+    val patientMedicalInfo: String? = null,
+    val patientProfile: PatientProfileDto? = null,
+    val mapUrl: String? = null,
+    val hospitalMapUrl: String? = null,
+    val distanceKm: Double? = null,
+    val etaMinutes: Int? = null,
+    val incomingAmbulance: String? = null,
+    val destinationHospital: String? = null,
+    val assignedHospital: String? = null,
+    val hospitalLatitude: Double? = null,
+    val hospitalLongitude: Double? = null,
+    val hospitalAddress: String? = null,
+    val hospitalPhone: String? = null,
+    val hospitalTraumaLevel: Int? = null,
+    val patientCount: Any? = null,
+    val status: String? = null,
+    val accepted: Boolean? = null,
+    val acknowledged: Boolean? = null
 )
+
+data class PatientProfileDto(
+    val fullName: String? = null,
+    val age: Int? = null,
+    val dateOfBirth: String? = null,
+    val gender: String? = null,
+    val bloodGroup: String? = null,
+    val allergies: List<String>? = null,
+    val chronicConditions: List<String>? = null,
+    val currentMedications: String? = null,
+    val primaryContact: EmergencyContactDto? = null,
+    val organDonor: Boolean? = null,
+    val specialNotes: String? = null
+)
+
+data class EmergencyContactDto(
+    val name: String? = null,
+    val phone: String? = null,
+    val relation: String? = null
+)
+
 data class AmbulanceDto(val id: String, val code: String? = null, val status: String? = null, val lat: Double? = null, val lng: Double? = null, val currentIncidentId: String? = null)
 data class HospitalDto(val id: String, val name: String? = null, val status: String? = null, val traumaLevel: Int? = null, val emergencyCapacity: Int? = null, val lat: Double? = null, val lng: Double? = null)
 

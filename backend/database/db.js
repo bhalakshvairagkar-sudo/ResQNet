@@ -145,10 +145,10 @@ class DataStore {
         ];
 
         const initialHospitals = [
-            { id: 'HOSP-01', name: 'Pune Trauma Center', lat: 18.5280, lng: 73.8720, location: { type: 'Point', coordinates: [73.8720, 18.5280] }, trauma: true, traumaLevel: 1, capacity: 'PRE-ALERT READY', emergencyCapacity: 8, edReadiness: 95, status: 'AVAILABLE', bloodBankStock: { "O+": 12, "O-": 4, "A+": 8, "B+": 10 } },
-            { id: 'HOSP-02', name: 'Ruby Hall General', lat: 18.5350, lng: 73.8780, location: { type: 'Point', coordinates: [73.8780, 18.5350] }, trauma: true, traumaLevel: 2, capacity: 'STANDBY', emergencyCapacity: 4, edReadiness: 85, status: 'AVAILABLE', bloodBankStock: { "O+": 6, "A+": 4, "B+": 5 } },
-            { id: 'HOSP-03', name: 'City Emergency Care', lat: 18.5050, lng: 73.8350, location: { type: 'Point', coordinates: [73.8350, 18.5050] }, trauma: false, traumaLevel: 3, capacity: 'LIMITED', emergencyCapacity: 2, edReadiness: 60, status: 'LIMITED', bloodBankStock: { "O+": 2, "A+": 1 } },
-            { id: 'HOSP-04', name: 'Sahyadri Specialty Hospital', lat: 18.5120, lng: 73.8340, location: { type: 'Point', coordinates: [73.8340, 18.5120] }, trauma: true, traumaLevel: 1, capacity: 'PRE-ALERT READY', emergencyCapacity: 6, edReadiness: 90, status: 'AVAILABLE', bloodBankStock: { "O+": 8, "O-": 2, "A+": 6, "B+": 7 } }
+            { id: 'HOSP-01', name: 'Pune Trauma Center', lat: 18.5280, lng: 73.8720, location: { type: 'Point', coordinates: [73.8720, 18.5280] }, trauma: true, traumaLevel: 1, capacity: 'PRE-ALERT READY', emergencyCapacity: 8, edReadiness: 95, status: 'AVAILABLE', address: 'Station Road, Sangamvadi, Pune', phone: '+91 20 2612 0000', bloodBankStock: { "O+": 12, "O-": 4, "A+": 8, "B+": 10 } },
+            { id: 'HOSP-02', name: 'Ruby Hall General', lat: 18.5350, lng: 73.8780, location: { type: 'Point', coordinates: [73.8780, 18.5350] }, trauma: true, traumaLevel: 2, capacity: 'STANDBY', emergencyCapacity: 4, edReadiness: 85, status: 'AVAILABLE', address: '40 Sassoon Road, Pune', phone: '+91 20 6645 5100', bloodBankStock: { "O+": 6, "A+": 4, "B+": 5 } },
+            { id: 'HOSP-03', name: 'City Emergency Care', lat: 18.5050, lng: 73.8350, location: { type: 'Point', coordinates: [73.8350, 18.5050] }, trauma: false, traumaLevel: 3, capacity: 'LIMITED', emergencyCapacity: 2, edReadiness: 60, status: 'LIMITED', address: 'Karve Road, Deccan, Pune', phone: '+91 20 2544 3300', bloodBankStock: { "O+": 2, "A+": 1 } },
+            { id: 'HOSP-04', name: 'Sahyadri Specialty Hospital', lat: 18.5120, lng: 73.8340, location: { type: 'Point', coordinates: [73.8340, 18.5120] }, trauma: true, traumaLevel: 1, capacity: 'PRE-ALERT READY', emergencyCapacity: 6, edReadiness: 90, status: 'AVAILABLE', address: 'Plot No. 30-C, Erandwane, Karve Road, Pune', phone: '+91 20 6721 3000', bloodBankStock: { "O+": 8, "O-": 2, "A+": 6, "B+": 7 } }
         ];
 
         initialAmbulances.forEach(a => this.ambulances.set(a.id, a));

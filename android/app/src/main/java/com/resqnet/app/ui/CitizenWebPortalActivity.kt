@@ -189,23 +189,34 @@ class CitizenWebPortalActivity : ComponentActivity() {
         }
 
         @JavascriptInterface
-        fun onUserSignedIn(
-            token: String,
-            username: String,
-            role: String,
+        fun onMedicalProfileSaved(
             fullName: String?,
-            phone: String?
+            bloodGroup: String?,
+            emergencyName: String?,
+            emergencyPhone: String?,
+            allergies: String?,
+            conditions: String?,
+            medications: String?,
+            specialNotes: String?
         ) {
             runOnUiThread {
+                val current = UserSessionManager.getSessionData(this@CitizenWebPortalActivity)
                 UserSessionManager.saveUserSession(
                     this@CitizenWebPortalActivity,
-                    token = token,
-                    username = username,
-                    role = role,
-                    fullName = fullName,
-                    phone = phone
+                    token = current.token ?: "",
+                    username = current.username ?: "citizen",
+                    role = current.role ?: "USER",
+                    fullName = fullName ?: current.fullName,
+                    phone = current.phone,
+                    bloodGroup = bloodGroup ?: current.bloodGroup,
+                    emergencyContact = emergencyName ?: current.emergencyContact,
+                    emergencyPhone = emergencyPhone ?: current.emergencyPhone,
+                    allergies = allergies ?: current.allergies,
+                    chronicConditions = conditions ?: current.chronicConditions,
+                    medications = medications ?: current.medications,
+                    specialNotes = specialNotes ?: current.specialNotes
                 )
-                Toast.makeText(this@CitizenWebPortalActivity, "✓ Welcome back, $username", Toast.LENGTH_SHORT).show()
+                Toast.makeText(this@CitizenWebPortalActivity, "✓ Medical Emergency Vault Saved & Armed!", Toast.LENGTH_SHORT).show()
                 startActivity(Intent(this@CitizenWebPortalActivity, MainActivity::class.java))
                 finish()
             }

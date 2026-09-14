@@ -9,6 +9,7 @@ import com.resqnet.app.data.api.EmergencyPayload
 import com.resqnet.app.data.api.IncidentDto
 import com.resqnet.app.data.local.LocalIncidentRecord
 import com.resqnet.app.data.local.LocalIncidentStore
+import com.resqnet.app.data.local.UserSessionManager
 import com.resqnet.app.domain.model.CrashDetectionResult
 import com.resqnet.app.domain.model.LocationQuality
 import com.resqnet.app.domain.model.SubmissionStatus
@@ -249,7 +250,7 @@ class IncidentRepository(private val context: Context) {
             confidence = record.confidence,
             severity = record.severity,
             status = "DETECTED",
-            userMedicalInfo = record.userMedicalInfo,
+            userMedicalInfo = record.userMedicalInfo ?: UserSessionManager.getMedicalSummary(context),
             timestamp = isoTimestamp,
             isDemo = false
         )

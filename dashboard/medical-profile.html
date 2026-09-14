@@ -446,6 +446,22 @@
         user.hasCompletedMedicalProfile = true;
         user.medicalProfile = data.profile;
         localStorage.resqnetUser = JSON.stringify(user);
+        
+        // Android Native Bridge sync
+        if (window.AndroidBridge && window.AndroidBridge.onMedicalProfileSaved) {
+          window.AndroidBridge.onMedicalProfileSaved(
+            payload.fullName,
+            payload.bloodGroup,
+            payload.primaryContact?.name,
+            payload.primaryContact?.phone,
+            (payload.allergies || []).join(', '),
+            (payload.chronicConditions || []).join(', '),
+            payload.currentMedications || '',
+            payload.specialNotes || ''
+          );
+          return;
+        }
+
         setTimeout(proceedToPortal, 1200);
       } else {
         msg.className = 'msg-box error';

@@ -3,8 +3,9 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>ResQNet — Ambulance Tactical Operations</title>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script src="/socket.io/socket.io.js"></script>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -343,14 +344,24 @@
         return;
       }
 
-      container.innerHTML = alerts.map((a) => {
+      container.innerHTML = alerts.map((a, idx) => {
         const isAccepted = a.accepted || a.status === 'EN_ROUTE';
+        const sceneLat = a.accidentLatitude || 18.5308;
+        const sceneLng = a.accidentLongitude || 73.8290;
+        const hospLat = a.hospitalLatitude || 18.5280;
+        const hospLng = a.hospitalLongitude || 73.8720;
+        const hospName = a.destinationHospital || a.assignedHospital || 'Pune Trauma Center';
+        const hospAddress = a.hospitalAddress || 'Station Road, Sangamvadi, Pune';
+        const sceneMapUrl = a.mapUrl || `https://www.google.com/maps/dir/?api=1&destination=${sceneLat},${sceneLng}`;
+        const hospMapUrl = a.hospitalMapUrl || `https://www.google.com/maps/dir/?api=1&destination=${hospLat},${hospLng}`;
+        const mapId = `ambMap_${idx}`;
+
         return `
-        <div class="alert-card">
+        <div class="alert-card" style="border-left: 5px solid ${isAccepted ? '#10b981' : '#ef4444'};">
           <div class="alert-header">
             <div class="alert-headline">
               <i class="fa-solid fa-triangle-exclamation"></i>
-              <span>${isAccepted ? 'ACTIVE MISSION' : 'EMERGENCY DISPATCH'}</span>
+              <span>${isAccepted ? 'ACTIVE RESCUE MISSION (EN ROUTE)' : 'EMERGENCY DISPATCH MISSION'}</span>
             </div>
             <span class="priority-badge">${esc(a.priority)}</span>
           </div>
@@ -366,21 +377,54 @@
               <div class="stat-label">Estimated ETA / Distance</div>
               <div class="stat-val" style="color:#fb923c;">${esc(a.etaMinutes)} MIN · ${esc(a.distanceKm)} KM</div>
             </div>
-            <div class="stat-box">
-              <div class="stat-label">Accident Scene GPS</div>
-              <div class="stat-val">${esc(a.accidentLatitude)}, ${esc(a.accidentLongitude)}</div>
+          </div>
+
+          <!-- DUAL LIVE GPS WAYPOINTS -->
+          <div style="margin-top:14px;background:#0b1324;border:1px solid #1e293b;border-radius:8px;padding:12px;">
+            <div style="font-size:12px;font-weight:700;color:#38bdf8;margin-bottom:10px;">
+              <i class="fa-solid fa-location-crosshairs"></i> DUAL LIVE GPS WAYPOINTS (PATIENT & HOSPITAL)
             </div>
-            <div class="stat-box">
-              <div class="stat-label">Target Trauma Hospital</div>
-              <div class="stat-val" style="color:#4ade80;">${esc(a.destinationHospital || 'Sahyadri Trauma')}</div>
+
+            <!-- Waypoint 1: Patient Crash Scene -->
+            <div style="background:#131d31;border:1px solid #dc2626;border-radius:6px;padding:10px;margin-bottom:10px;">
+              <div style="display:flex;justify-content:space-between;align-items:center;">
+                <span style="font-size:11px;font-weight:800;color:#f87171;">
+                  <i class="fa-solid fa-person-falling-burst"></i> WAYPOINT 1: PATIENT CRASH SCENE
+                </span>
+                <span style="font-size:10px;color:#94a3b8;font-family:monospace;">${sceneLat.toFixed(4)}, ${sceneLng.toFixed(4)}</span>
+              </div>
+              <div style="font-size:11px;color:#cbd5e1;margin-top:4px;">
+                <b>Coordinates:</b> Latitude: ${sceneLat}, Longitude: ${sceneLng}
+              </div>
+              <a href="${sceneMapUrl}" target="_blank" class="btn-action" style="background:#dc2626;color:#fff;text-decoration:none;display:flex;align-items:center;justify-content:center;gap:6px;margin-top:8px;padding:8px;border-radius:5px;font-size:11px;font-weight:700;">
+                <i class="fa-solid fa-diamond-turn-right"></i> NAVIGATE TO PATIENT SCENE (MAPS)
+              </a>
+            </div>
+
+            <!-- Waypoint 2: Destination Trauma Hospital -->
+            <div style="background:#131d31;border:1px solid #10b981;border-radius:6px;padding:10px;">
+              <div style="display:flex;justify-content:space-between;align-items:center;">
+                <span style="font-size:11px;font-weight:800;color:#34d399;">
+                  <i class="fa-solid fa-hospital"></i> WAYPOINT 2: DESTINATION HOSPITAL
+                </span>
+                <span style="font-size:10px;color:#94a3b8;font-family:monospace;">${hospLat.toFixed(4)}, ${hospLng.toFixed(4)}</span>
+              </div>
+              <div style="font-size:11px;color:#f8fafc;font-weight:700;margin-top:4px;">
+                ${esc(hospName)} (Level-${a.hospitalTraumaLevel || 1} Trauma Center)
+              </div>
+              <div style="font-size:10px;color:#94a3b8;margin-top:2px;">
+                ${esc(hospAddress)} • Emergency Phone: ${esc(a.hospitalPhone || '+91 20 2612 0000')}
+              </div>
+              <a href="${hospMapUrl}" target="_blank" class="btn-action" style="background:#059669;color:#fff;text-decoration:none;display:flex;align-items:center;justify-content:center;gap:6px;margin-top:8px;padding:8px;border-radius:5px;font-size:11px;font-weight:700;">
+                <i class="fa-solid fa-hospital-user"></i> NAVIGATE TO HOSPITAL TRAUMA BAY (MAPS)
+              </a>
             </div>
           </div>
 
-          <a href="${a.mapUrl}" target="_blank" class="btn-action btn-nav">
-            <i class="fa-solid fa-diamond-turn-right"></i> START GOOGLE MAPS NAVIGATION
-          </a>
+          <!-- Interactive 2-Leg Map Container -->
+          <div id="${mapId}" style="width:100%;height:180px;border-radius:8px;margin-top:12px;border:1px solid #1e293b;background:#050b14;"></div>
 
-          <div class="btn-group">
+          <div class="btn-group" style="margin-top:14px;">
             ${!isAccepted ? `
               <button class="btn-action btn-accept" onclick="acceptDispatch('${a.incidentId}')">
                 <i class="fa-solid fa-circle-check"></i> ACCEPT DISPATCH
@@ -396,6 +440,41 @@
           </div>
         </div>`;
       }).join('');
+
+      // Initialize Leaflet mini maps for each active alert
+      setTimeout(() => {
+        alerts.forEach((a, idx) => {
+          const mapId = `ambMap_${idx}`;
+          const el = document.getElementById(mapId);
+          if (!el || el._leaflet_id) return;
+
+          const sLat = a.accidentLatitude || 18.5308;
+          const sLng = a.accidentLongitude || 73.8290;
+          const hLat = a.hospitalLatitude || 18.5280;
+          const hLng = a.hospitalLongitude || 73.8720;
+
+          try {
+            const map = L.map(mapId, { zoomControl: false, attributionControl: false }).setView([sLat, sLng], 13);
+            L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', { maxZoom: 19 }).addTo(map);
+
+            // Scene Marker (Red)
+            L.circleMarker([sLat, sLng], { radius: 8, fillColor: '#ef4444', color: '#fff', weight: 2, fillOpacity: 0.9 })
+              .addTo(map).bindPopup('<b>📍 Patient Scene</b><br>' + sLat.toFixed(4) + ', ' + sLng.toFixed(4));
+
+            // Hospital Marker (Green)
+            L.circleMarker([hLat, hLng], { radius: 8, fillColor: '#10b981', color: '#fff', weight: 2, fillOpacity: 0.9 })
+              .addTo(map).bindPopup('<b>🏥 Destination Hospital</b><br>' + (a.destinationHospital || 'Trauma Center'));
+
+            // Route Polyline
+            L.polyline([[sLat, sLng], [hLat, hLng]], { color: '#38bdf8', weight: 3, dashArray: '6, 6' }).addTo(map);
+
+            const bounds = L.latLngBounds([[sLat, sLng], [hLat, hLng]]);
+            map.fitBounds(bounds, { padding: [20, 20] });
+          } catch (e) {
+            console.warn('Leaflet init warning:', e);
+          }
+        });
+      }, 100);
     }
 
     async function acceptDispatch(id) {
