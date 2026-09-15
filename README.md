@@ -255,6 +255,55 @@ When the hospital ED clicks **"ACKNOWLEDGE ALERT & PREP TRAUMA BAY"**, the patie
 
 ---
 
+🏗️ SYSTEM ARCHITECTURE
+                           RESQNET
+                              │
+              ┌───────────────┼────────────────┐
+              │               │                │
+              ▼               ▼                ▼
+        📱 ANDROID         📷 CCTV          🆘 SOS
+        SENSOR / GPS      YOLOv8          CITIZEN
+              │               │                │
+              └───────────────┼────────────────┘
+                              ▼
+                   INCIDENT INGESTION
+                              │
+                              ▼
+                ┌─────────────────────────┐
+                │     RESQNET BACKEND     │
+                │                         │
+                │ Authentication          │
+                │ Authorization           │
+                │ Incident Processing     │
+                │ Resource Selection      │
+                │ Severity / Priority     │
+                │ Alert Delivery          │
+                │ Dispatch State Machine  │
+                │ Routing / ETA           │
+                │ Socket.IO               │
+                │ Persistence             │
+                └────────────┬────────────┘
+                             │
+                    HTTPS / WebSocket
+                             │
+           ┌─────────────────┼──────────────────┐
+           │                 │                  │
+           ▼                 ▼                  ▼
+     👤 USER             🚑 AMBULANCE       🏥 HOSPITAL
+      PORTAL              OPERATIONS         TRAUMA PORTAL
+           │                 │                  │
+           └─────────────────┼──────────────────┘
+                             │
+                             ▼
+                  🧠 COMMAND CENTER
+                             │
+                ┌────────────┼────────────┐
+                ▼            ▼            ▼
+             Incidents    Ambulances   Hospitals
+                │
+                ▼
+           Live Map + Timeline
+
 ## 🛠️ Project Setup & Installation
 
 ### 1. Backend & Command Center (Node.js)
