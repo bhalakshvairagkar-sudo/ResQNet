@@ -245,16 +245,40 @@
       <option value="global_emergency01|Global@RQN26#">14. Global Multispeciality Hospital, Dighi</option>
       <option value="ycm_emergency01|YCM@RQN26!">15. YCM Hospital, Pimpri (Major Public Hospital)</option>
     </select>
+
+    <div style="font-weight:800;color:#ef4444;margin-top:10px;margin-bottom:6px;display:flex;align-items:center;gap:6px;">
+      <i class="fa-solid fa-truck-medical"></i> QUICK PUNE AMBULANCE FLEET LOGIN (7 UNITS)
+    </div>
+    <select id="quickAmbSelect" class="input-box" style="padding:7px 10px;font-size:11px;margin-bottom:8px;background:#030712;color:#f8fafc;border-color:#334155;" onchange="fillAmbCredentials(this.value)">
+      <option value="">-- Select an Ambulance Unit to Auto-Fill --</option>
+      <option value="ambulance1|Amb01@RQN26!">AMB-01: Shivajinagar Hub (ALS Tier-1) — ambulance1</option>
+      <option value="ambulance2|Amb02@RQN26!">AMB-02: Swargate Central (ALS Tier-1) — ambulance2</option>
+      <option value="ambulance3|Amb03@RQN26!">AMB-03: Pune Station Base (BLS Standard) — ambulance3</option>
+      <option value="ambulance4|Amb04@RQN26!">AMB-04: Kothrud Depot (ALS Tier-1) — ambulance4</option>
+      <option value="ambulance5|Amb05@RQN26!">AMB-05: Aundh Smart Point (ALS Tier-1) — ambulance5</option>
+      <option value="ambulance6|Amb06@RQN26!">AMB-06: Hadapsar Rapid Hub (ALS Tier-1) — ambulance6</option>
+      <option value="ambulance7|Amb07@RQN26!">AMB-07: Hinjewadi IT Depot (ALS Tier-1) — ambulance7</option>
+    </select>
+
     <div style="font-size:10px;color:#94a3b8;line-height:1.4;">
       <b>Other Portal Logins:</b><br>
       • Command Center Dispatch: <code>operator</code> / <code>configurable-demo-password</code><br>
-      • Field Ambulance Fleet: <code>ambulance1</code> to <code>ambulance5</code>
+      • Field Ambulance Fleet: <code>ambulance1</code> to <code>ambulance7</code> / Pass: <code>Amb01@RQN26!</code> ... <code>Amb07@RQN26!</code>
     </div>
   </div>
 </div>
 
 <script>
   function fillHospCredentials(val) {
+    if (!val) return;
+    const [u, p] = val.split('|');
+    setTab('login');
+    const uInput = document.querySelector('#formLogin input[name="username"]');
+    const pInput = document.querySelector('#formLogin input[name="password"]');
+    if (uInput) uInput.value = u;
+    if (pInput) pInput.value = p;
+  }
+  function fillAmbCredentials(val) {
     if (!val) return;
     const [u, p] = val.split('|');
     setTab('login');

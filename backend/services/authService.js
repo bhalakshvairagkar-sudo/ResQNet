@@ -19,12 +19,22 @@ const hospitalDemoUsers = [
   { username: 'ycm_emergency01', password: 'YCM@RQN26!', role: 'HOSPITAL', resourceId: 'HOSP-15', fullName: 'YCM Hospital, Pimpri' }
 ];
 
+const ambulanceDemoUsers = [
+  { resourceId: 'AMB-01', usernames: ['ambulance1', 'amb-01', 'amb01', 'amb_shivajinagar'], password: 'Amb01@RQN26!', role: 'AMBULANCE', fullName: 'Ambulance Unit 01 – Shivajinagar Hub (ALS)', station: 'Shivajinagar Hub', type: 'ALS' },
+  { resourceId: 'AMB-02', usernames: ['ambulance2', 'amb-02', 'amb02', 'amb_swargate'], password: 'Amb02@RQN26!', role: 'AMBULANCE', fullName: 'Ambulance Unit 02 – Swargate Central (ALS)', station: 'Swargate Central', type: 'ALS' },
+  { resourceId: 'AMB-03', usernames: ['ambulance3', 'amb-03', 'amb03', 'amb_punestation'], password: 'Amb03@RQN26!', role: 'AMBULANCE', fullName: 'Ambulance Unit 03 – Pune Station Base (BLS)', station: 'Pune Station Base', type: 'BLS' },
+  { resourceId: 'AMB-04', usernames: ['ambulance4', 'amb-04', 'amb04', 'amb_kothrud'], password: 'Amb04@RQN26!', role: 'AMBULANCE', fullName: 'Ambulance Unit 04 – Kothrud Depot (ALS)', station: 'Kothrud Depot', type: 'ALS' },
+  { resourceId: 'AMB-05', usernames: ['ambulance5', 'amb-05', 'amb05', 'amb_aundh'], password: 'Amb05@RQN26!', role: 'AMBULANCE', fullName: 'Ambulance Unit 05 – Aundh Smart Point (ALS)', station: 'Aundh Smart Point', type: 'ALS' },
+  { resourceId: 'AMB-06', usernames: ['ambulance6', 'amb-06', 'amb06', 'amb_hadapsar'], password: 'Amb06@RQN26!', role: 'AMBULANCE', fullName: 'Ambulance Unit 06 – Hadapsar Rapid Hub (ALS)', station: 'Hadapsar Rapid Hub', type: 'ALS' },
+  { resourceId: 'AMB-07', usernames: ['ambulance7', 'amb-07', 'amb07', 'amb_hinjewadi'], password: 'Amb07@RQN26!', role: 'AMBULANCE', fullName: 'Ambulance Unit 07 – Hinjewadi IT Depot (ALS)', station: 'Hinjewadi IT Depot', type: 'ALS' }
+];
+
 // Demo credentials for quick out-of-the-box evaluations and automated test backwards compatibility
 const password = process.env.DEMO_PASSWORD || 'configurable-demo-password';
 const demoUsers = [
   { username: process.env.COMMAND_CENTER_USER || 'operator', role: 'COMMAND_CENTER', fullName: 'Emergency Operations Command' },
   { username: process.env.USER_DEMO_USER || 'user1', role: 'USER', resourceId: process.env.USER_DEMO_USER || 'user1', fullName: 'Demo Citizen' },
-  ...['1', '2', '3', '4', '5'].map(n => ({ username: `ambulance${n}`, role: 'AMBULANCE', resourceId: `AMB-${n.padStart(2, '0')}`, fullName: `Ambulance Unit ${n}` })),
+  ...['1', '2', '3', '4', '5', '6', '7'].map(n => ({ username: `ambulance${n}`, role: 'AMBULANCE', resourceId: `AMB-${n.padStart(2, '0')}`, fullName: `Ambulance Unit ${n}` })),
   ...['1', '2', '3', '4', '5', '6', '7', '8', '9', '10', '11', '12', '13', '14', '15'].map(n => ({ username: `hospital${n}`, role: 'HOSPITAL', resourceId: `HOSP-${n.padStart(2, '0')}`, fullName: `Trauma Center ${n}` }))
 ];
 
@@ -58,7 +68,9 @@ async function register(userData) {
   }
 
   // Check demo accounts collision
-  const existingDemo = demoUsers.find(u => u.username === username) || hospitalDemoUsers.find(u => u.username === username);
+  const existingDemo = demoUsers.find(u => u.username === username) || 
+                       hospitalDemoUsers.find(u => u.username === username) ||
+                       ambulanceDemoUsers.find(u => u.usernames.includes(username));
   if (existingDemo) {
     throw new Error(`Username "${username}" is reserved by the system.`);
   }
@@ -160,7 +172,27 @@ async function login(username, suppliedPassword) {
     }
   }
 
-  // 3. Backward Compatibility with generic Demo Accounts
+  // 3. Check 7 Pune Ambulance Fleet Demo Credentials
+  const ambUser = ambulanceDemoUsers.find(u => u.usernames.map(x => x.toLowerCase()).includes(cleanUsername));
+  if (ambUser) {
+    if (cleanPass === ambUser.password || cleanPass === password || cleanPass === 'Ambulance@2026' || cleanPass === 'resqnet2026') {
+      const token = crypto.randomBytes(32).toString('hex');
+      const session = {
+        id: ambUser.resourceId,
+        username: cleanUsername,
+        fullName: ambUser.fullName,
+        role: 'AMBULANCE',
+        resourceId: ambUser.resourceId,
+        hasCompletedMedicalProfile: true,
+        token,
+        createdAt: new Date().toISOString()
+      };
+      sessions.set(token, session);
+      return session;
+    }
+  }
+
+  // 4. Backward Compatibility with generic Demo Accounts
   const demoUser = demoUsers.find(u => u.username === cleanUsername);
   if (demoUser) {
     const suppliedHash = crypto.createHash('sha256').update(cleanPass).digest();
@@ -232,6 +264,8 @@ module.exports = {
   revoke,
   getToken,
   socketSession,
-  hashPassword
+  hashPassword,
+  hospitalDemoUsers,
+  ambulanceDemoUsers
 };
 
