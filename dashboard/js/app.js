@@ -1,4 +1,4 @@
-/* ============ RESQNET COMMAND CENTER — PHASE 12A MULTI-MAP ============ */
+/* ============ RESQNET COMMAND CENTER — LEAFLET MULTI-MAP & OSRM ENGINE ============ */
 const CFG = window.RESQNET_CONFIG || {};
 const BACKEND_URL = CFG.BACKEND_URL || window.location.origin;
 const API = BACKEND_URL + "/api";
@@ -8,7 +8,7 @@ const sessionToken = localStorage.getItem("resqnetToken");
 const sessionUser = (() => { try { return JSON.parse(localStorage.getItem("resqnetUser") || "null"); } catch (_) { return null; } })();
 const authHeaders = () => ({ "Content-Type": "application/json", Authorization: `Bearer ${sessionToken}` });
 
-/* ---------- MAP PROVIDER / TILE ARCHITECTURE (12A.1 & 12A.2) ---------- */
+/* ---------- MAP PROVIDER / TILE ARCHITECTURE ---------- */
 const MAP_PROVIDERS = {
   dark: {
     name: "Dark Matter (Night)",
@@ -117,183 +117,75 @@ function haversine(a, b) {
 }
 const maskPhone = (p) => (p ? String(p).slice(0, 3) + "•••••" + String(p).slice(-2) : null);
 
-/* ---------- GOOGLE MAPS PLATFORM & OVERLAY ARCHITECTURE ---------- */
-let map = null;
-let googleTrafficLayer = null;
-let activeInfoWindow = null;
-const incMarkers = {}, ambMarkers = {}, hospMarkers = {}, cctvMarkers = {};
-const fovPolygons = {}, hotspotCircles = {}, trafficPolylines = [];
-let routePolylines = [];
+/* ---------- MAP & LAYER MANAGEMENT ---------- */
+let map = null, currentBaseLayer = null, currentOverlayLayer = null;
+let L_inc, L_resolved, L_amb, L_hosp, L_route, L_cctv, L_cctvFov, L_hotspots, L_traffic;
+const incMarkers = {}, ambMarkers = {}, hospMarkers = {}, cctvMarkers = {}, fovLayers = {}, hotspotCircles = {};
+const trafficPolylines = [];
 let testMapTarget = null;
 
-const GOOGLE_DARK_STYLE = [
-  { elementType: "geometry", stylers: [{ color: "#0b101b" }] },
-  { elementType: "labels.text.stroke", stylers: [{ color: "#0b101b" }] },
-  { elementType: "labels.text.fill", stylers: [{ color: "#8fa0b8" }] },
-  { featureType: "administrative.locality", elementType: "labels.text.fill", stylers: [{ color: "#38bdf8" }] },
-  { featureType: "poi", elementType: "labels.text.fill", stylers: [{ color: "#475569" }] },
-  { featureType: "poi.park", elementType: "geometry", stylers: [{ color: "#0f172a" }] },
-  { featureType: "poi.park", elementType: "labels.text.fill", stylers: [{ color: "#334155" }] },
-  { featureType: "road", elementType: "geometry", stylers: [{ color: "#1e293b" }] },
-  { featureType: "road", elementType: "geometry.stroke", stylers: [{ color: "#0f172a" }] },
-  { featureType: "road", elementType: "labels.text.fill", stylers: [{ color: "#94a3b8" }] },
-  { featureType: "road.highway", elementType: "geometry", stylers: [{ color: "#334155" }] },
-  { featureType: "road.highway", elementType: "geometry.stroke", stylers: [{ color: "#1e293b" }] },
-  { featureType: "road.highway", elementType: "labels.text.fill", stylers: [{ color: "#cbd5e1" }] },
-  { featureType: "transit", elementType: "geometry", stylers: [{ color: "#1e293b" }] },
-  { featureType: "transit.station", elementType: "labels.text.fill", stylers: [{ color: "#38bdf8" }] },
-  { featureType: "water", elementType: "geometry", stylers: [{ color: "#060a12" }] },
-  { featureType: "water", elementType: "labels.text.fill", stylers: [{ color: "#1e293b" }] },
-  { featureType: "water", elementType: "labels.text.stroke", stylers: [{ color: "#060a12" }] }
-];
-
-/* Custom HTML overlay marker using Google Maps OverlayView */
-class CustomHtmlOverlay {
-  constructor(position, htmlContent, onClick, className = "") {
-    this.lat = Number(position.lat || position[0]);
-    this.lng = Number(position.lng || position[1]);
-    this.htmlContent = htmlContent;
-    this.onClick = onClick;
-    this.className = className;
-    this.div = null;
-    this.visible = true;
-    this.overlayView = null;
-    this.initOverlay();
-  }
-
-  initOverlay() {
-    if (!window.google || !window.google.maps || !map) return;
-    const self = this;
-    class InternalOverlay extends google.maps.OverlayView {
-      onAdd() {
-        self.div = document.createElement("div");
-        self.div.className = "custom-map-overlay " + self.className;
-        self.div.innerHTML = self.htmlContent;
-        if (self.onClick) {
-          self.div.addEventListener("click", (e) => {
-            e.stopPropagation();
-            self.onClick();
-          });
-        }
-        const panes = this.getPanes();
-        panes.overlayMouseTarget.appendChild(self.div);
-      }
-      draw() {
-        const projection = this.getProjection();
-        if (!projection || !self.div) return;
-        const pos = new google.maps.LatLng(self.lat, self.lng);
-        const point = projection.fromLatLngToDivPixel(pos);
-        if (point) {
-          self.div.style.left = point.x + "px";
-          self.div.style.top = point.y + "px";
-          self.div.style.display = self.visible ? "block" : "none";
-        }
-      }
-      onRemove() {
-        if (self.div && self.div.parentNode) {
-          self.div.parentNode.removeChild(self.div);
-          self.div = null;
-        }
-      }
-    }
-    this.overlayView = new InternalOverlay();
-    this.overlayView.setMap(map);
-  }
-
-  setPosition(lat, lng) {
-    this.lat = Number(lat);
-    this.lng = Number(lng);
-    if (this.overlayView) this.overlayView.draw();
-  }
-
-  setContent(html) {
-    this.htmlContent = html;
-    if (this.div) this.div.innerHTML = html;
-  }
-
-  setVisible(vis) {
-    this.visible = vis;
-    if (this.div) this.div.style.display = vis ? "block" : "none";
-  }
-
-  remove() {
-    if (this.overlayView) {
-      this.overlayView.setMap(null);
-      this.overlayView = null;
-    }
-  }
-}
-
-function showInfoWindow(lat, lng, html) {
-  if (!map || !window.google || !window.google.maps) return;
-  if (activeInfoWindow) activeInfoWindow.close();
-  activeInfoWindow = new google.maps.InfoWindow({
-    content: `<div class="gmap-infowindow">${html}</div>`,
-    position: { lat: Number(lat), lng: Number(lng) }
-  });
-  activeInfoWindow.open(map);
-}
-
 function setMapStyle(styleKey) {
+  if (!map) return;
+  const provider = MAP_PROVIDERS[styleKey] || MAP_PROVIDERS.dark;
   state.mapStyle = styleKey;
   localStorage.setItem("resqnet_map_style", styleKey);
+
   if ($("mapStyleSelect")) $("mapStyleSelect").value = styleKey;
 
-  if (!map || !window.google || !window.google.maps) return;
-  if (styleKey === "dark") {
-    map.setMapTypeId("roadmap");
-    map.setOptions({ styles: GOOGLE_DARK_STYLE });
-  } else if (styleKey === "roadmap" || styleKey === "standard" || styleKey === "light") {
-    map.setMapTypeId("roadmap");
-    map.setOptions({ styles: [] });
-  } else if (styleKey === "satellite") {
-    map.setMapTypeId("satellite");
-    map.setOptions({ styles: [] });
-  } else if (styleKey === "hybrid") {
-    map.setMapTypeId("hybrid");
-    map.setOptions({ styles: [] });
-  } else if (styleKey === "terrain") {
-    map.setMapTypeId("terrain");
-    map.setOptions({ styles: [] });
+  if (currentBaseLayer) { map.removeLayer(currentBaseLayer); currentBaseLayer = null; }
+  if (currentOverlayLayer) { map.removeLayer(currentOverlayLayer); currentOverlayLayer = null; }
+
+  const errorBanner = $("mapTileErrorBanner");
+
+  currentBaseLayer = L.tileLayer(provider.url, {
+    attribution: provider.attribution,
+    maxZoom: provider.maxZoom || 19,
+    subdomains: provider.subdomains || "abc"
+  });
+
+  currentBaseLayer.on("tileerror", () => {
+    if (errorBanner) errorBanner.style.display = "flex";
+  });
+  currentBaseLayer.on("load", () => {
+    if (errorBanner) errorBanner.style.display = "none";
+  });
+
+  currentBaseLayer.addTo(map);
+
+  if (provider.overlayUrl) {
+    currentOverlayLayer = L.tileLayer(provider.overlayUrl, {
+      subdomains: provider.subdomains || "abcd",
+      maxZoom: provider.maxZoom || 19,
+      pane: "overlayPane"
+    }).addTo(map);
   }
 }
 
 function initMap() {
-  const checkGoogle = () => {
-    if (window.google && window.google.maps) {
-      startGoogleMap();
-    } else {
-      setTimeout(checkGoogle, 100);
-    }
-  };
-  checkGoogle();
-}
-
-function startGoogleMap() {
   const mapEl = $("map");
   if (!mapEl || map) return;
 
-  map = new google.maps.Map(mapEl, {
-    center: { lat: CENTER[0], lng: CENTER[1] },
-    zoom: CFG.DEFAULT_ZOOM || 13,
-    disableDefaultUI: true,
-    zoomControl: true,
-    zoomControlOptions: { position: google.maps.ControlPosition.LEFT_BOTTOM },
-    backgroundColor: "#0b101b"
-  });
+  map = L.map("map", { zoomControl: false, preferCanvas: true }).setView(CENTER, CFG.DEFAULT_ZOOM || 13);
+  L.control.zoom({ position: "bottomleft" }).addTo(map);
 
   setMapStyle(state.mapStyle);
 
-  googleTrafficLayer = new google.maps.TrafficLayer();
-  if (state.layers.traffic) {
-    googleTrafficLayer.setMap(map);
-  }
+  // Operational layer groups
+  L_traffic = L.layerGroup();
+  L_hotspots = L.layerGroup().addTo(map);
+  L_cctvFov = L.layerGroup().addTo(map);
+  L_cctv = L.layerGroup().addTo(map);
+  L_route = L.layerGroup().addTo(map);
+  L_hosp = L.layerGroup().addTo(map);
+  L_amb = L.layerGroup().addTo(map);
+  L_resolved = L.layerGroup();
+  L_inc = L.layerGroup().addTo(map);
 
-  map.addListener("click", (e) => {
+  map.on("click", (event) => {
     if (!testMapTarget) return;
-    const lat = e.latLng.lat(), lng = e.latLng.lng();
-    setTestCoordinates(testMapTarget, lat, lng);
-    $("testModeResult").textContent = `${testMapTarget === "inc" ? "Accident" : testMapTarget === "amb" ? "Ambulance" : "Hospital"} coordinates set from map click.`;
+    setTestCoordinates(testMapTarget, event.latlng.lat, event.latlng.lng);
+    const resEl = $("testModeResult");
+    if (resEl) resEl.textContent = `${testMapTarget === "inc" ? "Accident" : testMapTarget === "amb" ? "Ambulance" : "Hospital"} coordinates set from map click.`;
     testMapTarget = null;
   });
 
@@ -302,35 +194,59 @@ function startGoogleMap() {
 }
 
 /* ---------- MARKER FACTORIES ---------- */
-function makeIncHtml(sev, selected, resolved) {
+function makeIncIcon(sev, selected, resolved) {
   const b = band(sev);
   const isCrit = b.k === "critical";
   const sevKey = b.k || "medium";
 
-  return `<div class="inc-marker sev-${sevKey} ${selected ? "sel" : ""} ${resolved ? "resolved" : ""}">
-    ${isCrit && !resolved ? `<div class="ring"></div>` : ""}
-    <div class="core">${resolved ? "✓" : (sev !== null ? Math.min(99, Math.round(sev)) : "!")}</div>
-  </div>`;
+  return L.divIcon({
+    className: "custom-map-icon",
+    html: `<div class="inc-marker sev-${sevKey} ${selected ? "sel" : ""} ${resolved ? "resolved" : ""}">
+      ${isCrit && !resolved ? `<div class="ring"></div>` : ""}
+      <div class="core">${resolved ? "✓" : (sev !== null ? Math.min(99, Math.round(sev)) : "!")}</div>
+    </div>`,
+    iconSize: [34, 34],
+    iconAnchor: [17, 17],
+    popupAnchor: [0, -18]
+  });
 }
 
-function makeAmbHtml(status, sel) {
+function makeAmbIcon(status, sel) {
   const s = String(status || "available").toLowerCase();
-  return `<div class="amb-marker ${s} ${sel ? "sel" : ""}"><i class="fa-solid fa-truck-medical"></i></div>`;
+  return L.divIcon({
+    className: "custom-map-icon",
+    html: `<div class="amb-marker ${s} ${sel ? "sel" : ""}"><i class="fa-solid fa-truck-medical"></i></div>`,
+    iconSize: [30, 30],
+    iconAnchor: [15, 15],
+    popupAnchor: [0, -16]
+  });
 }
 
-function makeHospHtml(capacity, trauma, sel) {
+function makeHospIcon(capacity, trauma, sel) {
   const cap = String(capacity || "available").toLowerCase();
-  return `<div class="hosp-marker ${trauma ? "trauma" : ""} ${cap} ${sel ? "sel" : ""}"><i class="fa-solid ${trauma ? "fa-house-medical" : "fa-hospital"}"></i></div>`;
+  return L.divIcon({
+    className: "custom-map-icon",
+    html: `<div class="hosp-marker ${trauma ? "trauma" : ""} ${cap} ${sel ? "sel" : ""}"><i class="fa-solid ${trauma ? "fa-house-medical" : "fa-hospital"}"></i></div>`,
+    iconSize: [30, 30],
+    iconAnchor: [15, 15],
+    popupAnchor: [0, -16]
+  });
 }
 
-function makeCctvHtml(status) {
+function makeCctvIcon(status) {
   const s = String(status || "ONLINE").toLowerCase();
-  return `<div class="cctv-marker ${s}"><i class="fa-solid fa-video"></i></div>`;
+  return L.divIcon({
+    className: "custom-map-icon",
+    html: `<div class="cctv-marker ${s}"><i class="fa-solid fa-video"></i></div>`,
+    iconSize: [26, 26],
+    iconAnchor: [13, 13],
+    popupAnchor: [0, -14]
+  });
 }
 
 /* ---------- CCTV FOV CONE GEOMETRY ---------- */
-function createFovPolygonPoints(lat, lng, headingDeg, fovDeg, radiusMeters) {
-  const points = [{ lat, lng }];
+function createFovPolygon(lat, lng, headingDeg, fovDeg, radiusMeters) {
+  const points = [[lat, lng]];
   const R = 6378137;
   const startAng = (headingDeg - fovDeg / 2) * (Math.PI / 180);
   const endAng = (headingDeg + fovDeg / 2) * (Math.PI / 180);
@@ -340,10 +256,7 @@ function createFovPolygonPoints(lat, lng, headingDeg, fovDeg, radiusMeters) {
     const angle = startAng + (i / steps) * (endAng - startAng);
     const dLat = (radiusMeters * Math.cos(angle)) / R;
     const dLng = (radiusMeters * Math.sin(angle)) / (R * Math.cos((lat * Math.PI) / 180));
-    points.push({
-      lat: lat + (dLat * 180) / Math.PI,
-      lng: lng + (dLng * 180) / Math.PI
-    });
+    points.push([lat + (dLat * 180) / Math.PI, lng + (dLng * 180) / Math.PI]);
   }
   return points;
 }
@@ -374,7 +287,7 @@ async function loadInfrastructure() {
     if (Array.isArray(cams)) {
       cams.forEach((cam) => {
         state.cctv[cam.id] = cam;
-        const pos = { lat: cam.lat, lng: cam.lng };
+        const pos = [cam.lat, cam.lng];
         const popup = `<div class="pop-t" style="color:#38BDF8"><i class="fa-solid fa-video"></i> ${esc(cam.cameraId || cam.id)}</div>
           Name: <b>${esc(cam.cameraName || "Junction Cam")}</b><br/>
           Status: <b>${esc(cam.status)}</b><br/>
@@ -383,26 +296,21 @@ async function loadInfrastructure() {
           <div style="margin-top:8px"><button onclick="openCctvModal('${esc(cam.cameraId || cam.id)}')" style="width:100%;padding:4px 8px;background:#38BDF8;color:#000;border:none;border-radius:4px;font-weight:bold;cursor:pointer;font-size:10px;"><i class="fa-solid fa-play"></i> PREVIEW CAMERA FEED</button></div>`;
 
         if (!cctvMarkers[cam.id]) {
-          cctvMarkers[cam.id] = new CustomHtmlOverlay(pos, makeCctvHtml(cam.status), () => showInfoWindow(cam.lat, cam.lng, popup), "cctv-overlay");
-          cctvMarkers[cam.id].setVisible(state.layers.cctv);
+          cctvMarkers[cam.id] = L.marker(pos, { icon: makeCctvIcon(cam.status) }).bindPopup(popup).addTo(L_cctv);
         } else {
-          cctvMarkers[cam.id].setPosition(cam.lat, cam.lng);
-          cctvMarkers[cam.id].setContent(makeCctvHtml(cam.status));
+          cctvMarkers[cam.id].setLatLng(pos).setIcon(makeCctvIcon(cam.status)).setPopupContent(popup);
         }
 
-        if (cam.fovAngle && cam.heading !== undefined && map && window.google && window.google.maps) {
-          const cone = createFovPolygonPoints(cam.lat, cam.lng, cam.heading, cam.fovAngle, cam.coverageRadiusMeters || 200);
-          if (fovPolygons[cam.id]) fovPolygons[cam.id].setMap(null);
-          fovPolygons[cam.id] = new google.maps.Polygon({
-            paths: cone,
-            strokeColor: "#38BDF8",
-            strokeOpacity: 0.8,
-            strokeWeight: 1,
+        if (cam.fovAngle && cam.heading !== undefined) {
+          const cone = createFovPolygon(cam.lat, cam.lng, cam.heading, cam.fovAngle, cam.coverageRadiusMeters || 200);
+          if (fovLayers[cam.id]) L_cctvFov.removeLayer(fovLayers[cam.id]);
+          fovLayers[cam.id] = L.polygon(cone, {
+            color: "#38BDF8",
+            weight: 1,
+            opacity: 0.8,
             fillColor: "#38BDF8",
-            fillOpacity: 0.12,
-            map: state.layers.cctv ? map : null
-          });
-          fovPolygons[cam.id].addListener("click", () => showInfoWindow(cam.lat, cam.lng, `<b>${esc(cam.cameraId)}</b> Detection Zone`));
+            fillOpacity: 0.12
+          }).bindPopup(`<b>${esc(cam.cameraId)}</b> Detection Zone`).addTo(L_cctvFov);
         }
       });
     }
@@ -410,26 +318,21 @@ async function loadInfrastructure() {
     // 2. Crash Blackspot Hotspots
     const hotRes = await fetch(API + "/fleet/hotspots");
     const hotspots = await hotRes.json();
-    if (Array.isArray(hotspots) && map && window.google && window.google.maps) {
+    if (Array.isArray(hotspots)) {
       state.hotspots = hotspots;
-      Object.values(hotspotCircles).forEach((c) => c.setMap(null));
+      L_hotspots.clearLayers();
       hotspots.forEach((h, idx) => {
-        const circle = new google.maps.Circle({
-          center: { lat: h.lat, lng: h.lng },
+        const circle = L.circle([h.lat, h.lng], {
           radius: h.radiusMeters || 300,
-          strokeColor: "#EF4444",
-          strokeOpacity: 0.8,
-          strokeWeight: 1.5,
+          color: "#EF4444",
+          weight: 1.5,
+          opacity: 0.8,
           fillColor: "#EF4444",
-          fillOpacity: 0.16,
-          map: state.layers.hotspots ? map : null
-        });
-        circle.addListener("click", () => {
-          showInfoWindow(h.lat, h.lng, `<div class="pop-t" style="color:var(--red)"><i class="fa-solid fa-fire"></i> ${esc(h.name)}</div>
-            Risk Score: <b>${h.riskScore}/100</b><br/>
-            Category: <b>${esc(h.category)}</b><br/>
-            Historical Incidents: <b>${h.historicalIncidents}</b>`);
-        });
+          fillOpacity: 0.16
+        }).bindPopup(`<div class="pop-t" style="color:var(--red)"><i class="fa-solid fa-fire"></i> ${esc(h.name)}</div>
+          Risk Score: <b>${h.riskScore}/100</b><br/>
+          Category: <b>${esc(h.category)}</b><br/>
+          Historical Incidents: <b>${h.historicalIncidents}</b>`).addTo(L_hotspots);
         hotspotCircles[h.id || idx] = circle;
       });
     }
@@ -437,23 +340,16 @@ async function loadInfrastructure() {
     // 3. Configured Traffic Context Corridors
     const trafficRes = await fetch(API + "/fleet/traffic");
     const corridors = await trafficRes.json();
-    if (Array.isArray(corridors) && map && window.google && window.google.maps) {
+    if (Array.isArray(corridors)) {
       state.trafficCorridors = corridors;
-      trafficPolylines.forEach((p) => p.setMap(null));
-      trafficPolylines.length = 0;
+      L_traffic.clearLayers();
       corridors.forEach((c) => {
         const color = c.congestionLevel === "MODERATE" ? "#F97316" : "#22C55E";
-        const poly = new google.maps.Polyline({
-          path: c.coordinates.map((pt) => ({ lat: pt[1], lng: pt[0] })),
-          strokeColor: color,
-          strokeOpacity: 0.75,
-          strokeWeight: 4,
-          map: state.layers.traffic ? map : null
-        });
-        poly.addListener("click", () => {
-          const mid = c.coordinates[Math.floor(c.coordinates.length / 2)];
-          showInfoWindow(mid[1], mid[0], `<b>${esc(c.name)}</b><br/>Status: <b>${esc(c.trafficLabel)}</b>`);
-        });
+        const poly = L.polyline(c.coordinates.map((pt) => [pt[1], pt[0]]), {
+          color: color,
+          opacity: 0.75,
+          weight: 4
+        }).bindPopup(`<b>${esc(c.name)}</b><br/>Status: <b>${esc(c.trafficLabel)}</b>`).addTo(L_traffic);
         trafficPolylines.push(poly);
       });
     }
@@ -469,7 +365,7 @@ function updateAmbulance(a) {
   state.ambulances[amb.id] = amb;
   if (num(amb.lat) === null || num(amb.lng) === null) return;
   const sel = state.selectedIncidentId && state.routes[state.selectedIncidentId]?.ambulanceId === amb.id;
-  const pos = { lat: amb.lat, lng: amb.lng };
+  const pos = [amb.lat, amb.lng];
   const popup = `<div class="pop-t" style="color:var(--blue)"><i class="fa-solid fa-truck-medical"></i> ${esc(amb.id)} · ${esc(amb.type || "ALS")}</div>
     <div style="font-size:11px;color:#cbd5e1;margin-top:4px;line-height:1.6;">
       <b>Status:</b> <span class="tag" style="background:${amb.status === 'EN_ROUTE' ? '#c2410c' : '#15803d'};color:#fff;padding:1px 6px;border-radius:3px;font-size:10px;">${esc(String(amb.status || "AVAILABLE").toUpperCase())}</span><br/>
@@ -481,12 +377,9 @@ function updateAmbulance(a) {
     </div>`;
 
   if (ambMarkers[amb.id]) {
-    ambMarkers[amb.id].setPosition(amb.lat, amb.lng);
-    ambMarkers[amb.id].setContent(makeAmbHtml(amb.status, sel));
-    ambMarkers[amb.id].setVisible(state.layers.ambulances);
+    ambMarkers[amb.id].setLatLng(pos).setIcon(makeAmbIcon(amb.status, sel)).setPopupContent(popup);
   } else {
-    ambMarkers[amb.id] = new CustomHtmlOverlay(pos, makeAmbHtml(amb.status, sel), () => showInfoWindow(amb.lat, amb.lng, popup), "amb-overlay");
-    ambMarkers[amb.id].setVisible(state.layers.ambulances);
+    ambMarkers[amb.id] = L.marker(pos, { icon: makeAmbIcon(amb.status, sel) }).bindPopup(popup).addTo(L_amb);
   }
   renderKPIs();
 }
@@ -497,7 +390,7 @@ function updateHospital(h) {
   const hh = state.hospitals[h.id];
   if (num(hh.lat) === null || num(hh.lng) === null) return;
   const sel = state.selectedIncidentId && state.routes[state.selectedIncidentId]?.hospitalId === hh.id;
-  const pos = { lat: hh.lat, lng: hh.lng };
+  const pos = [hh.lat, hh.lng];
   const popup = `<div class="pop-t" style="color:var(--green)"><i class="fa-solid fa-hospital"></i> ${esc(hh.name)}</div>
     <div style="font-size:11px;color:#cbd5e1;margin-top:4px;line-height:1.6;">
       <b>Role:</b> <span>${sel ? "<b style='color:#38bdf8;'>SELECTED DESTINATION TRAUMA CENTER</b>" : "REGIONAL TRAUMA CENTER"}</span><br/>
@@ -511,21 +404,19 @@ function updateHospital(h) {
     </div>`;
 
   if (hospMarkers[hh.id]) {
-    hospMarkers[hh.id].setPosition(hh.lat, hh.lng);
-    hospMarkers[hh.id].setContent(makeHospHtml(hh.capacity, hh.trauma, sel));
-    hospMarkers[hh.id].setVisible(state.layers.hospitals);
+    hospMarkers[hh.id].setLatLng(pos).setIcon(makeHospIcon(hh.capacity, hh.trauma, sel)).setPopupContent(popup);
   } else {
-    hospMarkers[hh.id] = new CustomHtmlOverlay(pos, makeHospHtml(hh.capacity, hh.trauma, sel), () => showInfoWindow(hh.lat, hh.lng, popup), "hosp-overlay");
-    hospMarkers[hh.id].setVisible(state.layers.hospitals);
+    hospMarkers[hh.id] = L.marker(pos, { icon: makeHospIcon(hh.capacity, hh.trauma, sel) }).bindPopup(popup).addTo(L_hosp);
   }
   renderKPIs();
 }
 
-/* ---------- INCIDENT RENDERING & HONEST POPUPS (12A.5) ---------- */
+/* ---------- INCIDENT RENDERING & HONEST POPUPS ---------- */
 function upsertIncidentMarker(inc) {
   if (num(inc.latitude) === null || num(inc.longitude) === null) {
     if (incMarkers[inc._id]) {
-      incMarkers[inc._id].remove();
+      L_inc.removeLayer(incMarkers[inc._id]);
+      L_resolved.removeLayer(incMarkers[inc._id]);
       delete incMarkers[inc._id];
     }
     return;
@@ -533,8 +424,8 @@ function upsertIncidentMarker(inc) {
 
   const isResolved = inc.status === "RESOLVED";
   const isSelected = state.selectedIncidentId === inc._id;
-  const html = makeIncHtml(inc.severity, isSelected, isResolved);
-  const pos = { lat: inc.latitude, lng: inc.longitude };
+  const icon = makeIncIcon(inc.severity, isSelected, isResolved);
+  const pos = [inc.latitude, inc.longitude];
 
   const popup = `<div class="pop-t" style="color:${band(inc.severity).color}">
       ${isResolved ? "✓ RESOLVED" : "🚨 EMERGENCY"} · ${esc(inc.id || inc.incidentId || shortId(inc._id))}
@@ -551,19 +442,27 @@ function upsertIncidentMarker(inc) {
     Destination: <b>${esc(inc.assignedHospital || "None")}</b>`;
 
   if (incMarkers[inc._id]) {
-    incMarkers[inc._id].setPosition(inc.latitude, inc.longitude);
-    incMarkers[inc._id].setContent(html);
-    incMarkers[inc._id].setVisible(state.layers.incidents && (!isResolved || state.layers.incidents));
+    incMarkers[inc._id].setLatLng(pos).setIcon(icon).setPopupContent(popup);
+    if (isResolved) {
+      L_inc.removeLayer(incMarkers[inc._id]);
+      if (state.layers.incidents) L_resolved.addTo(map);
+    } else {
+      L_resolved.removeLayer(incMarkers[inc._id]);
+      if (state.layers.incidents) incMarkers[inc._id].addTo(L_inc);
+    }
   } else {
-    incMarkers[inc._id] = new CustomHtmlOverlay(pos, html, () => {
-      selectIncident(inc._id);
-      showInfoWindow(inc.latitude, inc.longitude, popup);
-    }, "inc-overlay");
-    incMarkers[inc._id].setVisible(state.layers.incidents);
+    const m = L.marker(pos, { icon }).bindPopup(popup);
+    m.on("click", () => selectIncident(inc._id));
+    if (isResolved) {
+      m.addTo(L_resolved);
+    } else {
+      m.addTo(L_inc);
+    }
+    incMarkers[inc._id] = m;
   }
 }
 
-/* ---------- FOCUS INCIDENT & VIEW CONTROLS (12A.3 & 12A.15) ---------- */
+/* ---------- FOCUS INCIDENT & VIEW CONTROLS ---------- */
 function focusIncident(id) {
   const targetId = id || state.selectedIncidentId;
   const inc = state.incidents[targetId];
@@ -571,63 +470,52 @@ function focusIncident(id) {
     return toast("NO GPS POSITION", "Selected incident has unavailable GPS coordinates.", "info");
   }
 
-  if (!map || !window.google || !window.google.maps) return;
-  const bounds = new google.maps.LatLngBounds();
-  bounds.extend(new google.maps.LatLng(inc.latitude, inc.longitude));
+  if (!map) return;
+  const pts = [[inc.latitude, inc.longitude]];
 
   const r = state.routes[targetId];
   if (r) {
     if (r.ambulanceId && state.ambulances[r.ambulanceId]) {
       const a = state.ambulances[r.ambulanceId];
-      if (a.lat && a.lng) bounds.extend(new google.maps.LatLng(a.lat, a.lng));
+      if (a.lat && a.lng) pts.push([a.lat, a.lng]);
     }
     if (r.hospitalId && state.hospitals[r.hospitalId]) {
       const h = state.hospitals[r.hospitalId];
-      if (h.lat && h.lng) bounds.extend(new google.maps.LatLng(h.lat, h.lng));
+      if (h.lat && h.lng) pts.push([h.lat, h.lng]);
     }
     if (r.coords && r.coords.length > 0) {
-      r.coords.forEach((pt) => bounds.extend(new google.maps.LatLng(pt[0], pt[1])));
+      r.coords.forEach((pt) => pts.push([pt[0], pt[1]]));
     }
   }
 
-  map.fitBounds(bounds, { top: 60, right: 60, bottom: 60, left: 60 });
+  if (pts.length === 1) {
+    map.setView(pts[0], 15);
+  } else {
+    map.fitBounds(L.latLngBounds(pts).pad(0.2));
+  }
 }
 
 function fitAll() {
-  if (!map || !window.google || !window.google.maps) return;
-  const bounds = new google.maps.LatLngBounds();
-  let count = 0;
+  if (!map) return;
+  const layers = [];
+  L_inc.eachLayer((l) => layers.push(l));
+  L_amb.eachLayer((l) => layers.push(l));
+  L_hosp.eachLayer((l) => layers.push(l));
+  L_cctv.eachLayer((l) => layers.push(l));
 
-  Object.values(state.incidents).forEach((i) => {
-    if (i.latitude && i.longitude) { bounds.extend(new google.maps.LatLng(i.latitude, i.longitude)); count++; }
-  });
-  Object.values(state.ambulances).forEach((a) => {
-    if (a.lat && a.lng) { bounds.extend(new google.maps.LatLng(a.lat, a.lng)); count++; }
-  });
-  Object.values(state.hospitals).forEach((h) => {
-    if (h.lat && h.lng) { bounds.extend(new google.maps.LatLng(h.lat, h.lng)); count++; }
-  });
-  Object.values(state.cctv).forEach((c) => {
-    if (c.lat && c.lng) { bounds.extend(new google.maps.LatLng(c.lat, c.lng)); count++; }
-  });
-
-  if (!count) {
-    map.setCenter({ lat: CENTER[0], lng: CENTER[1] });
-    map.setZoom(CFG.DEFAULT_ZOOM || 13);
+  if (!layers.length) {
+    map.setView(CENTER, CFG.DEFAULT_ZOOM || 13);
     return;
   }
-  map.fitBounds(bounds, { top: 50, right: 50, bottom: 50, left: 50 });
+  map.fitBounds(L.featureGroup(layers).getBounds().pad(0.15));
 }
 
 function fitFleet() {
-  if (!map || !window.google || !window.google.maps) return;
-  const bounds = new google.maps.LatLngBounds();
-  let count = 0;
-  Object.values(state.ambulances).forEach((a) => {
-    if (a.lat && a.lng) { bounds.extend(new google.maps.LatLng(a.lat, a.lng)); count++; }
-  });
-  if (!count) return toast("NO AMBULANCES", "No ambulances on map.", "info");
-  map.fitBounds(bounds, { top: 60, right: 60, bottom: 60, left: 60 });
+  if (!map) return;
+  const layers = [];
+  L_amb.eachLayer((l) => layers.push(l));
+  if (!layers.length) return toast("NO AMBULANCES", "No ambulances on map.", "info");
+  map.fitBounds(L.featureGroup(layers).getBounds().pad(0.2));
 }
 
 function toggleFullscreen() {
@@ -641,31 +529,32 @@ function toggleFullscreen() {
 
 function toggleLegend() {
   const leg = $("mapLegend");
-  leg.classList.toggle("hidden");
+  if (leg) leg.classList.toggle("hidden");
 }
 
 function toggleLayer(name, btn) {
   state.layers[name] = !state.layers[name];
-  btn.classList.toggle("on", state.layers[name]);
+  if (btn) btn.classList.toggle("on", state.layers[name]);
 
-  if (name === "traffic") {
-    if (googleTrafficLayer && map) {
-      googleTrafficLayer.setMap(state.layers.traffic ? map : null);
+  const groups = {
+    incidents: L_inc,
+    ambulances: L_amb,
+    hospitals: L_hosp,
+    routes: L_route,
+    cctv: L_cctv,
+    hotspots: L_hotspots,
+    traffic: L_traffic
+  };
+
+  const g = groups[name];
+  if (g && map) {
+    if (state.layers[name]) {
+      g.addTo(map);
+      if (name === "cctv") L_cctvFov.addTo(map);
+    } else {
+      map.removeLayer(g);
+      if (name === "cctv") map.removeLayer(L_cctvFov);
     }
-    trafficPolylines.forEach((p) => p.setMap(state.layers.traffic ? map : null));
-  } else if (name === "incidents") {
-    Object.values(incMarkers).forEach((m) => m.setVisible(state.layers.incidents));
-  } else if (name === "ambulances") {
-    Object.values(ambMarkers).forEach((m) => m.setVisible(state.layers.ambulances));
-  } else if (name === "hospitals") {
-    Object.values(hospMarkers).forEach((m) => m.setVisible(state.layers.hospitals));
-  } else if (name === "cctv") {
-    Object.values(cctvMarkers).forEach((m) => m.setVisible(state.layers.cctv));
-    Object.values(fovPolygons).forEach((p) => p.setMap(state.layers.cctv ? map : null));
-  } else if (name === "hotspots") {
-    Object.values(hotspotCircles).forEach((c) => c.setMap(state.layers.hotspots ? map : null));
-  } else if (name === "routes") {
-    routePolylines.forEach((p) => p.setMap(state.layers.routes ? map : null));
   }
 }
 
@@ -744,44 +633,41 @@ async function drawRoute(id) {
   const hospCoords = inc.hospitalRoute?.geometry?.coordinates?.map((c) => [c[1], c[0]]) || null;
   state.routes[id] = { ...r, ambulanceId: amb?.id || r.ambulanceId, hospitalId: hosp?.id || r.hospitalId, coords, hospCoords, distKm, etaMin, geometrySource };
 
-  // Clear previous route polylines
-  routePolylines.forEach((p) => p.setMap(null));
-  routePolylines = [];
-
-  if (map && window.google && window.google.maps) {
+  if (L_route) {
+    L_route.clearLayers();
     if (coords && coords.length > 0) {
       // Glow background line
-      const glowLine = new google.maps.Polyline({
-        path: coords.map((c) => ({ lat: c[0], lng: c[1] })),
-        geodesic: false,
-        strokeColor: "#F59E0B",
-        strokeOpacity: 0.35,
-        strokeWeight: 10,
-        map: state.layers.routes ? map : null
-      });
-      routePolylines.push(glowLine);
+      L.polyline(coords, {
+        color: "#F59E0B",
+        weight: 10,
+        opacity: 0.35,
+        lineCap: "round"
+      }).addTo(L_route);
 
       // Main crisp turn-by-turn road polyline
-      const line = new google.maps.Polyline({
-        path: coords.map((c) => ({ lat: c[0], lng: c[1] })),
-        geodesic: false,
-        strokeColor: "#FF9F0A",
-        strokeOpacity: 0.95,
-        strokeWeight: 5,
-        map: state.layers.routes ? map : null
-      });
-      routePolylines.push(line);
+      L.polyline(coords, {
+        color: "#FF9F0A",
+        weight: 5,
+        opacity: 0.95,
+        lineCap: "round"
+      }).addTo(L_route);
     }
     if (hospCoords && hospCoords.length > 0) {
-      const line2 = new google.maps.Polyline({
-        path: hospCoords.map((c) => ({ lat: c[0], lng: c[1] })),
-        geodesic: false,
-        strokeColor: "#38BDF8",
-        strokeOpacity: 0.9,
-        strokeWeight: 5,
-        map: state.layers.routes ? map : null
-      });
-      routePolylines.push(line2);
+      // Leg 2 Hospital route
+      L.polyline(hospCoords, {
+        color: "#38BDF8",
+        weight: 8,
+        opacity: 0.3,
+        lineCap: "round"
+      }).addTo(L_route);
+
+      L.polyline(hospCoords, {
+        color: "#38BDF8",
+        weight: 4.5,
+        opacity: 0.9,
+        dashArray: "8, 8",
+        lineCap: "round"
+      }).addTo(L_route);
     }
   }
 
@@ -894,6 +780,9 @@ function normalizeIncident(raw) {
     route: raw.route,
     hospitalRoute: raw.hospitalRoute,
     hospitalPreAlert: raw.hospitalPreAlert,
+    hospitalAcknowledged: raw.hospitalAcknowledged || false,
+    hospitalAckAt: raw.hospitalAckAt || null,
+    hospitalAckBy: raw.hospitalAckBy || null,
     timeline: raw.timeline || [],
     createdAt: raw.createdAt || new Date().toISOString()
   };
@@ -1208,7 +1097,7 @@ function toast(title, msg, type) {
   console.log(`[TOAST] ${title}: ${msg}`);
 }
 
-/* ---------- SOCKET.IO REAL-TIME INTEGRATION (12A.16) ---------- */
+/* ---------- SOCKET.IO REAL-TIME INTEGRATION ---------- */
 function initSocket() {
   try {
     const socket = io(BACKEND_URL, {
@@ -1327,7 +1216,7 @@ function initSocket() {
       if (state.cctv[id]) {
         Object.assign(state.cctv[id], cam);
         if (cctvMarkers[id]) {
-          cctvMarkers[id].setContent(makeCctvHtml(state.cctv[id].status));
+          cctvMarkers[id].setIcon(makeCctvIcon(state.cctv[id].status));
         }
       }
     });
@@ -1401,8 +1290,7 @@ async function resolveIncident() {
     const d = await res.json();
     if (d.success) {
       inc.status = "RESOLVED";
-      routePolylines.forEach((p) => p.setMap(null));
-      routePolylines = [];
+      if (L_route) L_route.clearLayers();
       upsertIncidentMarker(inc);
       pushTimeline(inc._id, "Incident resolved and archived to response audit vault");
       renderIncidentDetails();
@@ -1506,10 +1394,10 @@ async function resetDemo() {
     state.routes = {};
     state.timelines = {};
     state.selectedIncidentId = null;
-    Object.values(incMarkers).forEach((m) => m.remove());
+    if (L_inc) L_inc.clearLayers();
+    if (L_resolved) L_resolved.clearLayers();
+    if (L_route) L_route.clearLayers();
     Object.keys(incMarkers).forEach((k) => delete incMarkers[k]);
-    routePolylines.forEach((p) => p.setMap(null));
-    routePolylines = [];
     renderIncidentList();
     renderIncidentDetails();
     renderKPIs();
@@ -1535,64 +1423,75 @@ function wire() {
   if ($("closeCctvModal")) $("closeCctvModal").onclick = () => { if ($("cctvModal")) $("cctvModal").style.display = "none"; };
 
   setInterval(() => {
-    $("clock").textContent = new Date().toLocaleTimeString("en-GB", { hour12: false }) + " IST";
+    if ($("clock")) $("clock").textContent = new Date().toLocaleTimeString("en-GB", { hour12: false }) + " IST";
   }, 1000);
 
   // Map Style Selector
-  $("mapStyleSelect").onchange = (e) => setMapStyle(e.target.value);
+  if ($("mapStyleSelect")) $("mapStyleSelect").onchange = (e) => setMapStyle(e.target.value);
 
   // Health Popover
-  $("healthBtn").onclick = (e) => {
-    e.stopPropagation();
-    const p = $("healthPopover");
-    p.classList.toggle("show");
-    $("healthBtn").setAttribute("aria-expanded", p.classList.contains("show"));
-  };
+  if ($("healthBtn")) {
+    $("healthBtn").onclick = (e) => {
+      e.stopPropagation();
+      const p = $("healthPopover");
+      if (p) {
+        p.classList.toggle("show");
+        $("healthBtn").setAttribute("aria-expanded", p.classList.contains("show"));
+      }
+    };
+  }
   document.addEventListener("click", (e) => {
-    if (!$("healthPopover").contains(e.target) && e.target !== $("healthBtn")) $("healthPopover").classList.remove("show");
+    const pop = $("healthPopover"), btn = $("healthBtn");
+    if (pop && btn && !pop.contains(e.target) && e.target !== btn) pop.classList.remove("show");
   });
 
   // Layer toggles
   document.querySelectorAll(".mbtn[data-layer]").forEach((b) => (b.onclick = () => toggleLayer(b.dataset.layer, b)));
 
   // Map Controls
-  $("fitAllBtn").onclick = fitAll;
-  $("focusIncBtn").onclick = () => focusIncident();
-  $("fitFleetBtn").onclick = fitFleet;
-  $("fullScreenBtn").onclick = toggleFullscreen;
-  $("legendToggleBtn").onclick = toggleLegend;
-  $("closeLegendBtn").onclick = toggleLegend;
+  if ($("fitAllBtn")) $("fitAllBtn").onclick = fitAll;
+  if ($("focusIncBtn")) $("focusIncBtn").onclick = () => focusIncident();
+  if ($("fitFleetBtn")) $("fitFleetBtn").onclick = fitFleet;
+  if ($("fullScreenBtn")) $("fullScreenBtn").onclick = toggleFullscreen;
+  if ($("legendToggleBtn")) $("legendToggleBtn").onclick = toggleLegend;
+  if ($("closeLegendBtn")) $("closeLegendBtn").onclick = toggleLegend;
 
   // Panel Actions
-  $("btnCenter").onclick = () => focusIncident();
-  $("btnRoute").onclick = () => {
+  if ($("btnCenter")) $("btnCenter").onclick = () => focusIncident();
+  if ($("btnRoute")) $("btnRoute").onclick = () => {
     if (state.selectedIncidentId) drawRoute(state.selectedIncidentId);
   };
-  $("btnDispatch").onclick = dispatchAmbulance;
-  $("btnFailover").onclick = failoverAmbulance;
-  $("btnResolve").onclick = resolveIncident;
+  if ($("btnDispatch")) $("btnDispatch").onclick = dispatchAmbulance;
+  if ($("btnFailover")) $("btnFailover").onclick = failoverAmbulance;
+  if ($("btnResolve")) $("btnResolve").onclick = resolveIncident;
 
-  $("btnCollapse").onclick = () => {
-    const p = $("panel");
-    p.classList.toggle("collapsed");
-    $("collapseIcon").className = "fa-solid fa-chevron-" + (p.classList.contains("collapsed") ? "up" : "down");
-  };
+  if ($("btnCollapse")) {
+    $("btnCollapse").onclick = () => {
+      const p = $("panel");
+      if (p) {
+        p.classList.toggle("collapsed");
+        if ($("collapseIcon")) $("collapseIcon").className = "fa-solid fa-chevron-" + (p.classList.contains("collapsed") ? "up" : "down");
+      }
+    };
+  }
 
   // Demo Controls
-  $("demoBtn").onclick = openDemo;
-  $("demoClose").onclick = closeDemo;
-  $("demoModal").onclick = (e) => { if (e.target === $("demoModal")) closeDemo(); };
-  $("demoSmartphone").onclick = () => runDemo("smartphone");
-  $("demoCctv").onclick = () => runDemo("cctv");
-  $("demoCitizen").onclick = () => runDemo("citizen");
+  if ($("demoBtn")) $("demoBtn").onclick = openDemo;
+  if ($("demoClose")) $("demoClose").onclick = closeDemo;
+  if ($("demoModal")) $("demoModal").onclick = (e) => { if (e.target === $("demoModal")) closeDemo(); };
+  if ($("demoSmartphone")) $("demoSmartphone").onclick = () => runDemo("smartphone");
+  if ($("demoCctv")) $("demoCctv").onclick = () => runDemo("cctv");
+  if ($("demoCitizen")) $("demoCitizen").onclick = () => runDemo("citizen");
   if ($("demoFusion")) $("demoFusion").onclick = () => runDemo("fusion");
-  $("demoReset").onclick = resetDemo;
+  if ($("demoReset")) $("demoReset").onclick = resetDemo;
   wireTestMode();
 
   // Tabs & Search
-  $("tabIncidents").onclick = () => switchTab("incidents");
-  $("tabFeed").onclick = () => switchTab("feed");
-  $("searchInput").addEventListener("input", debounce((e) => { state.filters.q = e.target.value.trim(); applyFilters(); }, 180));
+  if ($("tabIncidents")) $("tabIncidents").onclick = () => switchTab("incidents");
+  if ($("tabFeed")) $("tabFeed").onclick = () => switchTab("feed");
+  if ($("searchInput")) {
+    $("searchInput").addEventListener("input", debounce((e) => { state.filters.q = e.target.value.trim(); applyFilters(); }, 180));
+  }
   document.querySelectorAll("#sevChips .chip").forEach((c) => (c.onclick = () => {
     document.querySelectorAll("#sevChips .chip").forEach((x) => x.classList.remove("on"));
     c.classList.add("on");
@@ -1607,17 +1506,23 @@ function wire() {
   }));
 }
 
-const openDemo = () => $("demoModal").classList.add("show");
-const closeDemo = () => $("demoModal").classList.remove("show");
+const openDemo = () => { if ($("demoModal")) $("demoModal").classList.add("show"); };
+const closeDemo = () => { if ($("demoModal")) $("demoModal").classList.remove("show"); };
 
 function setTestCoordinates(target, lat, lng) {
   const prefix = target === "amb" ? "testAmb" : target === "hosp" ? "testHosp" : "testInc";
-  $(prefix + "Lat").value = Number(lat).toFixed(6);
-  $(prefix + "Lng").value = Number(lng).toFixed(6);
+  if ($(prefix + "Lat")) $(prefix + "Lat").value = Number(lat).toFixed(6);
+  if ($(prefix + "Lng")) $(prefix + "Lng").value = Number(lng).toFixed(6);
 }
 function validTestCoordinates(lat, lng) { return Number.isFinite(lat) && Number.isFinite(lng) && Math.abs(lat) <= 90 && Math.abs(lng) <= 180; }
 function populateTestResources() {
-  const fill = (id, records, label) => { const select = $(id), previous = select.value; select.innerHTML = records.map(r => `<option value="${esc(r.id)}">${esc(r.id)} — ${esc(label(r))}</option>`).join(""); if (previous) select.value = previous; };
+  const fill = (id, records, label) => {
+    const select = $(id);
+    if (!select) return;
+    const previous = select.value;
+    select.innerHTML = records.map(r => `<option value="${esc(r.id)}">${esc(r.id)} — ${esc(label(r))}</option>`).join("");
+    if (previous) select.value = previous;
+  };
   fill("testAmbulanceId", Object.values(state.ambulances), a => a.code || a.name || "Unit");
   fill("testHospitalId", Object.values(state.hospitals), h => h.name || "Hospital");
 }
@@ -1628,22 +1533,72 @@ async function securedTestRequest(url, body, method = "POST") {
   return data;
 }
 function wireTestMode() {
-  if (!sessionUser || sessionUser.role !== "COMMAND_CENTER") { $("testModePanel").style.display = "none"; return; }
+  if (!sessionUser || sessionUser.role !== "COMMAND_CENTER") {
+    if ($("testModePanel")) $("testModePanel").style.display = "none";
+    return;
+  }
   const result = $("testModeResult");
-  $("demoBtnLabel").textContent = "DEMO / TEST MODE";
-  $("testAmbulanceForm").onsubmit = async (e) => { e.preventDefault(); const lat = Number($("testAmbLat").value), lng = Number($("testAmbLng").value); if (!validTestCoordinates(lat, lng)) return result.textContent = "Enter valid ambulance coordinates."; try { const data = await securedTestRequest(`/ambulances/${$("testAmbulanceId").value}/location`, { latitude: lat, longitude: lng, status: $("testAmbStatus").value }, "PATCH"); updateAmbulance(data.ambulance); result.textContent = `${data.ambulance.id} location updated in DEMO / TEST MODE.`; } catch (error) { result.textContent = error.message; } };
-  $("testHospitalForm").onsubmit = async (e) => { e.preventDefault(); const lat = Number($("testHospLat").value), lng = Number($("testHospLng").value); if (!validTestCoordinates(lat, lng)) return result.textContent = "Enter valid hospital coordinates."; try { const data = await securedTestRequest(`/hospitals/${$("testHospitalId").value}/location`, { latitude: lat, longitude: lng, status: $("testHospStatus").value }, "PATCH"); updateHospital(data.hospital); result.textContent = `${data.hospital.id} location updated in DEMO / TEST MODE.`; } catch (error) { result.textContent = error.message; } };
-  $("testIncidentForm").onsubmit = async (e) => { e.preventDefault(); const lat = Number($("testIncLat").value), lng = Number($("testIncLng").value); if (!validTestCoordinates(lat, lng)) return result.textContent = "Enter valid accident coordinates."; try { const data = await securedTestRequest("/incidents/test/incidents", { latitude: lat, longitude: lng, severity: Number($("testSeverity").value), patientCount: Number($("testPatients").value) || undefined, peakGForce: Number($("testGForce").value) || undefined, incidentType: $("testAccidentType").value, helpMessage: $("testHelpMessage").value || undefined }); result.textContent = `Emergency ${data.incidentId || data.id} created — targeted dispatch initiated.`; closeDemo(); } catch (error) { result.textContent = error.message; } };
-  document.querySelectorAll("[data-center]").forEach(button => button.onclick = () => { if (!map) return; const c = map.getCenter(); setTestCoordinates(target, c.lat(), c.lng()); result.textContent = "Coordinates copied from current map center."; });
+  if ($("demoBtnLabel")) $("demoBtnLabel").textContent = "DEMO / TEST MODE";
+  if ($("testAmbulanceForm")) {
+    $("testAmbulanceForm").onsubmit = async (e) => {
+      e.preventDefault();
+      const lat = Number($("testAmbLat").value), lng = Number($("testAmbLng").value);
+      if (!validTestCoordinates(lat, lng)) return result.textContent = "Enter valid ambulance coordinates.";
+      try {
+        const data = await securedTestRequest(`/ambulances/${$("testAmbulanceId").value}/location`, { latitude: lat, longitude: lng, status: $("testAmbStatus").value }, "PATCH");
+        updateAmbulance(data.ambulance);
+        if (result) result.textContent = `${data.ambulance.id} location updated in DEMO / TEST MODE.`;
+      } catch (error) { if (result) result.textContent = error.message; }
+    };
+  }
+  if ($("testHospitalForm")) {
+    $("testHospitalForm").onsubmit = async (e) => {
+      e.preventDefault();
+      const lat = Number($("testHospLat").value), lng = Number($("testHospLng").value);
+      if (!validTestCoordinates(lat, lng)) return result.textContent = "Enter valid hospital coordinates.";
+      try {
+        const data = await securedTestRequest(`/hospitals/${$("testHospitalId").value}/location`, { latitude: lat, longitude: lng, status: $("testHospStatus").value }, "PATCH");
+        updateHospital(data.hospital);
+        if (result) result.textContent = `${data.hospital.id} location updated in DEMO / TEST MODE.`;
+      } catch (error) { if (result) result.textContent = error.message; }
+    };
+  }
+  if ($("testIncidentForm")) {
+    $("testIncidentForm").onsubmit = async (e) => {
+      e.preventDefault();
+      const lat = Number($("testIncLat").value), lng = Number($("testIncLng").value);
+      if (!validTestCoordinates(lat, lng)) return result.textContent = "Enter valid accident coordinates.";
+      try {
+        const data = await securedTestRequest("/incidents/test/incidents", {
+          latitude: lat,
+          longitude: lng,
+          severity: Number($("testSeverity").value),
+          patientCount: Number($("testPatients").value) || undefined,
+          peakGForce: Number($("testGForce").value) || undefined,
+          incidentType: $("testAccidentType").value,
+          helpMessage: $("testHelpMessage").value || undefined
+        });
+        if (result) result.textContent = `Emergency ${data.incidentId || data.id} created — targeted dispatch initiated.`;
+        closeDemo();
+      } catch (error) { if (result) result.textContent = error.message; }
+    };
+  }
+  document.querySelectorAll("[data-center]").forEach(button => button.onclick = () => {
+    if (!map) return;
+    const target = button.dataset.center;
+    const c = map.getCenter();
+    setTestCoordinates(target, c.lat, c.lng);
+    if (result) result.textContent = "Coordinates copied from current map center.";
+  });
   populateTestResources();
 }
 
 function switchTab(t) {
   const inc = t === "incidents";
-  $("tabIncidents").classList.toggle("active", inc);
-  $("tabFeed").classList.toggle("active", !inc);
-  $("viewIncidents").style.display = inc ? "flex" : "none";
-  $("viewFeed").style.display = inc ? "none" : "flex";
+  if ($("tabIncidents")) $("tabIncidents").classList.toggle("active", inc);
+  if ($("tabFeed")) $("tabFeed").classList.toggle("active", !inc);
+  if ($("viewIncidents")) $("viewIncidents").style.display = inc ? "flex" : "none";
+  if ($("viewFeed")) $("viewFeed").style.display = inc ? "none" : "flex";
 }
 
 function applyFilters() {
