@@ -5,462 +5,678 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>ResQNet — Hospital Trauma Emergency Portal</title>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Archivo:wght@600;700;800;900&family=IBM+Plex+Mono:wght@500;600;700&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <script src="/socket.io/socket.io.js"></script>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body {
-      background: #06090e;
+      background: #040811;
       color: #e2e8f0;
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+      font-family: 'Inter', -apple-system, sans-serif;
       min-height: 100vh;
-      display: flex;
-      flex-direction: column;
+      padding: 16px;
     }
     header {
-      background: #0b111e;
-      border-bottom: 1px solid #1e293b;
-      padding: 12px 16px;
+      max-width: 1100px;
+      margin: 0 auto 16px auto;
       display: flex;
-      align-items: center;
       justify-content: space-between;
-      position: sticky;
-      top: 0;
-      z-index: 50;
-    }
-    .brand {
-      display: flex;
       align-items: center;
-      gap: 8px;
-      font-size: 15px;
-      font-weight: 800;
-      letter-spacing: 0.5px;
+      background: #0a1120;
+      border: 1px solid #1e293b;
+      padding: 14px 20px;
+      border-radius: 12px;
+      box-shadow: 0 4px 20px rgba(0,0,0,0.4);
+    }
+    .brand-title {
+      font-family: 'Archivo', sans-serif;
+      font-size: 20px;
+      font-weight: 900;
+      letter-spacing: 0.08em;
       color: #fff;
     }
-    .brand b { color: #22c55e; }
-    .hosp-tag {
-      background: #1e293b;
-      color: #4ade80;
-      border: 1px solid #22c55e44;
-      padding: 3px 8px;
-      border-radius: 4px;
+    .brand-title b { color: #38bdf8; }
+    .brand-sub {
       font-size: 11px;
+      color: #64748b;
       font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+    .header-actions {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .status-badge {
+      background: #064e3b;
+      color: #34d399;
+      font-size: 11px;
+      font-weight: 800;
+      padding: 6px 12px;
+      border-radius: 20px;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      border: 1px solid #10b98155;
+    }
+    .pulse-dot {
+      width: 8px;
+      height: 8px;
+      background: #10b981;
+      border-radius: 50%;
+      animation: pulse 1.5s infinite;
+    }
+    @keyframes pulse {
+      0%, 100% { transform: scale(1); opacity: 1; }
+      50% { transform: scale(1.4); opacity: 0.6; }
     }
     .btn-logout {
       background: #1e293b;
-      color: #94a3b8;
       border: 1px solid #334155;
-      padding: 5px 10px;
+      color: #cbd5e1;
+      font-size: 11px;
+      font-weight: 700;
+      padding: 7px 14px;
       border-radius: 6px;
-      font-size: 12px;
-      font-weight: 600;
       cursor: pointer;
+      transition: all 0.15s;
     }
+    .btn-logout:hover { background: #334155; color: #fff; }
+
     main {
-      flex: 1;
-      max-width: 720px;
-      width: 100%;
+      max-width: 1100px;
       margin: 0 auto;
-      padding: 14px;
       display: flex;
       flex-direction: column;
-      gap: 14px;
+      gap: 16px;
     }
+
     .card {
-      background: #0c1322;
+      background: #0b1324;
       border: 1px solid #1e293b;
       border-radius: 12px;
-      padding: 16px;
-      box-shadow: 0 4px 16px rgba(0,0,0,0.4);
+      padding: 18px 20px;
+      box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+    }
+    .card-head {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 14px;
+      border-bottom: 1px solid #1e293b;
+      padding-bottom: 10px;
     }
     .card-title {
-      font-size: 11px;
-      text-transform: uppercase;
-      letter-spacing: 1px;
-      color: #64748b;
+      font-size: 12px;
       font-weight: 800;
-      margin-bottom: 12px;
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-    }
-    .grid-2 {
-      display: grid;
-      grid-template-columns: repeat(2, 1fr);
-      gap: 10px;
-    }
-    .stat-box {
-      background: #070c16;
-      border: 1px solid #1e293b;
-      border-radius: 8px;
-      padding: 10px 12px;
-    }
-    .stat-label {
-      font-size: 10px;
-      color: #64748b;
+      letter-spacing: 0.08em;
       text-transform: uppercase;
-      font-weight: 700;
-      margin-bottom: 4px;
-    }
-    .stat-val {
-      font-size: 13px;
-      font-weight: 700;
-      color: #f1f5f9;
-      word-break: break-all;
-    }
-    .badge {
-      display: inline-block;
-      padding: 2px 6px;
-      border-radius: 4px;
-      font-size: 11px;
-      font-weight: 800;
-    }
-    .badge.available { background: #14532d; color: #4ade80; border: 1px solid #22c55e44; }
-    .badge.prepped { background: #075985; color: #38bdf8; border: 1px solid #0284c744; }
-    .badge.critical { background: #7f1d1d; color: #f87171; border: 1px solid #ef444444; }
-
-    /* Alert Card Styling */
-    .alert-card {
-      background: linear-gradient(180deg, #181109 0%, #0d121f 100%);
-      border: 2px solid #f97316;
-      border-radius: 12px;
-      padding: 18px;
-      box-shadow: 0 0 30px rgba(249, 115, 22, 0.35);
-      animation: hospPulse 2s infinite;
-      margin-bottom: 12px;
-    }
-    @keyframes hospPulse {
-      0% { border-color: #f97316; box-shadow: 0 0 20px rgba(249, 115, 22, 0.3); }
-      50% { border-color: #fdba74; box-shadow: 0 0 35px rgba(249, 115, 22, 0.6); }
-      100% { border-color: #f97316; box-shadow: 0 0 20px rgba(249, 115, 22, 0.3); }
-    }
-    .alert-header {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      margin-bottom: 12px;
-    }
-    .alert-headline {
-      font-size: 16px;
-      font-weight: 900;
-      color: #f97316;
+      color: #38bdf8;
       display: flex;
       align-items: center;
       gap: 8px;
     }
-    .priority-badge {
-      background: #f97316;
-      color: #000;
-      font-size: 10px;
-      font-weight: 900;
-      padding: 3px 8px;
-      border-radius: 4px;
-      letter-spacing: 0.5px;
+
+    .readiness-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 12px;
     }
-    .alert-desc {
-      font-size: 14px;
-      font-weight: 700;
-      color: #f8fafc;
-      margin-bottom: 12px;
-    }
-    .btn-action {
-      width: 100%;
-      padding: 13px 16px;
+    .readiness-item {
+      background: #060b16;
+      border: 1px solid #1e293b;
       border-radius: 8px;
+      padding: 12px;
+    }
+    .readiness-item .label {
+      font-size: 10px;
+      font-weight: 700;
+      color: #64748b;
+      text-transform: uppercase;
+      margin-bottom: 4px;
+    }
+    .readiness-item .val {
       font-size: 13px;
+      font-weight: 700;
+      color: #fff;
+    }
+
+    /* Alert Card */
+    .alert-card {
+      background: #0c1529;
+      border: 2px solid #ef4444;
+      box-shadow: 0 0 30px rgba(239, 68, 68, 0.25);
+      border-radius: 14px;
+      padding: 20px;
+      margin-bottom: 16px;
+      animation: alertGlow 2s infinite alternate;
+    }
+    @keyframes alertGlow {
+      from { box-shadow: 0 0 20px rgba(239, 68, 68, 0.2); }
+      to { box-shadow: 0 0 35px rgba(239, 68, 68, 0.45); }
+    }
+    .alert-card.acknowledged {
+      border-color: #10b981;
+      box-shadow: 0 0 25px rgba(16, 185, 129, 0.2);
+      animation: none;
+    }
+
+    .alert-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 14px;
+      border-bottom: 1px solid rgba(239, 68, 68, 0.3);
+      padding-bottom: 10px;
+    }
+    .alert-card.acknowledged .alert-header {
+      border-bottom-color: rgba(16, 185, 129, 0.3);
+    }
+    .alert-badge {
+      background: #dc2626;
+      color: #fff;
+      font-size: 11px;
+      font-weight: 900;
+      padding: 5px 12px;
+      border-radius: 6px;
+      letter-spacing: 0.05em;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .alert-card.acknowledged .alert-badge {
+      background: #059669;
+    }
+
+    .eta-banner {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      gap: 10px;
+      background: #070d1a;
+      border: 1px solid #1e293b;
+      border-radius: 8px;
+      padding: 12px;
+      margin-bottom: 16px;
+    }
+    .eta-item .label {
+      font-size: 10px;
+      color: #64748b;
+      font-weight: 700;
+      text-transform: uppercase;
+    }
+    .eta-item .val {
+      font-size: 14px;
       font-weight: 800;
+      color: #f59e0b;
+      font-family: 'IBM Plex Mono', monospace;
+    }
+
+    /* Patient Clinical Dossier */
+    .dossier-card {
+      background: #060b17;
+      border: 1px solid #334155;
+      border-radius: 10px;
+      padding: 16px;
+      margin-bottom: 16px;
+    }
+    .dossier-head {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 12px;
+      border-bottom: 1px dashed #1e293b;
+      padding-bottom: 8px;
+    }
+    .blood-badge {
+      background: #dc2626;
+      color: #fff;
+      font-size: 12px;
+      font-weight: 900;
+      padding: 4px 10px;
+      border-radius: 6px;
+      letter-spacing: 0.05em;
+      box-shadow: 0 2px 8px rgba(220, 38, 38, 0.4);
+    }
+    .dossier-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 12px;
+      font-size: 12px;
+    }
+    .dossier-field {
+      background: #0a1122;
+      border: 1px solid #1e293b;
+      border-radius: 6px;
+      padding: 10px;
+    }
+    .dossier-field .f-label {
+      font-size: 10px;
+      font-weight: 700;
+      color: #94a3b8;
+      text-transform: uppercase;
+      margin-bottom: 3px;
+    }
+    .dossier-field .f-val {
+      color: #fff;
+      font-weight: 600;
+    }
+    .f-val.allergy { color: #fca5a5; font-weight: 700; }
+    .f-val.med { color: #93c5fd; }
+    .f-val.notes { color: #fde047; font-size: 11px; }
+
+    .ice-card {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      background: #0f1c35;
+      border: 1px solid #38bdf844;
+      border-radius: 6px;
+      padding: 8px 12px;
+      margin-top: 10px;
+    }
+    .btn-dial {
+      background: #38bdf8;
+      color: #040811;
       border: none;
+      padding: 6px 12px;
+      border-radius: 6px;
+      font-size: 11px;
+      font-weight: 800;
+      text-decoration: none;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      cursor: pointer;
+    }
+
+    .nav-actions {
+      display: flex;
+      gap: 10px;
+      margin-bottom: 16px;
+      flex-wrap: wrap;
+    }
+    .btn-nav {
+      flex: 1;
+      min-width: 180px;
+      background: #1e293b;
+      border: 1px solid #334155;
+      color: #38bdf8;
+      padding: 10px 14px;
+      border-radius: 8px;
+      text-decoration: none;
+      font-size: 12px;
+      font-weight: 700;
+      text-align: center;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      transition: all 0.15s;
+    }
+    .btn-nav:hover { background: #334155; color: #fff; }
+
+    .btn-ack {
+      width: 100%;
+      background: #10b981;
+      color: #040811;
+      border: none;
+      padding: 14px;
+      border-radius: 8px;
+      font-family: 'Archivo', sans-serif;
+      font-size: 14px;
+      font-weight: 800;
+      letter-spacing: 0.05em;
       cursor: pointer;
       display: flex;
       align-items: center;
       justify-content: center;
       gap: 8px;
-      transition: all 0.15s ease;
-      text-decoration: none;
-      margin-top: 14px;
+      transition: background 0.15s;
+      box-shadow: 0 4px 15px rgba(16, 185, 129, 0.3);
     }
-    .btn-ack { background: #22c55e; color: #000; }
-    .btn-ack:hover { background: #16a34a; }
-    .btn-prepped { background: #0284c7; color: #fff; cursor: default; }
+    .btn-ack:hover { background: #059669; color: #fff; }
+    .ack-confirmed-banner {
+      background: #064e3b;
+      border: 1px solid #10b981;
+      color: #a7f3d0;
+      padding: 12px;
+      border-radius: 8px;
+      font-size: 12px;
+      font-weight: 800;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+    }
 
-    .idle-state {
+    .empty-state {
       text-align: center;
-      padding: 36px 16px;
+      padding: 40px 20px;
       color: #64748b;
     }
-    .idle-icon {
-      font-size: 36px;
-      color: #22c55e;
+    .empty-state i {
+      font-size: 42px;
+      color: #334155;
       margin-bottom: 12px;
     }
   </style>
 </head>
 <body>
-  <header>
-    <div class="brand">
-      <i class="fa-solid fa-house-medical" style="color:#22c55e;"></i>
-      <span>RES<b>Q</b>NET</span>
-      <span class="hosp-tag" id="hospBadge">HOSP-01</span>
-    </div>
-    <div style="display:flex;align-items:center;gap:10px;">
-      <span id="socketDot" style="width:8px;height:8px;border-radius:50%;background:#22c55e;display:inline-block;"></span>
-      <button class="btn-logout" onclick="logout()"><i class="fa-solid fa-arrow-right-from-bracket"></i> Logout</button>
-    </div>
-  </header>
 
-  <main>
-    <!-- Hospital Facility Status -->
-    <div class="card">
-      <div class="card-title">
-        <span><i class="fa-solid fa-hospital"></i> Trauma Center Readiness</span>
-        <span id="lastUpdated" style="font-size:9px;color:#475569;">SYNCING...</span>
+<header>
+  <div>
+    <div class="brand-title">RES<b>Q</b>NET <span style="font-size:14px;font-weight:600;color:#94a3b8;">| HOSPITAL TRAUMA PORTAL</span></div>
+    <div class="brand-sub" id="hospNameHeader">Loading facility profile…</div>
+  </div>
+  <div class="header-actions">
+    <div class="status-badge">
+      <span class="pulse-dot"></span>
+      <span id="socketStatusText">TRAUMA BAYS LIVE</span>
+    </div>
+    <button class="btn-logout" onclick="logout()"><i class="fa-solid fa-right-from-bracket"></i> LOGOUT</button>
+  </div>
+</header>
+
+<main>
+  <!-- Facility Readiness Card -->
+  <div class="card">
+    <div class="card-head">
+      <span class="card-title"><i class="fa-solid fa-hospital"></i> Emergency Facility Telemetry & Readiness</span>
+      <span style="font-size:11px;color:#94a3b8;font-family:'IBM Plex Mono',monospace;" id="hospIdBadge">HOSP-01</span>
+    </div>
+    <div class="readiness-grid" id="hospReadinessGrid">
+      <div class="readiness-item">
+        <div class="label">Operating Status</div>
+        <div class="val" style="color:#4ade80;" id="valStatus">AVAILABLE</div>
       </div>
-      <div class="grid-2" id="hospDetails">
-        <div class="stat-box">
-          <div class="stat-label">Facility Name</div>
-          <div class="stat-val" id="valName">Loading...</div>
-        </div>
-        <div class="stat-box">
-          <div class="stat-label">Trauma Capability</div>
-          <div class="stat-val" id="valTrauma" style="color:#4ade80;">Level 1 Trauma</div>
-        </div>
-        <div class="stat-box">
-          <div class="stat-label">Emergency Capacity</div>
-          <div class="stat-val" id="valCapacity">--</div>
-        </div>
-        <div class="stat-box">
-          <div class="stat-label">Facility GPS Location</div>
-          <div class="stat-val" id="valLocation">--</div>
-        </div>
+      <div class="readiness-item">
+        <div class="label">Trauma Designation</div>
+        <div class="val" style="color:#38bdf8;" id="valTrauma">Level 1 Trauma Center</div>
+      </div>
+      <div class="readiness-item">
+        <div class="label">Available ER Bays</div>
+        <div class="val" id="valCapacity">8 Resuscitation Bays</div>
+      </div>
+      <div class="readiness-item">
+        <div class="label">Facility GPS Coordinates</div>
+        <div class="val mono" style="font-size:11px;" id="valGps">18.5280, 73.8720</div>
       </div>
     </div>
+  </div>
 
-    <!-- Active Inbound Trauma Alerts -->
-    <section id="alertsContainer"></section>
-  </main>
+  <!-- Inbound Trauma Pre-Alerts Feed -->
+  <section id="alertsContainer"></section>
+</main>
 
-  <script>
-    const token = localStorage.resqnetToken;
-    const user = JSON.parse(localStorage.resqnetUser || 'null');
-    const H = { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' };
+<script>
+  const token = localStorage.resqnetToken;
+  const user = JSON.parse(localStorage.resqnetUser || 'null');
+  const H = { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' };
 
-    if (!user || user.role !== 'HOSPITAL') {
-      location = '/login.html';
+  if (!user || user.role !== 'HOSPITAL') {
+    location.href = '/login.html';
+  }
+
+  // Audio Chime Synthesizer for Zero-Dependency Alert Ringing
+  function playAlertChime() {
+    try {
+      const ctx = new (window.AudioContext || window.webkitAudioContext)();
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(880, ctx.currentTime);
+      osc.frequency.exponentialRampToValueAtTime(440, ctx.currentTime + 0.3);
+      gain.gain.setValueAtTime(0.3, ctx.currentTime);
+      gain.gain.linearRampToValueAtTime(0.01, ctx.currentTime + 0.35);
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start();
+      osc.stop(ctx.currentTime + 0.35);
+    } catch (e) {}
+  }
+
+  const socket = io({ auth: { token } });
+  const esc = x => String(x ?? 'NOT PROVIDED');
+
+  socket.on('connect', () => {
+    document.getElementById('socketStatusText').textContent = 'TRAUMA BAYS LIVE';
+  });
+  socket.on('disconnect', () => {
+    document.getElementById('socketStatusText').textContent = 'RECONNECTING...';
+  });
+
+  async function loadFacility() {
+    try {
+      const res = await fetch('/api/hospitals/' + (user.resourceId || 'HOSP-01'), { headers: H });
+      if (res.ok) {
+        const h = await res.json();
+        document.getElementById('hospNameHeader').textContent = `${h.name} · ${h.address || 'Pune'}`;
+        document.getElementById('hospIdBadge').textContent = h.id;
+        document.getElementById('valStatus').textContent = h.status || 'AVAILABLE';
+        document.getElementById('valTrauma').textContent = `Level ${h.traumaLevel || 1} Trauma Center`;
+        document.getElementById('valCapacity').textContent = `${h.emergencyCapacity ?? 8} Resuscitation Bays`;
+        document.getElementById('valGps').textContent = `${Number(h.lat).toFixed(4)}, ${Number(h.lng).toFixed(4)}`;
+      }
+    } catch (e) {
+      console.warn('Facility telemetry load error:', e.message);
     }
+  }
 
-    const hospId = user.resourceId || 'HOSP-01';
-    document.getElementById('hospBadge').textContent = hospId;
+  let activeAlertsMap = new Map();
 
-    const socket = io({ auth: { token }, transports: ['websocket', 'polling'] });
-    const esc = (x) => String(x ?? 'UNAVAILABLE');
-
-    function playHospitalChime() {
-      try {
-        const ctx = new (window.AudioContext || window.webkitAudioContext)();
-        const osc = ctx.createOscillator();
-        const gain = ctx.createGain();
-        osc.type = 'sine';
-        osc.frequency.setValueAtTime(587.33, ctx.currentTime); // D5
-        osc.frequency.setValueAtTime(880, ctx.currentTime + 0.2); // A5
-        gain.gain.setValueAtTime(0.25, ctx.currentTime);
-        gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.5);
-        osc.connect(gain);
-        gain.connect(ctx.destination);
-        osc.start();
-        osc.stop(ctx.currentTime + 0.55);
-      } catch (e) {}
-    }
-
-    socket.on('connect', () => {
-      document.getElementById('socketDot').style.background = '#22c55e';
-    });
-    socket.on('disconnect', () => {
-      document.getElementById('socketDot').style.background = '#ef4444';
-    });
-
-    async function loadHospital() {
-      try {
-        const res = await fetch('/api/hospitals/' + hospId, { headers: H });
-        if (res.ok) {
-          const h = await res.json();
-          document.getElementById('valName').textContent = h.name || hospId;
-          document.getElementById('valTrauma').textContent = `Level ${h.traumaLevel || 1} Trauma Center`;
-          document.getElementById('valCapacity').textContent = `${h.emergencyCapacity ?? h.capacity ?? 8} Available Beds`;
-          document.getElementById('valLocation').textContent = (h.lat && h.lng) ? `${Number(h.lat).toFixed(4)}, ${Number(h.lng).toFixed(4)}` : '18.5280, 73.8720';
-          document.getElementById('lastUpdated').textContent = new Date().toLocaleTimeString();
+  async function loadPendingAlerts() {
+    try {
+      const res = await fetch('/api/incidents/alerts/pending', { headers: H });
+      if (res.ok) {
+        const list = await res.json();
+        if (Array.isArray(list)) {
+          list.forEach(a => activeAlertsMap.set(a.incidentId || a.id, a));
+          renderAlerts();
         }
-      } catch (e) {
-        console.warn('Hospital load error:', e);
       }
+    } catch (e) {
+      console.warn('Alerts poll error:', e.message);
+    }
+  }
+
+  function handleIncomingAlert(a) {
+    if (!a) return;
+    const incId = a.incidentId || a.id;
+    const isNew = !activeAlertsMap.has(incId);
+    activeAlertsMap.set(incId, a);
+    renderAlerts();
+    if (isNew) {
+      playAlertChime();
+    }
+  }
+
+  function renderAlerts() {
+    const container = document.getElementById('alertsContainer');
+    const alerts = Array.from(activeAlertsMap.values()).filter(a => a.status !== 'RESOLVED');
+
+    if (alerts.length === 0) {
+      container.innerHTML = `
+        <div class="card empty-state">
+          <i class="fa-solid fa-circle-check" style="color:#10b981;"></i>
+          <h3 style="color:#fff;margin-bottom:6px;">All Trauma Bays Armed & Standing By</h3>
+          <p>Zero active trauma pre-alerts in queue. Incoming collision alerts will trigger immediately with patient clinical dossiers.</p>
+        </div>`;
+      return;
     }
 
-    async function fetchPendingAlerts() {
-      try {
-        const res = await fetch('/api/incidents/alerts/pending?role=HOSPITAL&resourceId=' + hospId, { headers: H });
-        if (res.ok) {
-          const alerts = await res.json();
-          if (Array.isArray(alerts)) {
-            renderAlerts(alerts);
-          }
-        }
-      } catch (e) {
-        console.warn('Pending alerts error:', e);
-      }
-    }
+    container.innerHTML = alerts.map(a => {
+      const isAck = a.acknowledged === true;
+      const prof = a.patientProfile || {};
+      const blood = prof.bloodGroup || 'O+ POSITIVE';
+      const patName = prof.fullName || 'Citizen Patient (Emergency Vault)';
+      const allergies = (prof.allergies && prof.allergies.length > 0) ? prof.allergies.join(', ') : 'None Reported';
+      const conditions = (prof.chronicConditions && prof.chronicConditions.length > 0) ? prof.chronicConditions.join(', ') : 'None Reported';
+      const meds = prof.currentMedications || 'None Reported';
+      const notes = prof.specialNotes || a.helpMessage || 'High-Impact Road Collision. Resuscitation Bay Requested.';
+      const iceName = prof.primaryContact?.name || 'Emergency Next-of-Kin';
+      const icePhone = prof.primaryContact?.phone || '+91 98220 12345';
+      const sceneMap = a.mapUrl || `https://www.google.com/maps/dir/?api=1&destination=${a.accidentLatitude || 18.5308},${a.accidentLongitude || 73.8290}`;
+      const hospMap = a.hospitalMapUrl || `https://www.google.com/maps/dir/?api=1&destination=${a.hospitalLatitude || 18.5280},${a.hospitalLongitude || 73.8720}`;
 
-    function renderAlerts(alerts) {
-      const container = document.getElementById('alertsContainer');
-      if (!alerts || alerts.length === 0) {
-        container.innerHTML = `
-          <div class="card idle-state">
-            <div class="idle-icon"><i class="fa-solid fa-bed-pulse"></i></div>
-            <h3 style="color:#f1f5f9;font-size:15px;margin-bottom:6px;">NO INBOUND TRAUMA PRE-ALERTS</h3>
-            <p style="font-size:12px;">Zero-Minute pre-alerts from field ambulances and AI incident detection will appear here automatically.</p>
-          </div>`;
-        return;
-      }
-
-      container.innerHTML = alerts.map((a) => {
-        const isAck = a.acknowledged === true;
-        const p = a.patientProfile || {};
-        const patName = p.fullName || 'Registered Citizen';
-        const blood = p.bloodGroup || 'O+ POSITIVE';
-        const iceName = p.primaryContact?.name || 'Emergency Next-of-Kin';
-        const icePhone = p.primaryContact?.phone || '+91 9876543210';
-        const iceRel = p.primaryContact?.relation || 'Family';
-        const allergies = (p.allergies && p.allergies.length > 0) ? p.allergies.join(', ') : 'None Reported';
-        const conditions = (p.chronicConditions && p.chronicConditions.length > 0) ? p.chronicConditions.join(', ') : 'None Reported';
-        const meds = p.currentMedications || 'None Reported';
-        const notes = p.specialNotes || 'Intake profile armed in ResQNet vault';
-
-        return `
-        <div class="alert-card" style="border-left: 5px solid ${isAck ? '#10b981' : '#ef4444'};">
+      return `
+        <div class="alert-card ${isAck ? 'acknowledged' : ''}" id="alert-${a.incidentId || a.id}">
           <div class="alert-header">
-            <div class="alert-headline">
-              <i class="fa-solid fa-truck-medical"></i>
-              <span>INCOMING TRAUMA PRE-ALERT</span>
+            <div>
+              <span class="alert-badge"><i class="fa-solid ${isAck ? 'fa-circle-check' : 'fa-triangle-exclamation'}"></i> ${isAck ? 'TRAUMA BAY PREPARED' : (a.priority || 'LEVEL-1 TRAUMA PRE-ALERT')}</span>
+              <span style="font-size:12px;color:#cbd5e1;font-weight:700;margin-left:10px;font-family:'IBM Plex Mono',monospace;">Incident ID: ${a.incidentId || a.id}</span>
             </div>
-            <span class="priority-badge">${esc(a.priority)}</span>
+            <span style="font-size:11px;color:#94a3b8;font-weight:700;"><i class="fa-solid fa-bolt" style="color:#f59e0b;"></i> SEVERITY: ${a.severity || 85}/100</span>
           </div>
 
-          <div class="alert-desc">${esc(a.helpMessage)}</div>
-
-          <div class="grid-2">
-            <div class="stat-box">
-              <div class="stat-label">Inbound Unit</div>
-              <div class="stat-val" style="color:#38bdf8;">${esc(a.incomingAmbulance)}</div>
+          <!-- ETA & Unit Banner -->
+          <div class="eta-banner">
+            <div class="eta-item">
+              <div class="label">Inbound Unit</div>
+              <div class="val" style="color:#38bdf8;"><i class="fa-solid fa-truck-medical"></i> ${esc(a.incomingAmbulance)}</div>
             </div>
-            <div class="stat-box">
-              <div class="stat-label">Estimated ETA</div>
-              <div class="stat-val" style="color:#fb923c;">${esc(a.etaMinutes)} MIN</div>
+            <div class="eta-item">
+              <div class="label">Estimated Inbound ETA</div>
+              <div class="val">${esc(a.etaMinutes || 4)} MINUTES</div>
             </div>
-            <div class="stat-box">
-              <div class="stat-label">Estimated Patients</div>
-              <div class="stat-val">${esc(a.patientCount)} Patient(s)</div>
-            </div>
-            <div class="stat-box">
-              <div class="stat-label">Trauma Bay Readiness</div>
-              <div class="stat-val">${isAck ? '<span class="badge prepped">BAY PREPARED</span>' : '<span class="badge critical">ACTION NEEDED</span>'}</div>
+            <div class="eta-item">
+              <div class="label">Accident Scene GPS</div>
+              <div class="val" style="color:#fff;font-size:12px;">${a.accidentLatitude || 18.5308}, ${a.accidentLongitude || 73.8290}</div>
             </div>
           </div>
 
-          <!-- PATIENT CLINICAL DOSSIER FROM INTAKE FORM -->
-          <div style="margin-top:14px;background:#0b1324;border:1px solid #1e293b;border-radius:8px;padding:12px 14px;">
-            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
-              <span style="font-size:12px;font-weight:700;color:#38bdf8;letter-spacing:0.5px;">
-                <i class="fa-solid fa-clipboard-user"></i> PATIENT CLINICAL DOSSIER (INTAKE FORM)
+          <!-- Patient Clinical Dossier (Intake Form Vault) -->
+          <div class="dossier-card">
+            <div class="dossier-head">
+              <span style="font-size:12px;font-weight:800;color:#38bdf8;letter-spacing:0.05em;">
+                <i class="fa-solid fa-file-medical"></i> PATIENT CLINICAL DOSSIER (INTAKE FORM)
               </span>
-              <span style="background:#dc2626;color:#fff;font-size:11px;font-weight:800;padding:2px 8px;border-radius:4px;">
-                BLOOD: ${esc(blood)}
-              </span>
+              <span class="blood-badge">BLOOD: ${blood}</span>
             </div>
 
-            <div style="font-size:12px;color:#f8fafc;margin-bottom:6px;">
-              <b>Patient:</b> ${esc(patName)} ${p.gender ? `• <b>Gender:</b> ${esc(p.gender)}` : ''} ${p.dateOfBirth ? `• <b>DOB:</b> ${esc(p.dateOfBirth)}` : ''}
-            </div>
-
-            <div style="background:#070c16;padding:8px 10px;border-radius:6px;margin-bottom:8px;display:flex;justify-content:space-between;align-items:center;font-size:11px;">
-              <div>
-                <span style="color:#94a3b8;"><b>Next-of-Kin (ICE):</b></span> 
-                <span style="color:#f8fafc;">${esc(iceName)} (${esc(iceRel)}) — ${esc(icePhone)}</span>
+            <div class="dossier-grid">
+              <div class="dossier-field">
+                <div class="f-label">Patient Name & Demographics</div>
+                <div class="f-val">${esc(patName)}</div>
+                <div style="font-size:10px;color:#94a3b8;margin-top:2px;">Gender: ${prof.gender || 'Male'} · DOB: ${prof.dateOfBirth || '1996-08-14'} (${prof.age || 29} yrs)</div>
               </div>
-              <a href="tel:${esc(icePhone)}" style="background:#38bdf8;color:#060911;padding:3px 8px;border-radius:4px;text-decoration:none;font-weight:700;font-size:10px;">
-                <i class="fa-solid fa-phone"></i> CALL ICE
-              </a>
+              <div class="dossier-field">
+                <div class="f-label">⚠️ Known Allergies</div>
+                <div class="f-val allergy">${esc(allergies)}</div>
+              </div>
+              <div class="dossier-field">
+                <div class="f-label">🏥 Chronic Conditions</div>
+                <div class="f-val">${esc(conditions)}</div>
+              </div>
+              <div class="dossier-field">
+                <div class="f-label">💊 Active Medications</div>
+                <div class="f-val med">${esc(meds)}</div>
+              </div>
             </div>
 
-            <div style="font-size:11px;color:#cbd5e1;line-height:1.6;">
-              <div><b style="color:#f87171;">⚠️ Allergies:</b> ${esc(allergies)}</div>
-              <div><b style="color:#38bdf8;">🏥 Chronic Conditions:</b> ${esc(conditions)}</div>
-              <div><b style="color:#94a3b8;">💊 Current Medications:</b> ${esc(meds)}</div>
-              <div><b style="color:#fbbf24;">📝 Clinical Notes:</b> ${esc(notes)}</div>
+            <!-- Emergency Next-of-Kin Contact -->
+            <div class="ice-card">
+              <div>
+                <div style="font-size:10px;font-weight:700;color:#94a3b8;text-transform:uppercase;">Emergency Next-of-Kin (ICE)</div>
+                <div style="color:#fff;font-size:12px;font-weight:800;margin-top:2px;">${esc(iceName)} · <span style="font-family:'IBM Plex Mono',monospace;">${esc(icePhone)}</span></div>
+              </div>
+              <a href="tel:${esc(icePhone)}" class="btn-dial"><i class="fa-solid fa-phone"></i> CALL ICE CONTACT</a>
+            </div>
+
+            <!-- Clinical Notes -->
+            <div class="dossier-field" style="margin-top:10px;">
+              <div class="f-label">📝 Clinical Trauma Notes & Accident Mechanism</div>
+              <div class="f-val notes">${esc(notes)}</div>
             </div>
           </div>
 
-          <div style="margin-top:12px;font-size:11px;color:#94a3b8;background:#070c16;padding:8px 12px;border-radius:6px;">
-            <i class="fa-solid fa-clipboard-check" style="color:#4ade80;"></i> <b>Automated Clinical Protocols:</b> Blood Bank notified • CT Scanner reserved • Trauma Surgery team alerted.
+          <!-- Dual Waypoint Maps Navigation -->
+          <div class="nav-actions">
+            <a href="${sceneMap}" target="_blank" class="btn-nav">
+              <i class="fa-solid fa-location-dot" style="color:#ef4444;"></i> VIEW ACCIDENT LOCATION (MAPS)
+            </a>
+            <a href="${hospMap}" target="_blank" class="btn-nav">
+              <i class="fa-solid fa-hospital" style="color:#10b981;"></i> HOSPITAL RECEIVING BAY (MAPS)
+            </a>
           </div>
 
+          <!-- Action Button -->
           ${!isAck ? `
-            <button class="btn-action btn-ack" onclick="acknowledgeAlert('${a.incidentId}')">
-              <i class="fa-solid fa-circle-check"></i> ACKNOWLEDGE ALERT & PREP TRAUMA BAY
+            <button class="btn-ack" onclick="acknowledgeAlert('${a.incidentId || a.id}')">
+              <i class="fa-solid fa-check-double"></i> ACKNOWLEDGE PRE-ALERT & PREP TRAUMA BAY
             </button>
           ` : `
-            <div class="btn-action btn-prepped">
-              <i class="fa-solid fa-check-double"></i> TRAUMA BAY PREPARED & CONFIRMED
+            <div class="ack-confirmed-banner">
+              <i class="fa-solid fa-circle-check"></i> TRAUMA BAY PREPARED & CONFIRMED · EMERGENCY TEAM ARMED
             </div>
           `}
-        </div>`;
-      }).join('');
-    }
+        </div>
+      `;
+    }).join('');
+  }
 
-    async function acknowledgeAlert(id) {
-      try {
-        const res = await fetch(`/api/incidents/${id}/hospital-ack`, {
-          method: 'POST',
-          headers: H
-        });
-        const data = await res.json();
-        if (data.success) {
-          fetchPendingAlerts();
-        } else {
-          alert('Error: ' + (data.error || 'Failed to acknowledge alert'));
+  async function acknowledgeAlert(incId) {
+    try {
+      const res = await fetch(`/api/incidents/${incId}/hospital-ack`, {
+        method: 'POST',
+        headers: H,
+        body: JSON.stringify({ hospitalId: user.resourceId })
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        alert(data.error || 'Failed to acknowledge alert');
+      } else {
+        if (activeAlertsMap.has(incId)) {
+          const item = activeAlertsMap.get(incId);
+          item.acknowledged = true;
+          activeAlertsMap.set(incId, item);
+          renderAlerts();
         }
-      } catch (e) {
-        alert('Network error: ' + e.message);
+        loadPendingAlerts();
       }
+    } catch (err) {
+      alert('Network error: ' + err.message);
     }
+  }
 
-    function logout() {
-      localStorage.clear();
-      location = '/login.html';
+  function logout() {
+    localStorage.clear();
+    location.href = '/login.html';
+  }
+
+  // Socket Event Handlers
+  socket.on('hospital:alert', handleIncomingAlert);
+  socket.on('hospital:prealert', handleIncomingAlert);
+  socket.on('hospital:selected', data => { if (data?.preAlert) handleIncomingAlert(data.preAlert); });
+  socket.on('incident:new', inc => {
+    if (inc.hospitalPreAlert) handleIncomingAlert(inc.hospitalPreAlert);
+    else loadPendingAlerts();
+  });
+  socket.on('incident:update', inc => {
+    if (activeAlertsMap.has(inc.incidentId || inc.id)) {
+      const item = activeAlertsMap.get(inc.incidentId || inc.id);
+      Object.assign(item, inc);
+      renderAlerts();
     }
+  });
+  socket.on('hospital:alert:ack', data => {
+    if (activeAlertsMap.has(data.incidentId)) {
+      const item = activeAlertsMap.get(data.incidentId);
+      item.acknowledged = true;
+      renderAlerts();
+    }
+  });
+  socket.on('incident:resolved', data => {
+    activeAlertsMap.delete(data.incidentId || data.id);
+    renderAlerts();
+  });
+  socket.on('hospital:location:update', loadFacility);
 
-    // Socket Event Listeners
-    socket.on('hospital:alert', () => {
-      playHospitalChime();
-      fetchPendingAlerts();
-    });
-    socket.on('hospital:selected', () => {
-      playHospitalChime();
-      fetchPendingAlerts();
-    });
-    socket.on('hospital:prealert', () => {
-      playHospitalChime();
-      fetchPendingAlerts();
-    });
-    socket.on('hospital:alert:ack', fetchPendingAlerts);
-    socket.on('incident:update', fetchPendingAlerts);
-    socket.on('demo:reset', () => {
-      loadHospital();
-      fetchPendingAlerts();
-    });
-
-    // Bootstrap
-    loadHospital();
-    fetchPendingAlerts();
-    setInterval(loadHospital, 4000);
-    setInterval(fetchPendingAlerts, 3000);
-  </script>
+  // Initial Boot & Polling
+  loadFacility();
+  loadPendingAlerts();
+  setInterval(loadPendingAlerts, 4000);
+</script>
 </body>
 </html>

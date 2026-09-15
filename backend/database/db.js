@@ -21,6 +21,7 @@ class DataStore {
         this.users = new Map();
         this.seedInitialFleet();
         this.seedInitialInfrastructure();
+        this.seedInitialUsers();
     }
 
     seedInitialInfrastructure() {
@@ -833,7 +834,41 @@ class DataStore {
         ];
     }
 
+    seedInitialUsers() {
+        const defaultUser = {
+            username: 'user1',
+            fullName: 'Aditya Deshmukh (Registered Citizen)',
+            phone: '+91 98220 12345',
+            email: 'aditya.deshmukh@gmail.com',
+            role: 'USER',
+            resourceId: 'USER-01',
+            medicalProfile: {
+                fullName: 'Aditya Deshmukh',
+                dateOfBirth: '1996-08-14',
+                age: 29,
+                gender: 'Male',
+                bloodGroup: 'O+ POSITIVE',
+                allergies: ['Penicillin', 'Sulfa Drugs'],
+                chronicConditions: ['Asthma (Mild)'],
+                currentMedications: 'Salbutamol Inhaler (PRN)',
+                primaryContact: {
+                    name: 'Suresh Deshmukh (Father)',
+                    phone: '+91 98220 12345',
+                    relation: 'Father / Next-of-Kin'
+                },
+                organDonor: true,
+                specialNotes: 'No prior surgical complications. Emergency Medical Profile Armed.',
+                isComplete: true
+            }
+        };
+        this.users.set('user1', defaultUser);
+    }
+
     // User Management & Emergency Medical Profile Vault
+    async getUserByUsername(username) {
+        return this.findUserByUsername(username);
+    }
+
     async createUser(userData) {
         const username = String(userData.username || '').toLowerCase().trim();
         const userObj = {

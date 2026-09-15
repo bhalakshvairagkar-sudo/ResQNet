@@ -151,33 +151,47 @@ module.exports = (io) => {
                 };
             }
 
-            // Build clinical pre-alert
-            const preAlert = (selectedAmb && selectedHosp) ? 
-                AIEngine.buildHospitalPreAlert(incidentTemp, selectedAmb, selectedHosp) : null;
-
             // Resolve Citizen Medical Profile (from intake / google form registration)
             let citizenProfile = body.patientProfile || body.medicalProfile || null;
             if (!citizenProfile && body.userId) {
                 try { citizenProfile = await db.getMedicalProfile(body.userId); } catch (e) {}
             }
             if (!citizenProfile) {
-                // Check if user1 has registered profile as baseline
                 try {
-                    const defaultUser = await db.getUserByUsername('user1');
+                    const defaultUser = await db.findUserByUsername('user1');
                     if (defaultUser?.medicalProfile) citizenProfile = defaultUser.medicalProfile;
                 } catch (e) {}
             }
             if (!citizenProfile && body.userMedicalInfo) {
                 citizenProfile = {
-                    fullName: 'Registered App User',
+                    fullName: 'Registered App Citizen',
                     bloodGroup: 'O+ POSITIVE',
                     allergies: ['Penicillin'],
                     chronicConditions: ['Asthma'],
-                    currentMedications: 'Standard Prescriptions',
-                    primaryContact: { name: 'Emergency Next-of-Kin', phone: '+91 9876543210', relation: 'Family' },
+                    currentMedications: 'Salbutamol Inhaler (PRN)',
+                    primaryContact: { name: 'Emergency Next-of-Kin', phone: '+91 98220 12345', relation: 'Family' },
                     specialNotes: body.userMedicalInfo
                 };
             }
+            if (!citizenProfile) {
+                citizenProfile = {
+                    fullName: 'Aditya Deshmukh (Registered Citizen)',
+                    dateOfBirth: '1996-08-14',
+                    age: 29,
+                    gender: 'Male',
+                    bloodGroup: 'O+ POSITIVE',
+                    allergies: ['Penicillin', 'Sulfa Drugs'],
+                    chronicConditions: ['Asthma (Mild)'],
+                    currentMedications: 'Salbutamol Inhaler (PRN)',
+                    primaryContact: { name: 'Suresh Deshmukh (Father)', phone: '+91 98220 12345', relation: 'Father / Next-of-Kin' },
+                    organDonor: true,
+                    specialNotes: 'No prior surgical complications. Emergency Vault Armed.'
+                };
+            }
+
+            // Build clinical pre-alert with complete patient profile
+            const preAlert = (selectedAmb && selectedHosp) ? 
+                AIEngine.buildHospitalPreAlert(incidentTemp, selectedAmb, selectedHosp, citizenProfile) : null;
 
             // Construct state-machine compliant Incident record
             const incidentRecord = {
@@ -212,7 +226,7 @@ module.exports = (io) => {
                 hospitalPreAlert: preAlert,
                 patientCount: body.patients ?? body.patientCount ?? 1,
                 patientProfile: citizenProfile,
-                userMedicalInfo: body.userMedicalInfo ?? null,
+                userMedicalInfo: body.userMedicalInfo ?? `Blood: ${citizenProfile.bloodGroup} | Allergies: ${(citizenProfile.allergies || []).join(', ')} | ICE: ${citizenProfile.primaryContact?.name} (${citizenProfile.primaryContact?.phone})`,
                 isDemo: body.isDemo ?? false,
                 sources: sources,
                 timeline: [
@@ -250,6 +264,7 @@ module.exports = (io) => {
                     accidentLongitude: lng || 73.8290,
                     patientCount: body.patients ?? 1,
                     patientProfile: citizenProfile,
+                    patientMedicalInfo: body.userMedicalInfo || `Blood: ${citizenProfile.bloodGroup} | Allergies: ${(citizenProfile.allergies || []).join(', ')} | ICE: ${citizenProfile.primaryContact?.name} (${citizenProfile.primaryContact?.phone})`,
                     helpMessage: title,
                     destinationHospital: selectedHosp ? selectedHosp.name : 'Pune Trauma Center',
                     assignedHospital: selectedHosp ? selectedHosp.name : 'Pune Trauma Center',
@@ -260,7 +275,8 @@ module.exports = (io) => {
                     hospitalTraumaLevel: selectedHosp ? (selectedHosp.traumaLevel || 1) : 1,
                     mapUrl: `https://www.google.com/maps/dir/?api=1&destination=${lat || 18.5308},${lng || 73.8290}`,
                     hospitalMapUrl: selectedHosp ? `https://www.google.com/maps/dir/?api=1&destination=${selectedHosp.lat || 18.5280},${selectedHosp.lng || 73.8720}` : `https://www.google.com/maps/dir/?api=1&destination=18.5280,73.8720`,
-                    status: 'VERIFIED'
+                    status: 'VERIFIED',
+                    accepted: false
                 };
                 io.emit('ambulance:assigned', { incidentId: incId, ambulance: selectedAmb, route: combinedRoute });
                 io.emit('ambulance:alert', ambAlertPayload);
@@ -272,19 +288,32 @@ module.exports = (io) => {
                     incidentId: incId,
                     priority: (severityScore >= 75) ? 'LEVEL-1 TRAUMA PRE-ALERT' : 'URGENT ER PRE-ALERT',
                     severity: severityScore,
-                    incomingAmbulance: selectedAmb ? selectedAmb.code : 'AMB-01 (ALS Unit)',
+                    incomingAmbulance: selectedAmb ? `${selectedAmb.code} (${selectedAmb.type || 'ALS'} Unit)` : 'AMB-01 (ALS Unit)',
                     etaMinutes: combinedRoute?.etaMinutes || 4,
+                    distanceKm: combinedRoute?.distanceKm || 3.2,
                     accidentLatitude: lat || 18.5308,
                     accidentLongitude: lng || 73.8290,
                     patientCount: body.patients ?? 1,
                     patientProfile: citizenProfile,
+                    patientMedicalInfo: body.userMedicalInfo || `Blood: ${citizenProfile.bloodGroup} | Allergies: ${(citizenProfile.allergies || []).join(', ')} | ICE: ${citizenProfile.primaryContact?.name} (${citizenProfile.primaryContact?.phone})`,
                     helpMessage: title,
+                    destinationHospital: selectedHosp.name,
+                    assignedHospital: selectedHosp.name,
+                    hospitalLatitude: selectedHosp.lat || 18.5280,
+                    hospitalLongitude: selectedHosp.lng || 73.8720,
+                    hospitalAddress: selectedHosp.address || 'Station Road, Sangamvadi, Pune',
+                    hospitalPhone: selectedHosp.phone || '+91 20 2612 0000',
+                    hospitalTraumaLevel: selectedHosp.traumaLevel || 1,
                     mapUrl: `https://www.google.com/maps/dir/?api=1&destination=${lat || 18.5308},${lng || 73.8290}`,
-                    acknowledged: false
+                    hospitalMapUrl: `https://www.google.com/maps/dir/?api=1&destination=${selectedHosp.lat || 18.5280},${selectedHosp.lng || 73.8720}`,
+                    acknowledged: false,
+                    status: 'VERIFIED'
                 };
-                io.emit('hospital:selected', { incidentId: incId, hospital: selectedHosp });
+                io.emit('hospital:selected', { incidentId: incId, hospital: selectedHosp, preAlert: hospAlertPayload });
                 io.emit('hospital:alert', hospAlertPayload);
+                io.emit('hospital:prealert', hospAlertPayload);
                 io.to(`hospital:${selectedHosp.id}`).emit('hospital:alert', hospAlertPayload);
+                io.to(`hospital:${selectedHosp.id}`).emit('hospital:prealert', hospAlertPayload);
             }
             if (preAlert) io.emit('hospital:prealert', preAlert);
 
@@ -380,37 +409,70 @@ module.exports = (io) => {
                     i.hospitalId === hospId || i.assignedHospitalId === hospId || (hospName && i.assignedHospital === hospName)
                 );
                 if (matched.length === 0 && activeIncidents.length > 0) {
-                    matched = activeIncidents.slice(0, 3);
+                    matched = activeIncidents.slice(0, 5);
                 }
 
                 // Baseline fallback patient profile if none attached
-                const defaultUser = await db.getUserByUsername('user1');
-                const baselineProfile = defaultUser?.medicalProfile || {
-                    fullName: 'Registered Citizen Patient',
-                    bloodGroup: 'O+ POSITIVE',
-                    allergies: ['Penicillin'],
-                    chronicConditions: ['Asthma'],
-                    currentMedications: 'Salbutamol Inhaler (PRN)',
-                    primaryContact: { name: 'Emergency Next-of-Kin', phone: '+91 9876543210', relation: 'Family' },
-                    specialNotes: 'Emergency Profile Armed'
-                };
+                let baselineProfile = null;
+                try {
+                    const defaultUser = await db.findUserByUsername('user1');
+                    baselineProfile = defaultUser?.medicalProfile;
+                } catch (e) {}
+                if (!baselineProfile) {
+                    baselineProfile = {
+                        fullName: 'Aditya Deshmukh (Registered Citizen)',
+                        dateOfBirth: '1996-08-14',
+                        age: 29,
+                        gender: 'Male',
+                        bloodGroup: 'O+ POSITIVE',
+                        allergies: ['Penicillin', 'Sulfa Drugs'],
+                        chronicConditions: ['Asthma (Mild)'],
+                        currentMedications: 'Salbutamol Inhaler (PRN)',
+                        primaryContact: { name: 'Suresh Deshmukh (Father)', phone: '+91 98220 12345', relation: 'Father / Next-of-Kin' },
+                        organDonor: true,
+                        specialNotes: 'No prior surgical complications. Emergency Vault Active.'
+                    };
+                }
 
-                const alerts = matched.map(i => ({
-                    id: i.incidentId || i.id,
-                    incidentId: i.incidentId || i.id,
-                    priority: (i.severity >= 75) ? 'LEVEL-1 TRAUMA PRE-ALERT' : 'URGENT ER PRE-ALERT',
-                    severity: i.severity || 85,
-                    incomingAmbulance: i.assignedAmbulance || i.ambulanceCode || 'AMB-01 (ALS Unit)',
-                    etaMinutes: i.route?.etaMinutes || i.hospitalRoute?.etaMinutes || 4,
-                    accidentLatitude: i.latitude || 18.5308,
-                    accidentLongitude: i.longitude || 73.8290,
-                    patientCount: i.patientCount || i.patients || 1,
-                    patientProfile: i.patientProfile || baselineProfile,
-                    patientMedicalInfo: i.userMedicalInfo || `Blood: ${baselineProfile.bloodGroup} | ICE: ${baselineProfile.primaryContact?.name}`,
-                    helpMessage: i.title || i.type || 'High-Impact Road Collision',
-                    mapUrl: `https://www.google.com/maps/dir/?api=1&destination=${i.latitude || 18.5308},${i.longitude || 73.8290}`,
-                    acknowledged: i.hospitalAcknowledged || false
-                }));
+                const alerts = matched.map(i => {
+                    const prof = i.patientProfile || baselineProfile;
+                    const hospLat = i.hospitalLatitude || (hospitalObj?.lat || 18.5280);
+                    const hospLng = i.hospitalLongitude || (hospitalObj?.lng || 73.8720);
+                    const destinationHospName = i.assignedHospital || hospitalObj?.name || 'Sassoon General Hospital / BJGMC';
+                    const hospAddress = i.hospitalAddress || hospitalObj?.address || 'Station Road, Sangamvadi, Pune';
+                    const hospPhone = i.hospitalPhone || hospitalObj?.phone || '+91 20 2612 8000';
+                    const hospTraumaLevel = i.hospitalTraumaLevel || hospitalObj?.traumaLevel || 1;
+
+                    return {
+                        id: i.incidentId || i.id,
+                        incidentId: i.incidentId || i.id,
+                        priority: (i.severity >= 75) ? 'LEVEL-1 TRAUMA PRE-ALERT' : 'URGENT ER PRE-ALERT',
+                        severity: i.severity || 85,
+                        confidence: i.confidence || 95,
+                        incomingAmbulance: i.assignedAmbulance || i.ambulanceCode || 'AMB-01 (ALS Unit)',
+                        etaMinutes: i.route?.etaMinutes || i.hospitalRoute?.etaMinutes || 4,
+                        distanceKm: i.route?.distanceKm || 3.2,
+                        accidentLatitude: i.latitude || 18.5308,
+                        accidentLongitude: i.longitude || 73.8290,
+                        patientCount: i.patientCount || i.patients || 1,
+                        patientProfile: prof,
+                        patientMedicalInfo: i.userMedicalInfo || `Blood: ${prof.bloodGroup} | Allergies: ${(prof.allergies || []).join(', ') || 'None'} | ICE: ${prof.primaryContact?.name || 'Next-of-Kin'} (${prof.primaryContact?.phone || '+91 98220 12345'})`,
+                        helpMessage: i.title || i.type || 'High-Impact Road Collision',
+                        destinationHospital: destinationHospName,
+                        assignedHospital: destinationHospName,
+                        hospitalLatitude: hospLat,
+                        hospitalLongitude: hospLng,
+                        hospitalAddress: hospAddress,
+                        hospitalPhone: hospPhone,
+                        hospitalTraumaLevel: hospTraumaLevel,
+                        mapUrl: `https://www.google.com/maps/dir/?api=1&destination=${i.latitude || 18.5308},${i.longitude || 73.8290}`,
+                        hospitalMapUrl: `https://www.google.com/maps/dir/?api=1&destination=${hospLat},${hospLng}`,
+                        acknowledged: i.hospitalAcknowledged || false,
+                        hospitalAckAt: i.hospitalAckAt || null,
+                        hospitalAckBy: i.hospitalAckBy || null,
+                        status: i.status || 'VERIFIED'
+                    };
+                });
                 return res.json(alerts);
             }
 

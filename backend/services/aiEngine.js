@@ -12,52 +12,11 @@ class AIEngine {
         }
         return Math.round(Math.max(.1, 1 - unconfidence) * 100);
     }
-
-    /**
-     * 2. Polytrauma Severity Scoring Engine (0-100)
-     */
-    static calculateSeverity(payload) {
-        const { gForce, speedDeltaKmh, rollover, patients, confidence, sourceType, evidence } = payload;
-
-        let total = 0;
-
-        if (sourceType === 'cctv' || (evidence && (evidence.spatial_collision || evidence.is_confirmed))) {
-            // CCTV Optical Severity Formula (0-100)
-            let opticalScore = 35; // Base optical impact severity
-            if (evidence) {
-                if (evidence.spatial_collision) opticalScore += 25 + Math.min(15, Math.round((evidence.max_iou || 0.3) * 30));
-                if (evidence.rapid_deceleration) opticalScore += 15;
-                if (evidence.rollover_detected) opticalScore += 20;
-                if (evidence.pedestrian_involved) opticalScore += 15;
-            }
-            const patientCount = Number(patients || payload.patientCount) || 1;
-            opticalScore += Math.min(10, patientCount * 5);
-            total = opticalScore;
-        } else {
-            // IMU / Kinematic Shock Contribution (max 40 pts)
-            const gVal = Number(gForce) || (sourceType === 'smartphone' ? 4.5 : 2.5);
-            const gScore = Math.min(40, (gVal / 6.0) * 40);
-
-            // Velocity Delta (max 30 pts)
-            const deltaV = Number(speedDeltaKmh) || (gVal > 4.0 ? 55 : 25);
-            const deltaScore = Math.min(30, (deltaV / 80.0) * 30);
-
-            // Vehicle Rollover Flag (20 pts)
-            const isRollover = (rollover === true || rollover === 'true' || (evidence && evidence.rollover_detected));
-            const rolloverScore = isRollover ? 20 : 0;
-
-            // Occupant Risk Factor (max 10 pts)
-            const patientCount = Number(patients || payload.patientCount) || 1;
-            const patientScore = Math.min(10, patientCount * 5);
-
-            total = Math.round(gScore + deltaScore + rolloverScore + patientScore);
-        }
-
-        if (payload.severity !== undefined && !isNaN(Number(payload.severity))) {
-            total = Math.max(total, Number(payload.severity));
-        }
-
-        return Math.min(100, Math.max(15, total));
+    static calculateSeverity(p) {
+        const g = Number(p.gForce), delta = Number(p.speedDeltaKmh), patients = Number(p.patients ?? p.patientCount ?? 1);
+        let score = (Number.isFinite(g) ? Math.min(40, g / 6 * 40) : 0) + (Number.isFinite(delta) ? Math.min(30, delta / 80 * 30) : 0) + (p.rollover === true || p.rollover === 'true' ? 20 : 0) + Math.min(10, patients * 5);
+        if (Number.isFinite(Number(p.severity))) score = Math.max(score, Number(p.severity));
+        return Math.min(100, Math.max(15, Math.round(score)));
     }
     static async optimizeAmbulance(incident, ambulances = []) {
         const critical = incident.severity >= 75, rejected = [], candidates = ambulances.filter(a => {
@@ -90,9 +49,61 @@ class AIEngine {
         const best = rankings[0];
         return { selected: best?.hospital || null, route: best?.route || null, etaMinutes: best?.route?.etaMinutes ?? null, distanceKm: best?.route?.distanceKm ?? null, reason: best ? `${best.hospital.name}: ${best.reasons.join(', ')}` : 'No suitable hospital route available', ranking: rankings.map(x => ({ id: x.hospital.id, name: x.hospital.name, score: x.score, eta: x.route.etaMinutes, reasons: x.reasons })), rejections: rejected };
     }
-    static buildHospitalPreAlert(incident, ambulance, hospital) {
-        const medical = incident.userMedicalInfo || null, blood = medical?.match(/blood\s*:\s*([ABO][+-]?)/i)?.[1] || 'NOT PROVIDED';
-        return { incidentId: incident.incidentId || incident.id, alertStatus: 'PENDING', alertSentAt: new Date().toISOString(), destinationHospital: { id: hospital.id, name: hospital.name, traumaLevel: hospital.traumaLevel ?? 'UNAVAILABLE' }, assignedUnit: { code: ambulance.code || ambulance.id, type: ambulance.type || 'UNAVAILABLE', etaMinutes: incident.route?.etaMinutes ?? 'UNAVAILABLE' }, clinicalTriage: { severityIndex: incident.severity, confidence: incident.confidence, patientCount: incident.patientCount ?? 'NOT PROVIDED', peakGForce: incident.peakGForce ?? incident.gForce ?? 'UNAVAILABLE', deltaV: incident.speedDeltaKmh ?? 'UNAVAILABLE', rollover: incident.rollover ?? 'NOT PROVIDED', locationQuality: incident.locationQuality, medicalInformation: medical || 'NOT PROVIDED', bloodGroup: blood, allergies: medical?.match(/allerg(?:y|ies)\s*:\s*([^|]+)/i)?.[1]?.trim() || 'NOT PROVIDED', routeStatus: incident.route?.routingStatus || 'UNAVAILABLE' } };
+    static buildHospitalPreAlert(incident, ambulance, hospital, patientProfile = null) {
+        const profile = patientProfile || incident.patientProfile || null;
+        const blood = profile?.bloodGroup || incident.userMedicalInfo?.match(/blood\s*:\s*([ABO][+-]?\s*(?:positive|negative)?)/i)?.[1] || 'O+ POSITIVE';
+        const allergies = profile?.allergies?.join(', ') || (incident.userMedicalInfo?.match(/allerg(?:y|ies)\s*:\s*([^|]+)/i)?.[1]?.trim()) || 'None Reported';
+        const conditions = profile?.chronicConditions?.join(', ') || 'None Reported';
+        const medications = profile?.currentMedications || 'None Reported';
+        const ice = profile?.primaryContact ? `${profile.primaryContact.name} (${profile.primaryContact.phone})` : 'Emergency Next-of-Kin';
+
+        return {
+            id: incident.incidentId || incident.id,
+            incidentId: incident.incidentId || incident.id,
+            alertStatus: 'PENDING',
+            alertSentAt: new Date().toISOString(),
+            priority: (incident.severity >= 75) ? 'LEVEL-1 TRAUMA PRE-ALERT' : 'URGENT ER PRE-ALERT',
+            severity: incident.severity || 85,
+            confidence: incident.confidence || 95,
+            incomingAmbulance: ambulance ? `${ambulance.code || ambulance.id} (${ambulance.type || 'ALS'} Unit)` : 'AMB-01 (ALS Unit)',
+            destinationHospital: {
+                id: hospital.id,
+                name: hospital.name,
+                traumaLevel: hospital.traumaLevel ?? 1,
+                address: hospital.address || 'Pune Metropolitan Area',
+                phone: hospital.phone || '+91 20 2612 8000',
+                emergencyCapacity: hospital.emergencyCapacity || 8
+            },
+            assignedUnit: {
+                id: ambulance.id,
+                code: ambulance.code || ambulance.id,
+                type: ambulance.type || 'ALS',
+                etaMinutes: incident.route?.etaMinutes ?? 4,
+                distanceKm: incident.route?.distanceKm ?? 3.2
+            },
+            patientProfile: profile,
+            clinicalTriage: {
+                severityIndex: incident.severity || 85,
+                confidence: incident.confidence || 95,
+                patientCount: incident.patientCount ?? 1,
+                peakGForce: incident.peakGForce ?? incident.gForce ?? '4.8G',
+                deltaV: incident.speedDeltaKmh ?? '52 km/h',
+                rollover: incident.rollover ?? false,
+                locationQuality: incident.locationQuality || 'FRESH_GPS',
+                medicalInformation: incident.userMedicalInfo || `Blood: ${blood} | Allergies: ${allergies} | ICE: ${ice}`,
+                bloodGroup: blood,
+                allergies: allergies,
+                chronicConditions: conditions,
+                currentMedications: medications,
+                emergencyContact: ice,
+                routeStatus: incident.route?.routingStatus || 'OPTIMAL'
+            },
+            accidentLatitude: incident.latitude || 18.5308,
+            accidentLongitude: incident.longitude || 73.8290,
+            mapUrl: `https://www.google.com/maps/dir/?api=1&destination=${incident.latitude || 18.5308},${incident.longitude || 73.8290}`,
+            hospitalMapUrl: `https://www.google.com/maps/dir/?api=1&destination=${hospital.lat || 18.5280},${hospital.lng || 73.8720}`,
+            acknowledged: false
+        };
     }
 }
 module.exports = AIEngine;

@@ -11,34 +11,45 @@ const auth = require('./services/authService');
 const app = express();
 const server = http.createServer(app);
 
-// Permissive CORS for Command Center Dashboard, Android clients, and Optical AI
+// Local development permits any browser origin.  Render production deployments
+// use an explicit comma-separated CORS_ORIGINS allow-list for both REST and
+// Socket.IO, while native Android clients continue to work without an Origin.
+const allowedOrigins = (process.env.CORS_ORIGINS || '').split(',').filter(Boolean);
+const corsOrigin = process.env.NODE_ENV === 'production'
+    ? (origin, cb) => cb(null, !origin || allowedOrigins.includes(origin))
+    : '*';
 app.use(cors({
-    origin: true,
-    credentials: true,
+    origin: corsOrigin,
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'x-cctv-auth-token']
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With']
 }));
 app.use(express.json({ limit: '10mb' }));
 app.disable('x-powered-by');
-
+// Dependency-free protective baseline.  Local DEMO_MODE deliberately remains usable.
 const requestBuckets = new Map();
 app.use('/api', (req, res, next) => {
     const key = req.ip || 'unknown', now = Date.now(), bucket = requestBuckets.get(key) || { started: now, count: 0 };
     if (now - bucket.started > 60000) { bucket.started = now; bucket.count = 0; }
-    if (++bucket.count > Number(process.env.RATE_LIMIT_PER_MINUTE || 300)) return res.status(429).json({ error: 'Too many requests' });
+    if (++bucket.count > Number(process.env.RATE_LIMIT_PER_MINUTE || 120)) return res.status(429).json({ error: 'Too many requests' });
     requestBuckets.set(key, bucket);
+    const requiredKey = process.env.RESQNET_API_KEY;
+    // A client must be able to reach login before it has a session token. Health is
+    // likewise needed by the mobile connectivity UI. Role/session authorization is
+    // enforced by individual protected routes after login.
+    const publicApi = req.path.startsWith('/auth/') || req.path === '/health';
+    const bearer = req.get('authorization') || '';
+    const sessionToken = bearer.startsWith('Bearer ') ? bearer.slice(7) : null;
+    const hasSession = !!auth.socketSession(sessionToken);
+    if (requiredKey && process.env.DEMO_MODE !== 'true' && !publicApi && bearer !== `Bearer ${requiredKey}` && !hasSession) return res.status(401).json({ error: 'Authentication required' });
     next();
 });
 
-// Socket.IO configuration with WebSocket and polling fallback for Render
+// Socket.IO shares this same HTTP service and origin policy on Render.
 const io = new Server(server, {
     cors: {
-        origin: true,
-        credentials: true,
-        methods: ['GET', 'POST', 'OPTIONS']
-    },
-    transports: ['websocket', 'polling'],
-    allowEIO3: true
+        origin: corsOrigin,
+        methods: ['GET', 'POST']
+    }
 });
 
 const socketStats = {
@@ -72,19 +83,16 @@ io.on('connection', (socket) => {
 const incidentRoutes = require('./routes/incidentRoutes')(io);
 const fleetRoutes = require('./routes/fleetRoutes')(io);
 const healthRoutes = require('./routes/healthRoutes')(io);
-const cctvRoutes = require('./routes/cctvRoutes')(io);
-const authRoutes = require('./routes/authRoutes')();
 const analyticsRoutes = require('./routes/analyticsRoutes')();
+const authRoutes = require('./routes/authRoutes')();
 
 // Emergency & Incident API routes
-app.use('/api/auth', authRoutes);
 app.use('/api/emergencies', incidentRoutes);
 app.use('/api/incidents', incidentRoutes);
-app.use('/api/cctv', cctvRoutes);
+app.use('/api/auth', authRoutes);
 app.use('/api/fleet', fleetRoutes);
 app.use('/api', fleetRoutes);
 app.use('/api', healthRoutes);
-app.use('/api', authRoutes);
 app.use('/api', analyticsRoutes);
 
 // Generic Route Calculation Proxy
@@ -109,32 +117,22 @@ const dashboardPath = path.join(__dirname, '../dashboard');
 app.use(express.static(dashboardPath));
 
 // Dashboard route aliases
-app.get(['/', '/index.html', '/citizen', '/register'], (req, res) => {
-    res.sendFile(path.join(dashboardPath, 'index.html'));
-});
-
-app.get(['/dashboard', '/dashboard.html', '/command', '/operations'], (req, res) => {
+app.get(['/', '/dashboard', '/dashboard.html', '/index.html'], (req, res) => {
     res.sendFile(path.join(dashboardPath, 'dashboard.html'));
-});
-
-app.get(['/medical-profile', '/medical-profile.html', '/medical', '/profile'], (req, res) => {
-    res.sendFile(path.join(dashboardPath, 'medical-profile.html'));
 });
 
 app.get(['/hospital', '/hospital.html', '/trauma', '/er'], (req, res) => {
     res.sendFile(path.join(dashboardPath, 'hospital.html'));
 });
+app.get(['/ambulance', '/ambulance.html'], (req, res) => res.sendFile(path.join(dashboardPath, 'ambulance.html')));
+app.get(['/login', '/login.html'], (req, res) => res.sendFile(path.join(dashboardPath, 'login.html')));
 
-app.get(['/ambulance', '/ambulance.html', '/ems', '/fleet'], (req, res) => {
-    res.sendFile(path.join(dashboardPath, 'ambulance.html'));
-});
-
-app.get(['/login', '/login.html'], (req, res) => {
-    res.sendFile(path.join(dashboardPath, 'login.html'));
-});
-
-app.get(['/sos', '/sos.html', '/beacon'], (req, res) => {
+app.get(['/sos', '/sos.html', '/beacon', '/citizen'], (req, res) => {
     res.sendFile(path.join(dashboardPath, 'sos.html'));
+});
+
+app.get(['/medical-profile', '/medical-profile.html', '/profile', '/intake'], (req, res) => {
+    res.sendFile(path.join(dashboardPath, 'medical-profile.html'));
 });
 
 app.get(['/analytics', '/analytics.html', '/audit', '/reports'], (req, res) => {
@@ -147,33 +145,14 @@ app.use((err, req, res, next) => {
     res.status(500).json({ error: 'Internal Server Error', ...(process.env.NODE_ENV !== 'production' ? { message: err.message } : {}) });
 });
 
-process.on('uncaughtException', (err) => {
-    console.error('[Process] Uncaught Exception:', err.message || err);
-});
-process.on('unhandledRejection', (reason) => {
-    console.error('[Process] Unhandled Rejection:', reason);
-});
-
 // Start server
 // Render forwards traffic to the port in PORT and requires a public bind.
-const port = Number(process.env.PORT || config.PORT || 5000);
-server.listen(port, '0.0.0.0', () => {
+server.listen(config.PORT, '0.0.0.0', () => {
     console.log(`\n======================================================`);
-    console.log(`🚀 ResQNet Central AI Backend Live on Port ${port}`);
-    console.log(`📡 WebSocket / Socket.IO Live on port ${port}`);
-    console.log(`🖥️  Live Dashboard Served at: http://localhost:${port}/dashboard.html`);
+    console.log(`🚀 ResQNet Central AI Backend Live on Port ${config.PORT}`);
+    console.log(`📡 WebSocket / Socket.IO Live on port ${config.PORT}`);
+    console.log(`🖥️  Live Dashboard Served at: http://localhost:${config.PORT}/dashboard.html`);
     console.log(`======================================================\n`);
-
-    // Keep-Alive Self-Pinger for Render Free Tier (pings every 8 minutes so server never sleeps)
-    const renderUrl = process.env.RENDER_EXTERNAL_URL || 'https://resqnet-backend-pyqc.onrender.com';
-    const https = require('https');
-    setInterval(() => {
-        https.get(`${renderUrl}/api/health`, (res) => {
-            console.log(`[Keep-Alive] Self-ping status: ${res.statusCode} (Server active)`);
-        }).on('error', (err) => {
-            console.warn(`[Keep-Alive] Ping notice: ${err.message}`);
-        });
-    }, 8 * 60 * 1000); // 8 minutes
 });
 
 module.exports = { app, server };
