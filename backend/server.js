@@ -143,6 +143,20 @@ app.get(['/', '/dashboard', '/dashboard.html', '/index.html'], (req, res) => {
 app.get(['/hospital', '/hospital.html', '/trauma', '/er'], (req, res) => {
     res.sendFile(path.join(dashboardPath, 'hospital.html'));
 });
+app.get(['/download', '/download.html', '/app', '/apk'], (req, res) => {
+    res.sendFile(path.join(dashboardPath, 'download.html'));
+});
+
+app.get(['/resqnet.apk', '/download/resqnet.apk', '/app.apk'], (req, res) => {
+    const apkPath = path.join(dashboardPath, 'resqnet.apk');
+    if (fs.existsSync(apkPath)) {
+        res.setHeader('Content-Type', 'application/vnd.android.package-archive');
+        return res.download(apkPath, 'ResQNet-v3.4.0.apk');
+    } else {
+        return res.status(404).send('APK file not found on server.');
+    }
+});
+
 app.get(['/ambulance', '/ambulance.html'], (req, res) => res.sendFile(path.join(dashboardPath, 'ambulance.html')));
 app.get(['/login', '/login.html'], (req, res) => res.sendFile(path.join(dashboardPath, 'login.html')));
 
