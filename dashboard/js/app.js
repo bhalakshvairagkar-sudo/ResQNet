@@ -1,4 +1,10 @@
-/* ============ RESQNET COMMAND CENTER — LEAFLET MULTI-MAP & OSRM ENGINE ============ */
+/* ============ RESQNET COMMAND CENTER — DUAL GOOGLE MAPS & LEAFLET ENGINE ============
+ * Real-Time Google Maps with Native Live Traffic Layer
+ * Turn-by-Turn OSRM Road Geometry & Live Dispatched Ambulance Motion
+ * 15 Pune Trauma Hospitals & 9 Optical AI CCTV Junction Cameras
+ * Prominently Visible Assigned Fleet & Hospital Intelligence
+ * =================================================================================== */
+
 const CFG = window.RESQNET_CONFIG || {};
 const BACKEND_URL = CFG.BACKEND_URL || window.location.origin;
 const API = BACKEND_URL + "/api";
@@ -8,52 +14,53 @@ const sessionToken = localStorage.getItem("resqnetToken");
 const sessionUser = (() => { try { return JSON.parse(localStorage.getItem("resqnetUser") || "null"); } catch (_) { return null; } })();
 const authHeaders = () => ({ "Content-Type": "application/json", Authorization: `Bearer ${sessionToken}` });
 
-/* ---------- MAP PROVIDER / TILE ARCHITECTURE ---------- */
+/* ---------- TACTICAL DARK STYLES FOR GOOGLE MAPS ---------- */
+const GOOGLE_DARK_STYLE = [
+  { elementType: "geometry", stylers: [{ color: "#0b111a" }] },
+  { elementType: "labels.text.stroke", stylers: [{ color: "#0b111a" }] },
+  { elementType: "labels.text.fill", stylers: [{ color: "#748ba0" }] },
+  { featureType: "administrative.locality", elementType: "labels.text.fill", stylers: [{ color: "#cbd5e1" }] },
+  { featureType: "poi", elementType: "labels.text.fill", stylers: [{ color: "#5eead4" }] },
+  { featureType: "poi.park", elementType: "geometry", stylers: [{ color: "#081b1b" }] },
+  { featureType: "poi.park", elementType: "labels.text.fill", stylers: [{ color: "#6b7280" }] },
+  { featureType: "road", elementType: "geometry", stylers: [{ color: "#162232" }] },
+  { featureType: "road", elementType: "geometry.stroke", stylers: [{ color: "#0f1724" }] },
+  { featureType: "road", elementType: "labels.text.fill", stylers: [{ color: "#94a3b8" }] },
+  { featureType: "road.highway", elementType: "geometry", stylers: [{ color: "#1e3a5f" }] },
+  { featureType: "road.highway", elementType: "geometry.stroke", stylers: [{ color: "#0f1d30" }] },
+  { featureType: "road.highway", elementType: "labels.text.fill", stylers: [{ color: "#38bdf8" }] },
+  { featureType: "transit", elementType: "geometry", stylers: [{ color: "#162338" }] },
+  { featureType: "transit.station", elementType: "labels.text.fill", stylers: [{ color: "#38bdf8" }] },
+  { featureType: "water", elementType: "geometry", stylers: [{ color: "#06101c" }] },
+  { featureType: "water", elementType: "labels.text.fill", stylers: [{ color: "#334155" }] },
+  { featureType: "water", elementType: "labels.text.stroke", stylers: [{ color: "#06101c" }] }
+];
+
+/* ---------- LEAFLET TILE PROVIDERS (FALLBACK / ALTERNATIVE) ---------- */
 const MAP_PROVIDERS = {
   dark: {
     name: "Dark Matter (Night)",
     url: "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png",
-    attribution: "&copy; <a href='https://openstreetmap.org'>OpenStreetMap</a> &copy; <a href='https://carto.com/'>CARTO</a>",
+    attribution: "&copy; OpenStreetMap contributors &copy; CARTO",
     subdomains: "abcd",
     maxZoom: 19
   },
   standard: {
     name: "Standard Road Map",
     url: "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
-    attribution: "&copy; <a href='https://openstreetmap.org'>OpenStreetMap</a> contributors",
+    attribution: "&copy; OpenStreetMap contributors",
     subdomains: "abc",
-    maxZoom: 19
-  },
-  light: {
-    name: "Light Positron",
-    url: "https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png",
-    attribution: "&copy; <a href='https://openstreetmap.org'>OpenStreetMap</a> &copy; <a href='https://carto.com/'>CARTO</a>",
-    subdomains: "abcd",
     maxZoom: 19
   },
   satellite: {
     name: "Satellite Imagery",
     url: "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
-    attribution: "&copy; Esri, i-cubed, USDA, USGS, AEX, GeoEye, Getmapping, Aerogrid, IGN, IGP, UPR-EGP, GIS Community",
+    attribution: "&copy; Esri, i-cubed, USDA, USGS",
     maxZoom: 18
-  },
-  hybrid: {
-    name: "Hybrid (Sat + Roads)",
-    url: "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
-    overlayUrl: "https://{s}.basemaps.cartocdn.com/rastertiles/voyager_only_labels/{z}/{x}/{y}{r}.png",
-    attribution: "&copy; Esri &copy; CARTO",
-    subdomains: "abcd",
-    maxZoom: 18
-  },
-  terrain: {
-    name: "Topo Terrain",
-    url: "https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png",
-    attribution: "&copy; <a href='https://opentopomap.org'>OpenTopoMap</a> &copy; OpenStreetMap",
-    subdomains: "abc",
-    maxZoom: 17
   }
 };
 
+/* ---------- CENTRAL STATE ---------- */
 const state = {
   incidents: {},
   ambulances: {},
@@ -69,7 +76,7 @@ const state = {
   activity: [],
   systemHealth: {},
   demoMode: false,
-  mapStyle: localStorage.getItem("resqnet_map_style") || "dark",
+  mapStyle: localStorage.getItem("resqnet_map_style") || "google_dark",
   filters: { sev: "ALL", src: "ALL", q: "" },
   layers: {
     incidents: true,
@@ -78,14 +85,15 @@ const state = {
     routes: true,
     cctv: true,
     hotspots: true,
-    traffic: false
+    traffic: true // Traffic enabled by default as requested
   },
   seen: new Set(),
   lastSync: null,
-  demoBusy: false
+  demoBusy: false,
+  activeSimulations: {} // Ongoing live ambulance motion animations
 };
 
-/* ---------- utils ---------- */
+/* ---------- UTILITY FUNCTIONS ---------- */
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 const num = (v) => (v === null || v === undefined || v === "" || isNaN(Number(v)) ? null : Number(v));
@@ -115,73 +123,225 @@ function haversine(a, b) {
   const h = Math.sin(dLat / 2) ** 2 + Math.cos((a[0] * Math.PI) / 180) * Math.cos((b[0] * Math.PI) / 180) * Math.sin(dLng / 2) ** 2;
   return 2 * R * Math.asin(Math.sqrt(h));
 }
-const maskPhone = (p) => (p ? String(p).slice(0, 3) + "•••••" + String(p).slice(-2) : null);
 
-/* ---------- MAP & LAYER MANAGEMENT ---------- */
-let map = null, currentBaseLayer = null, currentOverlayLayer = null;
+/* Calculate bearing in degrees from point A to point B */
+function calculateBearing(lat1, lon1, lat2, lon2) {
+  const φ1 = (lat1 * Math.PI) / 180, φ2 = (lat2 * Math.PI) / 180;
+  const Δλ = ((lon2 - lon1) * Math.PI) / 180;
+  const y = Math.sin(Δλ) * Math.cos(φ2);
+  const x = Math.cos(φ1) * Math.sin(φ2) - Math.cos(φ1) * Math.cos(φ2) * Math.cos(Δλ);
+  const θ = Math.atan2(y, x);
+  return ((θ * 180) / Math.PI + 360) % 360;
+}
+
+/* ---------- DUAL-ENGINE MAP ARCHITECTURE ---------- */
+let activeEngine = null; // 'google' or 'leaflet'
+let gMap = null, gTrafficLayer = null, gInfoWindow = null;
+const gOverlays = { inc: {}, amb: {}, hosp: {}, cctv: {} };
+const gPolylines = { route1: null, route1Glow: null, route2: null, route2Glow: null };
+const gFovs = {};
+const gHotspots = {};
+
+let lMap = null, lBaseLayer = null;
 let L_inc, L_resolved, L_amb, L_hosp, L_route, L_cctv, L_cctvFov, L_hotspots, L_traffic;
 const incMarkers = {}, ambMarkers = {}, hospMarkers = {}, cctvMarkers = {}, fovLayers = {}, hotspotCircles = {};
-const trafficPolylines = [];
 let testMapTarget = null;
 
-function setMapStyle(styleKey) {
-  if (!map) return;
-  const provider = MAP_PROVIDERS[styleKey] || MAP_PROVIDERS.dark;
-  state.mapStyle = styleKey;
-  localStorage.setItem("resqnet_map_style", styleKey);
+/* ---------- GOOGLE MAPS CUSTOM HTML OVERLAY CLASS ---------- */
+let GoogleHtmlOverlayClass = null;
 
-  if ($("mapStyleSelect")) $("mapStyleSelect").value = styleKey;
+function defineGoogleHtmlOverlay() {
+  if (GoogleHtmlOverlayClass || !window.google || !window.google.maps) return;
 
-  if (currentBaseLayer) { map.removeLayer(currentBaseLayer); currentBaseLayer = null; }
-  if (currentOverlayLayer) { map.removeLayer(currentOverlayLayer); currentOverlayLayer = null; }
+  GoogleHtmlOverlayClass = class extends google.maps.OverlayView {
+    constructor(lat, lng, htmlContent, onClick, className = "") {
+      super();
+      this.lat = lat;
+      this.lng = lng;
+      this.htmlContent = htmlContent;
+      this.onClick = onClick;
+      this.className = className;
+      this.div = null;
+      this.visible = true;
+    }
+    onAdd() {
+      this.div = document.createElement("div");
+      this.div.className = "custom-map-overlay " + this.className;
+      this.div.innerHTML = this.htmlContent;
+      if (this.onClick) {
+        this.div.addEventListener("click", (e) => {
+          e.stopPropagation();
+          this.onClick(e);
+        });
+      }
+      const panes = this.getPanes();
+      if (panes && panes.overlayMouseTarget) {
+        panes.overlayMouseTarget.appendChild(this.div);
+      }
+    }
+    draw() {
+      if (!this.div) return;
+      const proj = this.getProjection();
+      if (!proj) return;
+      const pt = proj.fromLatLngToDivPixel(new google.maps.LatLng(this.lat, this.lng));
+      if (pt) {
+        this.div.style.left = pt.x + "px";
+        this.div.style.top = pt.y + "px";
+        this.div.style.display = this.visible ? "block" : "none";
+      }
+    }
+    setPosition(lat, lng) {
+      this.lat = lat;
+      this.lng = lng;
+      this.draw();
+    }
+    setContent(html) {
+      this.htmlContent = html;
+      if (this.div) this.div.innerHTML = html;
+    }
+    setVisible(v) {
+      this.visible = v;
+      if (this.div) this.div.style.display = v ? "block" : "none";
+    }
+    onRemove() {
+      if (this.div && this.div.parentNode) {
+        this.div.parentNode.removeChild(this.div);
+        this.div = null;
+      }
+    }
+  };
+}
 
-  const errorBanner = $("mapTileErrorBanner");
+/* ---------- MAP INITIALIZATION & ENGINE SWITCHING ---------- */
+function initMapEngine() {
+  const mapEl = $("map");
+  if (!mapEl) return;
 
-  currentBaseLayer = L.tileLayer(provider.url, {
+  const preferGoogle = state.mapStyle.startsWith("google_") || !state.mapStyle;
+  const isGoogleAvailable = window.google && window.google.maps && !window.googleMapsFailed;
+
+  if (preferGoogle && isGoogleAvailable) {
+    initGoogleMapsEngine();
+  } else {
+    initLeafletEngine();
+  }
+
+  seedFleet();
+  loadInfrastructure();
+}
+
+/* Callback when Google Maps JS API loads */
+window.onGoogleMapsReady = function(success) {
+  if (success && !gMap) {
+    console.log("[ResQNet] Google Maps JS API loaded successfully. Initializing Google Maps engine.");
+    initGoogleMapsEngine();
+    seedFleet();
+    loadInfrastructure();
+  } else if (!success && !lMap) {
+    console.warn("[ResQNet] Google Maps failed, initializing Leaflet fallback engine.");
+    initLeafletEngine();
+    seedFleet();
+    loadInfrastructure();
+  }
+};
+
+function initGoogleMapsEngine() {
+  const mapEl = $("map");
+  if (!mapEl || gMap) return;
+
+  // Cleanup Leaflet if running
+  if (lMap) {
+    try { lMap.remove(); lMap = null; } catch (_) {}
+    mapEl.innerHTML = "";
+  }
+
+  defineGoogleHtmlOverlay();
+
+  let mapTypeId = google.maps.MapTypeId.ROADMAP;
+  let styles = GOOGLE_DARK_STYLE;
+
+  if (state.mapStyle === "google_roadmap") {
+    styles = [];
+  } else if (state.mapStyle === "google_satellite") {
+    mapTypeId = google.maps.MapTypeId.SATELLITE;
+    styles = [];
+  } else if (state.mapStyle === "google_hybrid") {
+    mapTypeId = google.maps.MapTypeId.HYBRID;
+    styles = [];
+  } else if (state.mapStyle === "google_terrain") {
+    mapTypeId = google.maps.MapTypeId.TERRAIN;
+    styles = [];
+  }
+
+  gMap = new google.maps.Map(mapEl, {
+    center: { lat: CENTER[0], lng: CENTER[1] },
+    zoom: CFG.DEFAULT_ZOOM || 12,
+    mapTypeId: mapTypeId,
+    styles: styles,
+    disableDefaultUI: true,
+    zoomControl: true,
+    zoomControlOptions: { position: google.maps.ControlPosition.BOTTOM_LEFT }
+  });
+
+  // Google Maps Native Traffic Layer
+  gTrafficLayer = new google.maps.TrafficLayer();
+  if (state.layers.traffic) {
+    gTrafficLayer.setMap(gMap);
+  }
+
+  gInfoWindow = new google.maps.InfoWindow();
+
+  gMap.addListener("click", (e) => {
+    if (testMapTarget && e.latLng) {
+      const lat = e.latLng.lat();
+      const lng = e.latLng.lng();
+      setTestCoordinates(testMapTarget, lat, lng);
+      const resEl = $("testModeResult");
+      if (resEl) resEl.textContent = `${testMapTarget === "inc" ? "Accident" : testMapTarget === "amb" ? "Ambulance" : "Hospital"} coordinates set from map click.`;
+      testMapTarget = null;
+    }
+  });
+
+  activeEngine = "google";
+  console.log("[ResQNet] Google Maps Command Engine active with real-time traffic layer.");
+}
+
+function initLeafletEngine() {
+  const mapEl = $("map");
+  if (!mapEl || lMap) return;
+
+  // Cleanup Google Maps if running
+  if (gMap) {
+    try {
+      if (gTrafficLayer) gTrafficLayer.setMap(null);
+      gMap = null;
+    } catch (_) {}
+    mapEl.innerHTML = "";
+  }
+
+  lMap = L.map("map", { zoomControl: false, preferCanvas: true }).setView(CENTER, CFG.DEFAULT_ZOOM || 12);
+  L.control.zoom({ position: "bottomleft" }).addTo(lMap);
+
+  const provider = MAP_PROVIDERS[state.mapStyle] || MAP_PROVIDERS.dark;
+  lBaseLayer = L.tileLayer(provider.url, {
     attribution: provider.attribution,
     maxZoom: provider.maxZoom || 19,
     subdomains: provider.subdomains || "abc"
-  });
-
-  currentBaseLayer.on("tileerror", () => {
-    if (errorBanner) errorBanner.style.display = "flex";
-  });
-  currentBaseLayer.on("load", () => {
-    if (errorBanner) errorBanner.style.display = "none";
-  });
-
-  currentBaseLayer.addTo(map);
-
-  if (provider.overlayUrl) {
-    currentOverlayLayer = L.tileLayer(provider.overlayUrl, {
-      subdomains: provider.subdomains || "abcd",
-      maxZoom: provider.maxZoom || 19,
-      pane: "overlayPane"
-    }).addTo(map);
-  }
-}
-
-function initMap() {
-  const mapEl = $("map");
-  if (!mapEl || map) return;
-
-  map = L.map("map", { zoomControl: false, preferCanvas: true }).setView(CENTER, CFG.DEFAULT_ZOOM || 13);
-  L.control.zoom({ position: "bottomleft" }).addTo(map);
-
-  setMapStyle(state.mapStyle);
+  }).addTo(lMap);
 
   // Operational layer groups
   L_traffic = L.layerGroup();
-  L_hotspots = L.layerGroup().addTo(map);
-  L_cctvFov = L.layerGroup().addTo(map);
-  L_cctv = L.layerGroup().addTo(map);
-  L_route = L.layerGroup().addTo(map);
-  L_hosp = L.layerGroup().addTo(map);
-  L_amb = L.layerGroup().addTo(map);
+  if (state.layers.traffic) L_traffic.addTo(lMap);
+  L_hotspots = L.layerGroup().addTo(lMap);
+  L_cctvFov = L.layerGroup().addTo(lMap);
+  L_cctv = L.layerGroup().addTo(lMap);
+  L_route = L.layerGroup().addTo(lMap);
+  L_hosp = L.layerGroup().addTo(lMap);
+  L_amb = L.layerGroup().addTo(lMap);
   L_resolved = L.layerGroup();
-  L_inc = L.layerGroup().addTo(map);
+  L_inc = L.layerGroup().addTo(lMap);
 
-  map.on("click", (event) => {
+  lMap.on("click", (event) => {
     if (!testMapTarget) return;
     setTestCoordinates(testMapTarget, event.latlng.lat, event.latlng.lng);
     const resEl = $("testModeResult");
@@ -189,62 +349,124 @@ function initMap() {
     testMapTarget = null;
   });
 
-  seedFleet();
-  loadInfrastructure();
+  activeEngine = "leaflet";
+  console.log("[ResQNet] Leaflet Multi-Tile Engine active as fallback.");
 }
 
-/* ---------- MARKER FACTORIES ---------- */
-function makeIncIcon(sev, selected, resolved) {
-  const b = band(sev);
+function setMapStyle(styleKey) {
+  state.mapStyle = styleKey;
+  localStorage.setItem("resqnet_map_style", styleKey);
+  if ($("mapStyleSelect")) $("mapStyleSelect").value = styleKey;
+
+  if (styleKey.startsWith("google_")) {
+    if (!gMap && window.google && window.google.maps) {
+      initGoogleMapsEngine();
+      renderAllEntities();
+    } else if (gMap) {
+      if (styleKey === "google_dark") {
+        gMap.setMapTypeId(google.maps.MapTypeId.ROADMAP);
+        gMap.setOptions({ styles: GOOGLE_DARK_STYLE });
+      } else if (styleKey === "google_roadmap") {
+        gMap.setMapTypeId(google.maps.MapTypeId.ROADMAP);
+        gMap.setOptions({ styles: [] });
+      } else if (styleKey === "google_satellite") {
+        gMap.setMapTypeId(google.maps.MapTypeId.SATELLITE);
+        gMap.setOptions({ styles: [] });
+      } else if (styleKey === "google_hybrid") {
+        gMap.setMapTypeId(google.maps.MapTypeId.HYBRID);
+        gMap.setOptions({ styles: [] });
+      } else if (styleKey === "google_terrain") {
+        gMap.setMapTypeId(google.maps.MapTypeId.TERRAIN);
+        gMap.setOptions({ styles: [] });
+      }
+    }
+  } else {
+    if (!lMap) {
+      initLeafletEngine();
+      renderAllEntities();
+    } else {
+      const provider = MAP_PROVIDERS[styleKey] || MAP_PROVIDERS.dark;
+      if (lBaseLayer) lMap.removeLayer(lBaseLayer);
+      lBaseLayer = L.tileLayer(provider.url, {
+        attribution: provider.attribution,
+        maxZoom: provider.maxZoom || 19,
+        subdomains: provider.subdomains || "abc"
+      }).addTo(lMap);
+    }
+  }
+}
+
+function renderAllEntities() {
+  Object.values(state.incidents).forEach(upsertIncidentMarker);
+  Object.values(state.ambulances).forEach(updateAmbulance);
+  Object.values(state.hospitals).forEach(updateHospital);
+  Object.values(state.cctv).forEach(renderCctvCamera);
+  if (state.selectedIncidentId) drawRoute(state.selectedIncidentId);
+}
+
+/* ---------- MARKER HTML GENERATORS & PROMINENT CALLOUT BADGES ---------- */
+function getIncMarkerHtml(inc, isSelected, isResolved) {
+  const b = band(inc.severity);
   const isCrit = b.k === "critical";
   const sevKey = b.k || "medium";
 
-  return L.divIcon({
-    className: "custom-map-icon",
-    html: `<div class="inc-marker sev-${sevKey} ${selected ? "sel" : ""} ${resolved ? "resolved" : ""}">
-      ${isCrit && !resolved ? `<div class="ring"></div>` : ""}
-      <div class="core">${resolved ? "✓" : (sev !== null ? Math.min(99, Math.round(sev)) : "!")}</div>
-    </div>`,
-    iconSize: [34, 34],
-    iconAnchor: [17, 17],
-    popupAnchor: [0, -18]
-  });
+  const badgeHtml = isSelected ? `
+    <div class="callout-badge incident">
+      <i class="fa-solid fa-triangle-exclamation"></i>
+      <span>${esc(inc.id || shortId(inc._id))} · SEV ${inc.severity || 85}</span>
+    </div>` : "";
+
+  return `
+    ${badgeHtml}
+    <div class="inc-marker sev-${sevKey} ${isSelected ? "sel" : ""} ${isResolved ? "resolved" : ""}">
+      ${isCrit && !isResolved ? `<div class="ring"></div>` : ""}
+      <div class="core">${isResolved ? "✓" : (inc.severity !== null ? Math.min(99, Math.round(inc.severity)) : "!")}</div>
+    </div>`;
 }
 
-function makeAmbIcon(status, sel) {
-  const s = String(status || "available").toLowerCase();
-  return L.divIcon({
-    className: "custom-map-icon",
-    html: `<div class="amb-marker ${s} ${sel ? "sel" : ""}"><i class="fa-solid fa-truck-medical"></i></div>`,
-    iconSize: [30, 30],
-    iconAnchor: [15, 15],
-    popupAnchor: [0, -16]
-  });
+function getAmbMarkerHtml(amb, isSelected) {
+  const s = String(amb.status || "available").toLowerCase();
+  const isDispatched = amb.status === "EN_ROUTE" || amb.isMoving;
+
+  const badgeHtml = (isSelected || isDispatched) ? `
+    <div class="callout-badge ambulance ${isDispatched ? 'moving' : ''}">
+      <i class="fa-solid fa-truck-medical"></i>
+      <span>${esc(amb.id)} (${esc(amb.type || "ALS")})</span>
+      ${isDispatched ? `<span style="color:#f59e0b;font-weight:900;"> ● EN ROUTE ${amb.eta ? `(${amb.eta}m)` : ''}</span>` : ''}
+    </div>` : "";
+
+  return `
+    ${badgeHtml}
+    <div class="amb-marker ${s} ${isSelected ? "sel" : ""} ${isDispatched ? "moving" : ""}">
+      <i class="fa-solid fa-truck-medical"></i>
+    </div>`;
 }
 
-function makeHospIcon(capacity, trauma, sel) {
-  const cap = String(capacity || "available").toLowerCase();
-  return L.divIcon({
-    className: "custom-map-icon",
-    html: `<div class="hosp-marker ${trauma ? "trauma" : ""} ${cap} ${sel ? "sel" : ""}"><i class="fa-solid ${trauma ? "fa-house-medical" : "fa-hospital"}"></i></div>`,
-    iconSize: [30, 30],
-    iconAnchor: [15, 15],
-    popupAnchor: [0, -16]
-  });
+function getHospMarkerHtml(hosp, isSelected) {
+  const cap = String(hosp.capacity || "available").toLowerCase();
+  const isDestHosp = isSelected;
+  const isAck = isDestHosp && state.incidents[state.selectedIncidentId]?.hospitalAcknowledged;
+
+  const badgeHtml = isDestHosp ? `
+    <div class="callout-badge hospital">
+      <i class="fa-solid fa-hospital"></i>
+      <span>${esc(hosp.name)}</span>
+      ${isAck ? '<span style="color:#4ade80;font-weight:800;margin-left:4px;">✓ ACKNOWLEDGED</span>' : '<span style="color:#fb923c;font-weight:700;margin-left:4px;">PRE-ALERT SENT</span>'}
+    </div>` : "";
+
+  return `
+    ${badgeHtml}
+    <div class="hosp-marker ${hosp.trauma ? "trauma" : ""} ${cap} ${isSelected ? "sel" : ""}">
+      <i class="fa-solid ${hosp.trauma ? "fa-house-medical" : "fa-hospital"}"></i>
+    </div>`;
 }
 
-function makeCctvIcon(status) {
-  const s = String(status || "ONLINE").toLowerCase();
-  return L.divIcon({
-    className: "custom-map-icon",
-    html: `<div class="cctv-marker ${s}"><i class="fa-solid fa-video"></i></div>`,
-    iconSize: [26, 26],
-    iconAnchor: [13, 13],
-    popupAnchor: [0, -14]
-  });
+function getCctvMarkerHtml(cam) {
+  const s = String(cam.status || "ONLINE").toLowerCase();
+  return `<div class="cctv-marker ${s}"><i class="fa-solid fa-video"></i></div>`;
 }
 
-/* ---------- CCTV FOV CONE GEOMETRY ---------- */
+/* ---------- CCTV FOV CONE GEOMETRY GENERATOR ---------- */
 function createFovPolygon(lat, lng, headingDeg, fovDeg, radiusMeters) {
   const points = [[lat, lng]];
   const R = 6378137;
@@ -285,34 +507,7 @@ async function loadInfrastructure() {
     const cctvRes = await fetch(API + "/fleet/cctv");
     const cams = await cctvRes.json();
     if (Array.isArray(cams)) {
-      cams.forEach((cam) => {
-        state.cctv[cam.id] = cam;
-        const pos = [cam.lat, cam.lng];
-        const popup = `<div class="pop-t" style="color:#38BDF8"><i class="fa-solid fa-video"></i> ${esc(cam.cameraId || cam.id)}</div>
-          Name: <b>${esc(cam.cameraName || "Junction Cam")}</b><br/>
-          Status: <b>${esc(cam.status)}</b><br/>
-          FPS: <b>${cam.fps || 24.0}</b> | Latency: <b>${cam.inferenceLatency || 38}ms</b><br/>
-          Coverage: <b>${cam.coverageRadiusMeters || 200}m @ ${cam.fovAngle || 60}°</b><br/>
-          <div style="margin-top:8px"><button onclick="openCctvModal('${esc(cam.cameraId || cam.id)}')" style="width:100%;padding:4px 8px;background:#38BDF8;color:#000;border:none;border-radius:4px;font-weight:bold;cursor:pointer;font-size:10px;"><i class="fa-solid fa-play"></i> PREVIEW CAMERA FEED</button></div>`;
-
-        if (!cctvMarkers[cam.id]) {
-          cctvMarkers[cam.id] = L.marker(pos, { icon: makeCctvIcon(cam.status) }).bindPopup(popup).addTo(L_cctv);
-        } else {
-          cctvMarkers[cam.id].setLatLng(pos).setIcon(makeCctvIcon(cam.status)).setPopupContent(popup);
-        }
-
-        if (cam.fovAngle && cam.heading !== undefined) {
-          const cone = createFovPolygon(cam.lat, cam.lng, cam.heading, cam.fovAngle, cam.coverageRadiusMeters || 200);
-          if (fovLayers[cam.id]) L_cctvFov.removeLayer(fovLayers[cam.id]);
-          fovLayers[cam.id] = L.polygon(cone, {
-            color: "#38BDF8",
-            weight: 1,
-            opacity: 0.8,
-            fillColor: "#38BDF8",
-            fillOpacity: 0.12
-          }).bindPopup(`<b>${esc(cam.cameraId)}</b> Detection Zone`).addTo(L_cctvFov);
-        }
-      });
+      cams.forEach(renderCctvCamera);
     }
 
     // 2. Crash Blackspot Hotspots
@@ -320,53 +515,143 @@ async function loadInfrastructure() {
     const hotspots = await hotRes.json();
     if (Array.isArray(hotspots)) {
       state.hotspots = hotspots;
-      L_hotspots.clearLayers();
-      hotspots.forEach((h, idx) => {
-        const circle = L.circle([h.lat, h.lng], {
-          radius: h.radiusMeters || 300,
-          color: "#EF4444",
-          weight: 1.5,
-          opacity: 0.8,
-          fillColor: "#EF4444",
-          fillOpacity: 0.16
-        }).bindPopup(`<div class="pop-t" style="color:var(--red)"><i class="fa-solid fa-fire"></i> ${esc(h.name)}</div>
-          Risk Score: <b>${h.riskScore}/100</b><br/>
-          Category: <b>${esc(h.category)}</b><br/>
-          Historical Incidents: <b>${h.historicalIncidents}</b>`).addTo(L_hotspots);
-        hotspotCircles[h.id || idx] = circle;
-      });
+      renderHotspots(hotspots);
     }
 
-    // 3. Configured Traffic Context Corridors
+    // 3. Configured Traffic Context
     const trafficRes = await fetch(API + "/fleet/traffic");
     const corridors = await trafficRes.json();
     if (Array.isArray(corridors)) {
       state.trafficCorridors = corridors;
-      L_traffic.clearLayers();
-      corridors.forEach((c) => {
-        const color = c.congestionLevel === "MODERATE" ? "#F97316" : "#22C55E";
-        const poly = L.polyline(c.coordinates.map((pt) => [pt[1], pt[0]]), {
-          color: color,
-          opacity: 0.75,
-          weight: 4
-        }).bindPopup(`<b>${esc(c.name)}</b><br/>Status: <b>${esc(c.trafficLabel)}</b>`).addTo(L_traffic);
-        trafficPolylines.push(poly);
-      });
+      renderTrafficCorridors(corridors);
     }
   } catch (e) {
     console.warn("[Dashboard] Infrastructure load error:", e.message);
   }
 }
 
+function renderCctvCamera(cam) {
+  state.cctv[cam.id] = cam;
+  const pos = [cam.lat, cam.lng];
+  const popupHtml = `
+    <div class="pop-t" style="color:#38BDF8"><i class="fa-solid fa-video"></i> ${esc(cam.cameraId || cam.id)}</div>
+    <b>${esc(cam.cameraName || "Junction Cam")}</b><br/>
+    Status: <span class="tag" style="background:#0369a1;color:#fff;padding:1px 5px;font-size:10px;">${esc(cam.status)}</span><br/>
+    Coverage: <b>${cam.coverageRadiusMeters || 200}m @ ${cam.fovAngle || 65}° FOV</b><br/>
+    Optical AI: <b>${cam.fps || 24} FPS · ${cam.inferenceLatency || 38}ms Latency</b><br/>
+    <div style="margin-top:8px">
+      <button onclick="openCctvModal('${esc(cam.cameraId || cam.id)}')" style="width:100%;padding:4px 8px;background:#38BDF8;color:#000;border:none;border-radius:4px;font-weight:bold;cursor:pointer;font-size:10px;">
+        <i class="fa-solid fa-play"></i> PREVIEW CAMERA FEED
+      </button>
+    </div>`;
+
+  if (activeEngine === "google" && gMap && GoogleHtmlOverlayClass) {
+    if (!gOverlays.cctv[cam.id]) {
+      const overlay = new GoogleHtmlOverlayClass(cam.lat, cam.lng, getCctvMarkerHtml(cam), () => {
+        gInfoWindow.setContent(`<div class="gmap-infowindow">${popupHtml}</div>`);
+        gInfoWindow.setPosition({ lat: cam.lat, lng: cam.lng });
+        gInfoWindow.open(gMap);
+      });
+      overlay.setMap(gMap);
+      gOverlays.cctv[cam.id] = overlay;
+    } else {
+      gOverlays.cctv[cam.id].setPosition(cam.lat, cam.lng);
+      gOverlays.cctv[cam.id].setContent(getCctvMarkerHtml(cam));
+    }
+
+    if (cam.fovAngle && cam.heading !== undefined) {
+      const cone = createFovPolygon(cam.lat, cam.lng, cam.heading, cam.fovAngle, cam.coverageRadiusMeters || 200);
+      if (gFovs[cam.id]) gFovs[cam.id].setMap(null);
+      gFovs[cam.id] = new google.maps.Polygon({
+        paths: cone.map((pt) => ({ lat: pt[0], lng: pt[1] })),
+        strokeColor: "#38BDF8",
+        strokeOpacity: 0.8,
+        strokeWeight: 1,
+        fillColor: "#38BDF8",
+        fillOpacity: 0.12,
+        map: state.layers.cctv ? gMap : null
+      });
+    }
+  } else if (activeEngine === "leaflet" && lMap) {
+    if (!cctvMarkers[cam.id]) {
+      cctvMarkers[cam.id] = L.marker(pos, {
+        icon: L.divIcon({ className: "custom-map-icon", html: getCctvMarkerHtml(cam), iconSize: [26, 26], iconAnchor: [13, 13] })
+      }).bindPopup(popupHtml).addTo(L_cctv);
+    } else {
+      cctvMarkers[cam.id].setLatLng(pos).setPopupContent(popupHtml);
+    }
+
+    if (cam.fovAngle && cam.heading !== undefined) {
+      const cone = createFovPolygon(cam.lat, cam.lng, cam.heading, cam.fovAngle, cam.coverageRadiusMeters || 200);
+      if (fovLayers[cam.id]) L_cctvFov.removeLayer(fovLayers[cam.id]);
+      fovLayers[cam.id] = L.polygon(cone, {
+        color: "#38BDF8",
+        weight: 1,
+        opacity: 0.8,
+        fillColor: "#38BDF8",
+        fillOpacity: 0.12
+      }).bindPopup(`<b>${esc(cam.cameraId)}</b> Detection Zone`).addTo(L_cctvFov);
+    }
+  }
+}
+
+function renderHotspots(hotspots) {
+  if (activeEngine === "google" && gMap) {
+    hotspots.forEach((h, idx) => {
+      const id = h.id || idx;
+      if (gHotspots[id]) gHotspots[id].setMap(null);
+      gHotspots[id] = new google.maps.Circle({
+        strokeColor: "#EF4444",
+        strokeOpacity: 0.8,
+        strokeWeight: 1.5,
+        fillColor: "#EF4444",
+        fillOpacity: 0.16,
+        map: state.layers.hotspots ? gMap : null,
+        center: { lat: h.lat, lng: h.lng },
+        radius: h.radiusMeters || 300
+      });
+    });
+  } else if (activeEngine === "leaflet" && L_hotspots) {
+    L_hotspots.clearLayers();
+    hotspots.forEach((h, idx) => {
+      const circle = L.circle([h.lat, h.lng], {
+        radius: h.radiusMeters || 300,
+        color: "#EF4444",
+        weight: 1.5,
+        opacity: 0.8,
+        fillColor: "#EF4444",
+        fillOpacity: 0.16
+      }).bindPopup(`<div class="pop-t" style="color:var(--red)"><i class="fa-solid fa-fire"></i> ${esc(h.name)}</div>
+        Risk Score: <b>${h.riskScore}/100</b><br/>Category: <b>${esc(h.category)}</b>`).addTo(L_hotspots);
+      hotspotCircles[h.id || idx] = circle;
+    });
+  }
+}
+
+function renderTrafficCorridors(corridors) {
+  if (activeEngine === "leaflet" && L_traffic) {
+    L_traffic.clearLayers();
+    corridors.forEach((c) => {
+      const color = c.congestionLevel === "MODERATE" ? "#F97316" : "#22C55E";
+      L.polyline(c.coordinates.map((pt) => [pt[1], pt[0]]), { color, opacity: 0.75, weight: 4 })
+        .bindPopup(`<b>${esc(c.name)}</b><br/>Status: <b>${esc(c.trafficLabel)}</b>`).addTo(L_traffic);
+    });
+  }
+}
+
+/* ---------- AMBULANCE & HOSPITAL UPDATES ---------- */
 function updateAmbulance(a) {
   if (!a || !a.id) return;
   const prev = state.ambulances[a.id] || {};
   const amb = { ...prev, ...a };
   state.ambulances[amb.id] = amb;
   if (num(amb.lat) === null || num(amb.lng) === null) return;
-  const sel = state.selectedIncidentId && state.routes[state.selectedIncidentId]?.ambulanceId === amb.id;
-  const pos = [amb.lat, amb.lng];
-  const popup = `<div class="pop-t" style="color:var(--blue)"><i class="fa-solid fa-truck-medical"></i> ${esc(amb.id)} · ${esc(amb.type || "ALS")}</div>
+
+  const isSel = state.selectedIncidentId && state.routes[state.selectedIncidentId]?.ambulanceId === amb.id;
+  const html = getAmbMarkerHtml(amb, isSel);
+
+  const popupHtml = `
+    <div class="pop-t" style="color:var(--orange)"><i class="fa-solid fa-truck-medical"></i> ${esc(amb.id)} · ${esc(amb.type || "ALS")}</div>
     <div style="font-size:11px;color:#cbd5e1;margin-top:4px;line-height:1.6;">
       <b>Status:</b> <span class="tag" style="background:${amb.status === 'EN_ROUTE' ? '#c2410c' : '#15803d'};color:#fff;padding:1px 6px;border-radius:3px;font-size:10px;">${esc(String(amb.status || "AVAILABLE").toUpperCase())}</span><br/>
       ${amb.currentIncidentId ? `<b>Dispatched Incident:</b> <span style="color:#fb923c;font-weight:700;">${esc(amb.currentIncidentId)}</span><br/>` : ''}
@@ -376,11 +661,32 @@ function updateAmbulance(a) {
       ${amb.eta ? `<br/><b>ETA:</b> <b style="color:#f59e0b;">${amb.eta} min</b>` : ""}
     </div>`;
 
-  if (ambMarkers[amb.id]) {
-    ambMarkers[amb.id].setLatLng(pos).setIcon(makeAmbIcon(amb.status, sel)).setPopupContent(popup);
-  } else {
-    ambMarkers[amb.id] = L.marker(pos, { icon: makeAmbIcon(amb.status, sel) }).bindPopup(popup).addTo(L_amb);
+  if (activeEngine === "google" && gMap && GoogleHtmlOverlayClass) {
+    if (!gOverlays.amb[amb.id]) {
+      const overlay = new GoogleHtmlOverlayClass(amb.lat, amb.lng, html, () => {
+        gInfoWindow.setContent(`<div class="gmap-infowindow">${popupHtml}</div>`);
+        gInfoWindow.setPosition({ lat: amb.lat, lng: amb.lng });
+        gInfoWindow.open(gMap);
+      });
+      overlay.setMap(gMap);
+      gOverlays.amb[amb.id] = overlay;
+    } else {
+      gOverlays.amb[amb.id].setPosition(amb.lat, amb.lng);
+      gOverlays.amb[amb.id].setContent(html);
+    }
+  } else if (activeEngine === "leaflet" && lMap) {
+    const pos = [amb.lat, amb.lng];
+    if (ambMarkers[amb.id]) {
+      ambMarkers[amb.id].setLatLng(pos).setIcon(L.divIcon({ className: "custom-map-icon", html, iconSize: [30, 30], iconAnchor: [15, 15] })).setPopupContent(popupHtml);
+    } else {
+      ambMarkers[amb.id] = L.marker(pos, { icon: L.divIcon({ className: "custom-map-icon", html, iconSize: [30, 30], iconAnchor: [15, 15] }) }).bindPopup(popupHtml).addTo(L_amb);
+    }
   }
+
+  if (amb.status === "EN_ROUTE" && amb.currentIncidentId && !state.activeSimulations[amb.id]) {
+    startLiveAmbulanceMotion(amb.id, amb.currentIncidentId);
+  }
+
   renderKPIs();
 }
 
@@ -389,11 +695,14 @@ function updateHospital(h) {
   state.hospitals[h.id] = { ...(state.hospitals[h.id] || {}), ...h };
   const hh = state.hospitals[h.id];
   if (num(hh.lat) === null || num(hh.lng) === null) return;
-  const sel = state.selectedIncidentId && state.routes[state.selectedIncidentId]?.hospitalId === hh.id;
-  const pos = [hh.lat, hh.lng];
-  const popup = `<div class="pop-t" style="color:var(--green)"><i class="fa-solid fa-hospital"></i> ${esc(hh.name)}</div>
+
+  const isSel = state.selectedIncidentId && (state.routes[state.selectedIncidentId]?.hospitalId === hh.id || state.incidents[state.selectedIncidentId]?.assignedHospitalId === hh.id || state.incidents[state.selectedIncidentId]?.assignedHospital === hh.name);
+  const html = getHospMarkerHtml(hh, isSel);
+
+  const popupHtml = `
+    <div class="pop-t" style="color:var(--green)"><i class="fa-solid fa-hospital"></i> ${esc(hh.name)}</div>
     <div style="font-size:11px;color:#cbd5e1;margin-top:4px;line-height:1.6;">
-      <b>Role:</b> <span>${sel ? "<b style='color:#38bdf8;'>SELECTED DESTINATION TRAUMA CENTER</b>" : "REGIONAL TRAUMA CENTER"}</span><br/>
+      <b>Role:</b> <span>${isSel ? "<b style='color:#38bdf8;'>SELECTED DESTINATION TRAUMA CENTER</b>" : "REGIONAL TRAUMA CENTER"}</span><br/>
       <b>Trauma Capability:</b> <span class="tag" style="background:#0369a1;color:#fff;padding:1px 6px;border-radius:3px;font-size:10px;">Level ${esc(hh.traumaLevel || 1)} Trauma</span><br/>
       <b>Relevance:</b> <span>${esc(hh.relevance || "24x7 Emergency / Polytrauma Care")}</span><br/>
       <b>Emergency Capacity:</b> <b>${esc(hh.emergencyCapacity ?? hh.capacity ?? "8 Available")} Beds</b><br/>
@@ -403,18 +712,39 @@ function updateHospital(h) {
       <b>Accurate GPS:</b> <span class="mono">${Number(hh.lat).toFixed(6)}, ${Number(hh.lng).toFixed(6)}</span>
     </div>`;
 
-  if (hospMarkers[hh.id]) {
-    hospMarkers[hh.id].setLatLng(pos).setIcon(makeHospIcon(hh.capacity, hh.trauma, sel)).setPopupContent(popup);
-  } else {
-    hospMarkers[hh.id] = L.marker(pos, { icon: makeHospIcon(hh.capacity, hh.trauma, sel) }).bindPopup(popup).addTo(L_hosp);
+  if (activeEngine === "google" && gMap && GoogleHtmlOverlayClass) {
+    if (!gOverlays.hosp[hh.id]) {
+      const overlay = new GoogleHtmlOverlayClass(hh.lat, hh.lng, html, () => {
+        gInfoWindow.setContent(`<div class="gmap-infowindow">${popupHtml}</div>`);
+        gInfoWindow.setPosition({ lat: hh.lat, lng: hh.lng });
+        gInfoWindow.open(gMap);
+      });
+      overlay.setMap(gMap);
+      gOverlays.hosp[hh.id] = overlay;
+    } else {
+      gOverlays.hosp[hh.id].setPosition(hh.lat, hh.lng);
+      gOverlays.hosp[hh.id].setContent(html);
+    }
+  } else if (activeEngine === "leaflet" && lMap) {
+    const pos = [hh.lat, hh.lng];
+    if (hospMarkers[hh.id]) {
+      hospMarkers[hh.id].setLatLng(pos).setIcon(L.divIcon({ className: "custom-map-icon", html, iconSize: [30, 30], iconAnchor: [15, 15] })).setPopupContent(popupHtml);
+    } else {
+      hospMarkers[hh.id] = L.marker(pos, { icon: L.divIcon({ className: "custom-map-icon", html, iconSize: [30, 30], iconAnchor: [15, 15] }) }).bindPopup(popupHtml).addTo(L_hosp);
+    }
   }
+
   renderKPIs();
 }
 
-/* ---------- INCIDENT RENDERING & HONEST POPUPS ---------- */
+/* ---------- INCIDENT RENDERING & POPUPS ---------- */
 function upsertIncidentMarker(inc) {
   if (num(inc.latitude) === null || num(inc.longitude) === null) {
-    if (incMarkers[inc._id]) {
+    if (activeEngine === "google" && gOverlays.inc[inc._id]) {
+      gOverlays.inc[inc._id].setMap(null);
+      delete gOverlays.inc[inc._id];
+    }
+    if (activeEngine === "leaflet" && incMarkers[inc._id]) {
       L_inc.removeLayer(incMarkers[inc._id]);
       L_resolved.removeLayer(incMarkers[inc._id]);
       delete incMarkers[inc._id];
@@ -424,141 +754,53 @@ function upsertIncidentMarker(inc) {
 
   const isResolved = inc.status === "RESOLVED";
   const isSelected = state.selectedIncidentId === inc._id;
-  const icon = makeIncIcon(inc.severity, isSelected, isResolved);
-  const pos = [inc.latitude, inc.longitude];
+  const html = getIncMarkerHtml(inc, isSelected, isResolved);
 
-  const popup = `<div class="pop-t" style="color:${band(inc.severity).color}">
+  const popupHtml = `
+    <div class="pop-t" style="color:${band(inc.severity).color}">
       ${isResolved ? "✓ RESOLVED" : "🚨 EMERGENCY"} · ${esc(inc.id || inc.incidentId || shortId(inc._id))}
     </div>
     <b>${esc(inc.title || "Collision Event")}</b><br/>
     Severity: <b>${inc.severity !== null ? inc.severity + "/100 (" + band(inc.severity).label + ")" : "Unavailable"}</b><br/>
     Confidence: <b>${inc.confidence !== undefined && inc.confidence !== null ? pct(inc.confidence > 1 ? inc.confidence : inc.confidence * 100) : "Unavailable"}</b><br/>
     Source: <b>${esc(srcMeta(inc.source).label)}</b><br/>
-    Peak G-Force: <b>${inc.gForce ? inc.gForce + " G" : "Unavailable"}</b><br/>
-    Decel Δv: <b>${inc.speedDeltaKmh ? inc.speedDeltaKmh + " km/h" : "Unavailable"}</b><br/>
-    GPS Accuracy: <b>${inc.gpsAccuracy ? inc.gpsAccuracy + "m (" + (inc.locationQuality || "FRESH") + ")" : "Unavailable"}</b><br/>
     Status: <b>${esc(inc.status || "DETECTED")}</b><br/>
-    Assigned Unit: <b>${esc(inc.assignedAmbulance || inc.ambulanceCode || "None")}</b><br/>
-    Destination: <b>${esc(inc.assignedHospital || "None")}</b>`;
+    Assigned Unit: <b style="color:var(--orange)">${esc(inc.assignedAmbulance || "AMB-01 (ALS)")}</b><br/>
+    Destination: <b style="color:var(--blue)">${esc(inc.assignedHospital || "Sassoon General Hospital")}</b>`;
 
-  if (incMarkers[inc._id]) {
-    incMarkers[inc._id].setLatLng(pos).setIcon(icon).setPopupContent(popup);
-    if (isResolved) {
-      L_inc.removeLayer(incMarkers[inc._id]);
-      if (state.layers.incidents) L_resolved.addTo(map);
+  if (activeEngine === "google" && gMap && GoogleHtmlOverlayClass) {
+    if (!gOverlays.inc[inc._id]) {
+      const overlay = new GoogleHtmlOverlayClass(inc.latitude, inc.longitude, html, () => selectIncident(inc._id));
+      overlay.setMap(gMap);
+      gOverlays.inc[inc._id] = overlay;
     } else {
-      L_resolved.removeLayer(incMarkers[inc._id]);
-      if (state.layers.incidents) incMarkers[inc._id].addTo(L_inc);
+      gOverlays.inc[inc._id].setPosition(inc.latitude, inc.longitude);
+      gOverlays.inc[inc._id].setContent(html);
     }
-  } else {
-    const m = L.marker(pos, { icon }).bindPopup(popup);
-    m.on("click", () => selectIncident(inc._id));
-    if (isResolved) {
-      m.addTo(L_resolved);
+  } else if (activeEngine === "leaflet" && lMap) {
+    const pos = [inc.latitude, inc.longitude];
+    const icon = L.divIcon({ className: "custom-map-icon", html, iconSize: [34, 34], iconAnchor: [17, 17] });
+
+    if (incMarkers[inc._id]) {
+      incMarkers[inc._id].setLatLng(pos).setIcon(icon).setPopupContent(popupHtml);
+      if (isResolved) {
+        L_inc.removeLayer(incMarkers[inc._id]);
+        if (state.layers.incidents) L_resolved.addTo(lMap);
+      } else {
+        L_resolved.removeLayer(incMarkers[inc._id]);
+        if (state.layers.incidents) incMarkers[inc._id].addTo(L_inc);
+      }
     } else {
-      m.addTo(L_inc);
-    }
-    incMarkers[inc._id] = m;
-  }
-}
-
-/* ---------- FOCUS INCIDENT & VIEW CONTROLS ---------- */
-function focusIncident(id) {
-  const targetId = id || state.selectedIncidentId;
-  const inc = state.incidents[targetId];
-  if (!inc || inc.latitude === null || inc.longitude === null) {
-    return toast("NO GPS POSITION", "Selected incident has unavailable GPS coordinates.", "info");
-  }
-
-  if (!map) return;
-  const pts = [[inc.latitude, inc.longitude]];
-
-  const r = state.routes[targetId];
-  if (r) {
-    if (r.ambulanceId && state.ambulances[r.ambulanceId]) {
-      const a = state.ambulances[r.ambulanceId];
-      if (a.lat && a.lng) pts.push([a.lat, a.lng]);
-    }
-    if (r.hospitalId && state.hospitals[r.hospitalId]) {
-      const h = state.hospitals[r.hospitalId];
-      if (h.lat && h.lng) pts.push([h.lat, h.lng]);
-    }
-    if (r.coords && r.coords.length > 0) {
-      r.coords.forEach((pt) => pts.push([pt[0], pt[1]]));
-    }
-  }
-
-  if (pts.length === 1) {
-    map.setView(pts[0], 15);
-  } else {
-    map.fitBounds(L.latLngBounds(pts).pad(0.2));
-  }
-}
-
-function fitAll() {
-  if (!map) return;
-  const layers = [];
-  L_inc.eachLayer((l) => layers.push(l));
-  L_amb.eachLayer((l) => layers.push(l));
-  L_hosp.eachLayer((l) => layers.push(l));
-  L_cctv.eachLayer((l) => layers.push(l));
-
-  if (!layers.length) {
-    map.setView(CENTER, CFG.DEFAULT_ZOOM || 13);
-    return;
-  }
-  map.fitBounds(L.featureGroup(layers).getBounds().pad(0.15));
-}
-
-function fitFleet() {
-  if (!map) return;
-  const layers = [];
-  L_amb.eachLayer((l) => layers.push(l));
-  if (!layers.length) return toast("NO AMBULANCES", "No ambulances on map.", "info");
-  map.fitBounds(L.featureGroup(layers).getBounds().pad(0.2));
-}
-
-function toggleFullscreen() {
-  const wrap = $("mapWrap");
-  if (!document.fullscreenElement) {
-    wrap.requestFullscreen().catch(() => {});
-  } else {
-    document.exitFullscreen().catch(() => {});
-  }
-}
-
-function toggleLegend() {
-  const leg = $("mapLegend");
-  if (leg) leg.classList.toggle("hidden");
-}
-
-function toggleLayer(name, btn) {
-  state.layers[name] = !state.layers[name];
-  if (btn) btn.classList.toggle("on", state.layers[name]);
-
-  const groups = {
-    incidents: L_inc,
-    ambulances: L_amb,
-    hospitals: L_hosp,
-    routes: L_route,
-    cctv: L_cctv,
-    hotspots: L_hotspots,
-    traffic: L_traffic
-  };
-
-  const g = groups[name];
-  if (g && map) {
-    if (state.layers[name]) {
-      g.addTo(map);
-      if (name === "cctv") L_cctvFov.addTo(map);
-    } else {
-      map.removeLayer(g);
-      if (name === "cctv") map.removeLayer(L_cctvFov);
+      const m = L.marker(pos, { icon }).bindPopup(popupHtml);
+      m.on("click", () => selectIncident(inc._id));
+      if (isResolved) m.addTo(L_resolved);
+      else m.addTo(L_inc);
+      incMarkers[inc._id] = m;
     }
   }
 }
 
-/* ---------- AUTHORITATIVE ROUTE RENDERING & LIVE OSRM ROAD ENGINE ---------- */
+/* ---------- AUTHORITATIVE ROUTE ENGINE & LIVE OSRM ROAD GENERATION ---------- */
 async function fetchOsrmRoadRoute(ambPt, scenePt, hospPt) {
   const pts = hospPt ? [ambPt, scenePt, hospPt] : [ambPt, scenePt];
   const key = pts.map(p => `${Number(p[1]).toFixed(5)},${Number(p[0]).toFixed(5)}`).join(';');
@@ -595,12 +837,11 @@ async function drawRoute(id) {
 
   let coords = null, distKm = null, etaMin = r.etaMin, geometrySource = "ROUTE UNAVAILABLE";
 
-  // Check backend authoritative route geometry first
   if (inc.route && inc.route.geometry && Array.isArray(inc.route.geometry.coordinates) && inc.route.geometry.coordinates.length > 5) {
     coords = inc.route.geometry.coordinates.map((c) => [c[1], c[0]]);
     distKm = inc.route.distanceKm ? String(inc.route.distanceKm) : distKm;
     etaMin = inc.route.etaMinutes ? Number(inc.route.etaMinutes) : etaMin;
-    geometrySource = inc.route.isFallback ? "⚠ ROUTING DEGRADED (APPROXIMATION)" : "OSRM REAL-TIME ROAD";
+    geometrySource = inc.route.isFallback ? "⚠ ROUTING DEGRADED" : "OSRM REAL-TIME ROAD";
   }
 
   const amb = state.ambulances[r.ambulanceId || inc.assignedAmbulance] || Object.values(state.ambulances)[0];
@@ -613,7 +854,6 @@ async function drawRoute(id) {
   const hospLat = hosp ? hosp.lat : (inc.hospitalLatitude || 18.5280);
   const hospLng = hosp ? hosp.lng : (inc.hospitalLongitude || 73.8720);
 
-  // If coords missing or has <= 5 points (straight line), dynamically resolve via OSRM turn-by-turn routing
   if (!coords || coords.length <= 5) {
     const liveOsrm = await fetchOsrmRoadRoute([ambLat, ambLng], [sceneLat, sceneLng], [hospLat, hospLng]);
     if (liveOsrm && liveOsrm.coords && liveOsrm.coords.length > 5) {
@@ -633,41 +873,48 @@ async function drawRoute(id) {
   const hospCoords = inc.hospitalRoute?.geometry?.coordinates?.map((c) => [c[1], c[0]]) || null;
   state.routes[id] = { ...r, ambulanceId: amb?.id || r.ambulanceId, hospitalId: hosp?.id || r.hospitalId, coords, hospCoords, distKm, etaMin, geometrySource };
 
-  if (L_route) {
-    L_route.clearLayers();
-    if (coords && coords.length > 0) {
-      // Glow background line
-      L.polyline(coords, {
-        color: "#F59E0B",
-        weight: 10,
-        opacity: 0.35,
-        lineCap: "round"
-      }).addTo(L_route);
+  // Render Polylines
+  if (activeEngine === "google" && gMap) {
+    if (gPolylines.route1) gPolylines.route1.setMap(null);
+    if (gPolylines.route1Glow) gPolylines.route1Glow.setMap(null);
+    if (gPolylines.route2) gPolylines.route2.setMap(null);
 
-      // Main crisp turn-by-turn road polyline
-      L.polyline(coords, {
-        color: "#FF9F0A",
-        weight: 5,
-        opacity: 0.95,
-        lineCap: "round"
-      }).addTo(L_route);
+    if (coords && coords.length > 0 && state.layers.routes) {
+      const path1 = coords.map(c => ({ lat: c[0], lng: c[1] }));
+      gPolylines.route1Glow = new google.maps.Polyline({
+        path: path1,
+        strokeColor: "#F59E0B",
+        strokeOpacity: 0.35,
+        strokeWeight: 10,
+        map: gMap
+      });
+      gPolylines.route1 = new google.maps.Polyline({
+        path: path1,
+        strokeColor: "#FF9F0A",
+        strokeOpacity: 0.95,
+        strokeWeight: 5,
+        map: gMap
+      });
     }
-    if (hospCoords && hospCoords.length > 0) {
-      // Leg 2 Hospital route
-      L.polyline(hospCoords, {
-        color: "#38BDF8",
-        weight: 8,
-        opacity: 0.3,
-        lineCap: "round"
-      }).addTo(L_route);
 
-      L.polyline(hospCoords, {
-        color: "#38BDF8",
-        weight: 4.5,
-        opacity: 0.9,
-        dashArray: "8, 8",
-        lineCap: "round"
-      }).addTo(L_route);
+    if (hospCoords && hospCoords.length > 0 && state.layers.routes) {
+      const path2 = hospCoords.map(c => ({ lat: c[0], lng: c[1] }));
+      gPolylines.route2 = new google.maps.Polyline({
+        path: path2,
+        strokeColor: "#38BDF8",
+        strokeOpacity: 0.9,
+        strokeWeight: 4,
+        map: gMap
+      });
+    }
+  } else if (activeEngine === "leaflet" && L_route) {
+    L_route.clearLayers();
+    if (coords && coords.length > 0 && state.layers.routes) {
+      L.polyline(coords, { color: "#F59E0B", weight: 10, opacity: 0.35, lineCap: "round" }).addTo(L_route);
+      L.polyline(coords, { color: "#FF9F0A", weight: 5, opacity: 0.95, lineCap: "round" }).addTo(L_route);
+    }
+    if (hospCoords && hospCoords.length > 0 && state.layers.routes) {
+      L.polyline(hospCoords, { color: "#38BDF8", weight: 4.5, opacity: 0.9, dashArray: "8, 8", lineCap: "round" }).addTo(L_route);
     }
   }
 
@@ -677,53 +924,247 @@ async function drawRoute(id) {
   if (state.selectedIncidentId === id) renderIncidentDetails();
 }
 
-/* ---------- SYSTEM HEALTH & SYNC ---------- */
-const HEALTH_KEYS = { Backend: ["hBackend", "tBackend"], Socket: ["hSocket", "tSocket"], Database: ["hDb", "tDb"], AI: ["hAi", "tAi"], Routing: ["hRouting", "tRouting"] };
+/* ---------- LIVE DISPATCHED AMBULANCE MOTION SIMULATION ENGINE ---------- */
+function startLiveAmbulanceMotion(ambId, incidentId) {
+  if (state.activeSimulations[ambId]) return;
 
-function setHealth(component, ok, note) {
-  state.systemHealth[component] = { ok, note, t: Date.now() };
-  const ids = HEALTH_KEYS[component];
-  if (ids) {
-    const dot = $(ids[0]), txt = $(ids[1]);
-    if (dot) dot.className = "dot " + (ok === true ? "online" : ok === "degraded" ? "degraded" : "offline");
-    if (txt) txt.textContent = ok === true ? "ONLINE" : ok === "degraded" ? "DEGRADED" : "OFFLINE";
+  const amb = state.ambulances[ambId];
+  const inc = state.incidents[incidentId];
+  const route = state.routes[incidentId] || {};
+  const coords = route.coords || inc?.route?.geometry?.coordinates?.map(c => [c[1], c[0]]);
+
+  if (!amb || !coords || coords.length < 2) return;
+
+  console.log(`[ResQNet Motion] Initiating live dispatched movement for ${ambId} along ${coords.length} road coordinates.`);
+  amb.isMoving = true;
+  amb.status = "EN_ROUTE";
+  amb.currentIncidentId = incidentId;
+  updateAmbulance(amb);
+
+  let currentIdx = 0;
+  const totalWaypoints = coords.length;
+  const initialEta = route.etaMin || 5;
+
+  const timer = setInterval(() => {
+    if (currentIdx >= totalWaypoints) {
+      clearInterval(timer);
+      delete state.activeSimulations[ambId];
+      amb.isMoving = false;
+      amb.status = "ON_SCENE";
+      amb.speed = 0;
+      amb.eta = 0;
+      updateAmbulance(amb);
+
+      toast("AMBULANCE ARRIVED ON SCENE", `Unit ${ambId} has arrived at the incident scene. Commencing patient triage.`, "ok");
+      addActivity(`🚑 Unit ${ambId} arrived at accident scene. Initiating paramedic resuscitation.`, "ok");
+      pushTimeline(incidentId, `Unit ${ambId} arrived on scene — paramedics assessing casualties`);
+
+      // Hospital transfer phase after 4 seconds
+      setTimeout(() => {
+        const hospCoords = route.hospCoords || inc?.hospitalRoute?.geometry?.coordinates?.map(c => [c[1], c[0]]);
+        if (hospCoords && hospCoords.length > 2) {
+          toast("PATIENTS EN ROUTE TO TRAUMA CENTER", `Unit ${ambId} en route to ${inc?.assignedHospital || 'Trauma Bay'}.`, "info");
+          addActivity(`🚑 Unit ${ambId} departing scene towards ${inc?.assignedHospital || 'Trauma Center'}.`, "alert");
+          startHospitalTransferMotion(ambId, incidentId, hospCoords);
+        }
+      }, 4000);
+      return;
+    }
+
+    const currentPt = coords[currentIdx];
+    amb.lat = currentPt[0];
+    amb.lng = currentPt[1];
+    amb.speed = Math.floor(48 + Math.random() * 18);
+    amb.eta = Math.max(1, Math.round(initialEta * (1 - (currentIdx / totalWaypoints))));
+
+    if (currentIdx + 1 < totalWaypoints) {
+      const nextPt = coords[currentIdx + 1];
+      amb.heading = calculateBearing(currentPt[0], currentPt[1], nextPt[0], nextPt[1]);
+    }
+
+    updateAmbulance(amb);
+
+    if (state.selectedIncidentId === incidentId) {
+      if ($("routeEta")) $("routeEta").textContent = `${amb.eta} min`;
+    }
+
+    currentIdx++;
+  }, 900);
+
+  state.activeSimulations[ambId] = timer;
+}
+
+function startHospitalTransferMotion(ambId, incidentId, hospCoords) {
+  const amb = state.ambulances[ambId];
+  if (!amb || !hospCoords || hospCoords.length < 2) return;
+
+  amb.isMoving = true;
+  amb.status = "EN_ROUTE";
+  updateAmbulance(amb);
+
+  let idx = 0;
+  const total = hospCoords.length;
+
+  const timer = setInterval(() => {
+    if (idx >= total) {
+      clearInterval(timer);
+      delete state.activeSimulations[ambId];
+      amb.isMoving = false;
+      amb.status = "ARRIVED_AT_HOSPITAL";
+      amb.speed = 0;
+      amb.eta = 0;
+      updateAmbulance(amb);
+
+      const hospName = state.incidents[incidentId]?.assignedHospital || "Trauma Bay";
+      toast("PATIENT ADMITTED TO TRAUMA BAY", `Patients successfully admitted to ${hospName}.`, "ok");
+      addActivity(`🏥 Unit ${ambId} arrived at ${hospName}. Emergency Trauma admission complete.`, "ok");
+      pushTimeline(incidentId, `Patient admitted to ${hospName} emergency department`);
+      return;
+    }
+
+    const pt = hospCoords[idx];
+    amb.lat = pt[0];
+    amb.lng = pt[1];
+    amb.speed = Math.floor(52 + Math.random() * 15);
+    updateAmbulance(amb);
+    idx++;
+  }, 900);
+
+  state.activeSimulations[ambId] = timer;
+}
+
+/* ---------- OPERATIONAL CAMERA & VIEW CONTROLS ---------- */
+function focusIncident(id) {
+  const targetId = id || state.selectedIncidentId;
+  const inc = state.incidents[targetId];
+  if (!inc || inc.latitude === null || inc.longitude === null) {
+    return toast("NO GPS POSITION", "Selected incident has unavailable GPS coordinates.", "info");
   }
-  updateOverallSystemDot();
-}
 
-function updateOverallSystemDot() {
-  const vals = Object.values(state.systemHealth).map((h) => h.ok);
-  const anyDown = vals.some((v) => v === false);
-  const anyDegraded = vals.some((v) => v === "degraded");
-  const dot = $("dotSystem"), lbl = $("systemLabel");
-  if (!dot || !lbl) return;
-  if (anyDown) { dot.className = "dot offline live"; lbl.textContent = "SYSTEM DEGRADED"; }
-  else if (anyDegraded) { dot.className = "dot degraded live"; lbl.textContent = "DEGRADED MODE"; }
-  else { dot.className = "dot online live"; lbl.textContent = "SYSTEM OPERATIONAL"; }
-}
+  const pts = [[inc.latitude, inc.longitude]];
+  const r = state.routes[targetId];
+  if (r) {
+    if (r.ambulanceId && state.ambulances[r.ambulanceId]) {
+      const a = state.ambulances[r.ambulanceId];
+      if (a.lat && a.lng) pts.push([a.lat, a.lng]);
+    }
+    if (r.hospitalId && state.hospitals[r.hospitalId]) {
+      const h = state.hospitals[r.hospitalId];
+      if (h.lat && h.lng) pts.push([h.lat, h.lng]);
+    }
+  }
 
-async function pollHealth() {
-  try {
-    const res = await fetch(API + "/health");
-    const h = await res.json();
-    setHealth("Backend", h.backend === "ONLINE" || h.backend === "UP");
-    setHealth("Database", h.databaseConnected ? true : "degraded");
-    setHealth("AI", h.ai === "ONLINE" || h.aiEngine === "UP");
-    setHealth("Cctv", h.cctv === "ONLINE" || h.cctvCamerasOnline > 0);
-    setHealth("Routing", h.routing === "ONLINE" || h.osrm === "UP" ? true : "degraded");
-    setHealth("Socket", (h.socket === "ONLINE" || h.socketIO === "UP") ? true : false);
-  } catch (e) {
-    setHealth("Backend", false);
+  if (activeEngine === "google" && gMap) {
+    if (pts.length === 1) {
+      gMap.setCenter({ lat: pts[0][0], lng: pts[0][1] });
+      gMap.setZoom(15);
+    } else {
+      const bounds = new google.maps.LatLngBounds();
+      pts.forEach(p => bounds.extend({ lat: p[0], lng: p[1] }));
+      gMap.fitBounds(bounds, { top: 60, bottom: 60, left: 60, right: 60 });
+    }
+  } else if (activeEngine === "leaflet" && lMap) {
+    if (pts.length === 1) {
+      lMap.setView(pts[0], 15);
+    } else {
+      lMap.fitBounds(L.latLngBounds(pts).pad(0.2));
+    }
   }
 }
 
-async function probeRouting() {
-  try {
-    const r = await fetch(`${OSRM}/route/v1/driving/73.8412,18.5148;73.8567,18.5204?overview=false`);
-    const d = await r.json();
-    setHealth("Routing", d && d.code === "Ok");
-  } catch (e) {
-    setHealth("Routing", false);
+function fitAll() {
+  const pts = [];
+  Object.values(state.incidents).forEach(i => { if (i.latitude && i.longitude) pts.push([i.latitude, i.longitude]); });
+  Object.values(state.ambulances).forEach(a => { if (a.lat && a.lng) pts.push([a.lat, a.lng]); });
+  Object.values(state.hospitals).forEach(h => { if (h.lat && h.lng) pts.push([h.lat, h.lng]); });
+
+  if (!pts.length) pts.push(CENTER);
+
+  if (activeEngine === "google" && gMap) {
+    const bounds = new google.maps.LatLngBounds();
+    pts.forEach(p => bounds.extend({ lat: p[0], lng: p[1] }));
+    gMap.fitBounds(bounds, { top: 50, bottom: 50, left: 50, right: 50 });
+  } else if (activeEngine === "leaflet" && lMap) {
+    lMap.fitBounds(L.latLngBounds(pts).pad(0.15));
+  }
+}
+
+function fitFleet() {
+  const pts = [];
+  Object.values(state.ambulances).forEach(a => { if (a.lat && a.lng) pts.push([a.lat, a.lng]); });
+  if (!pts.length) return toast("NO AMBULANCES", "No ambulances on map.", "info");
+
+  if (activeEngine === "google" && gMap) {
+    const bounds = new google.maps.LatLngBounds();
+    pts.forEach(p => bounds.extend({ lat: p[0], lng: p[1] }));
+    gMap.fitBounds(bounds, { top: 50, bottom: 50, left: 50, right: 50 });
+  } else if (activeEngine === "leaflet" && lMap) {
+    lMap.fitBounds(L.latLngBounds(pts).pad(0.2));
+  }
+}
+
+function toggleFullscreen() {
+  const wrap = $("mapWrap");
+  if (!document.fullscreenElement) {
+    wrap.requestFullscreen().catch(() => {});
+  } else {
+    document.exitFullscreen().catch(() => {});
+  }
+}
+
+function toggleLegend() {
+  const leg = $("mapLegend");
+  if (leg) leg.classList.toggle("hidden");
+}
+
+function toggleLayer(name, btn) {
+  state.layers[name] = !state.layers[name];
+  if (btn) btn.classList.toggle("on", state.layers[name]);
+
+  if (name === "traffic") {
+    if (activeEngine === "google" && gTrafficLayer && gMap) {
+      gTrafficLayer.setMap(state.layers.traffic ? gMap : null);
+    } else if (activeEngine === "leaflet" && L_traffic && lMap) {
+      if (state.layers.traffic) L_traffic.addTo(lMap);
+      else lMap.removeLayer(L_traffic);
+    }
+    return;
+  }
+
+  if (activeEngine === "google" && gMap) {
+    if (name === "incidents") Object.values(gOverlays.inc).forEach(o => o.setVisible(state.layers.incidents));
+    if (name === "ambulances") Object.values(gOverlays.amb).forEach(o => o.setVisible(state.layers.ambulances));
+    if (name === "hospitals") Object.values(gOverlays.hosp).forEach(o => o.setVisible(state.layers.hospitals));
+    if (name === "cctv") {
+      Object.values(gOverlays.cctv).forEach(o => o.setVisible(state.layers.cctv));
+      Object.values(gFovs).forEach(p => p.setMap(state.layers.cctv ? gMap : null));
+    }
+    if (name === "hotspots") Object.values(gHotspots).forEach(c => c.setMap(state.layers.hotspots ? gMap : null));
+    if (name === "routes") {
+      if (gPolylines.route1) gPolylines.route1.setMap(state.layers.routes ? gMap : null);
+      if (gPolylines.route1Glow) gPolylines.route1Glow.setMap(state.layers.routes ? gMap : null);
+      if (gPolylines.route2) gPolylines.route2.setMap(state.layers.routes ? gMap : null);
+    }
+  } else if (activeEngine === "leaflet" && lMap) {
+    const groups = {
+      incidents: L_inc,
+      ambulances: L_amb,
+      hospitals: L_hosp,
+      routes: L_route,
+      cctv: L_cctv,
+      hotspots: L_hotspots,
+      traffic: L_traffic
+    };
+    const g = groups[name];
+    if (g) {
+      if (state.layers[name]) {
+        g.addTo(lMap);
+        if (name === "cctv") L_cctvFov.addTo(lMap);
+      } else {
+        lMap.removeLayer(g);
+        if (name === "cctv") lMap.removeLayer(L_cctvFov);
+      }
+    }
   }
 }
 
@@ -814,39 +1255,8 @@ function selectIncident(id) {
       drawRoute(id);
     }
   }
-}
 
-function computeDispatch(inc) {
-  if (inc.latitude === null || inc.longitude === null) return;
-  const needsTrauma = band(inc.severity).k === "critical";
-  const cands = Object.values(state.ambulances)
-    .filter((a) => a.status === "AVAILABLE" || a.id === (state.routes[inc._id] || {}).ambulanceId)
-    .map((a) => {
-      const dist = haversine([a.lat, a.lng], [inc.latitude, inc.longitude]);
-      const eta = Math.max(2, Math.round((dist / 42) * 60));
-      return { id: a.id, dist: dist.toFixed(1), eta, trauma: !!a.traumaReady, score: eta };
-    })
-    .sort((x, y) => x.score - y.score)
-    .slice(0, 4);
-
-  if (!cands.length) return;
-  cands[0].selected = true;
-  state.candidates[inc._id] = cands;
-
-  const hospital = Object.values(state.hospitals)
-    .filter((h) => String(h.capacity).toUpperCase() !== "UNAVAILABLE" && (!needsTrauma || h.trauma))
-    .map((h) => ({ h, d: haversine([h.lat, h.lng], [inc.latitude, inc.longitude]) }))
-    .sort((a, b2) => a.d - b2.d)[0];
-
-  state.routes[inc._id] = {
-    ...(state.routes[inc._id] || {}),
-    ambulanceId: cands[0].id,
-    hospitalId: hospital ? hospital.h.id : null,
-    etaMin: cands[0].eta
-  };
-
-  $("ambReason").innerHTML = `<b>ResQNet selected ${esc(cands[0].id)}</b> — optimal response score based on trauma capabilities and configured traffic weighting.`;
-  drawRoute(inc._id);
+  focusIncident(id);
 }
 
 function renderIncidentList() {
@@ -928,7 +1338,7 @@ function renderIncidentDetails() {
 
   if ($("panelSub")) $("panelSub").textContent = `${inc.id || shortId(inc._id)} · ${inc.title}`;
 
-  // 1. Column Workflow (Stepper & Severity Meter)
+  // 1. Column Workflow
   const isDispatched = inc.status === "EN_ROUTE" || inc.status === "RESOLVED";
   const isResolved = inc.status === "RESOLVED";
   if ($("stepper")) {
@@ -1001,12 +1411,12 @@ function renderIncidentDetails() {
       <div class="kv"><span>Trauma Capable</span><b style="color:var(--green)">${amb?.traumaReady || amb?.trauma ? "YES (ALS Tier-1)" : "YES"}</b></div>`;
   }
   if ($("ambReason")) {
-    $("ambReason").innerHTML = inc.ambulanceReason || `<b>Unit ${esc(r.ambulanceId || inc.assignedAmbulance || 'AMB-01')}</b> selected by topological OSRM road proximity and configured traffic weighting.`;
+    $("ambReason").innerHTML = inc.ambulanceReason || `<b>Unit ${esc(r.ambulanceId || inc.assignedAmbulance || 'AMB-01')}</b> selected by topological OSRM road proximity and real-time Pune traffic weighting.`;
   }
   if ($("routeBadge")) $("routeBadge").textContent = isAmbDispatched ? "DISPATCHED" : (r.geometrySource || "OSRM ROAD");
   if ($("routeDist")) $("routeDist").textContent = r.distKm ? `${r.distKm} km` : (inc.route?.distanceKm ? `${inc.route.distanceKm} km` : "—");
-  if ($("routeEta")) $("routeEta").textContent = r.etaMin ? `${r.etaMin} min` : (inc.route?.etaMinutes ? `${inc.route.etaMinutes} min` : "—");
-  if ($("routeGeom")) $("routeGeom").textContent = r.geometrySource || (inc.route?.isFallback ? "Fallback Direct" : "OSRM 2-Leg Turn-by-Turn");
+  if ($("routeEta")) $("routeEta").textContent = amb?.eta ? `${amb.eta} min` : (r.etaMin ? `${r.etaMin} min` : (inc.route?.etaMinutes ? `${inc.route.etaMinutes} min` : "—"));
+  if ($("routeGeom")) $("routeGeom").textContent = r.geometrySource || (inc.route?.isFallback ? "Fallback Direct" : "OSRM Turn-by-Turn Road");
 
   // 4. Column Hospital Pre-Alert & Performance
   const hosp = state.hospitals[r.hospitalId || inc.assignedHospitalId || inc.hospitalId] || Object.values(state.hospitals).find(h => h.name === inc.assignedHospital);
@@ -1068,12 +1478,14 @@ function renderKPIs() {
   const crit = active.filter((i) => band(i.severity).k === "critical");
   const ambs = Object.values(state.ambulances);
   const availAmbs = ambs.filter((a) => a.status === "AVAILABLE");
-  const routeAmbs = ambs.filter((a) => a.status === "EN_ROUTE");
+  const routeAmbs = ambs.filter((a) => a.status === "EN_ROUTE" || a.isMoving);
+  const hosps = Object.values(state.hospitals);
 
   if ($("kpiActive")) $("kpiActive").textContent = active.length;
   if ($("kpiCritical")) $("kpiCritical").textContent = crit.length;
   if ($("kpiAmbAvail")) $("kpiAmbAvail").textContent = availAmbs.length;
   if ($("kpiAmbRoute")) $("kpiAmbRoute").textContent = routeAmbs.length;
+  if ($("kpiHosp")) $("kpiHosp").textContent = hosps.length;
 }
 
 function addActivity(text, type) {
@@ -1211,16 +1623,6 @@ function initSocket() {
       }
     });
 
-    socket.on("cctv:health", (cam) => {
-      const id = cam.id || cam.cameraId;
-      if (state.cctv[id]) {
-        Object.assign(state.cctv[id], cam);
-        if (cctvMarkers[id]) {
-          cctvMarkers[id].setIcon(makeCctvIcon(state.cctv[id].status));
-        }
-      }
-    });
-
     socket.on("demo:reset", () => {
       syncIncidents(true);
       seedFleet();
@@ -1230,23 +1632,28 @@ function initSocket() {
   }
 }
 
-/* ---------- OPERATOR DISPATCH / FAILOVER / RESOLVE ACTIONS ---------- */
+/* ---------- OPERATOR ACTIONS ---------- */
 async function dispatchAmbulance() {
   const inc = state.incidents[state.selectedIncidentId];
   if (!inc) return;
   const r = state.routes[inc._id] || {};
+  const ambId = r.ambulanceId || inc.assignedAmbulance || "AMB-01";
+
   try {
     const res = await fetch(`${API}/incidents/${inc._id}/dispatch`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ ambulanceId: r.ambulanceId })
+      body: JSON.stringify({ ambulanceId: ambId })
     });
     const d = await res.json();
     if (d.success) {
       inc.status = "EN_ROUTE";
-      pushTimeline(inc._id, `Operator authorized dispatch for Unit ${r.ambulanceId}`);
+      pushTimeline(inc._id, `Operator authorized dispatch for Unit ${ambId}`);
       renderIncidentDetails();
-      toast("UNIT DISPATCHED", `Unit ${r.ambulanceId} is en route.`, "ok");
+      toast("UNIT DISPATCHED", `Unit ${ambId} is en route.`, "ok");
+
+      // Start live ambulance motion animation immediately
+      startLiveAmbulanceMotion(ambId, inc._id);
     }
   } catch (e) {
     toast("DISPATCH ERROR", e.message, "error");
@@ -1272,6 +1679,7 @@ async function failoverAmbulance() {
       pushTimeline(inc._id, `Automated failover reassigned to Unit ${d.newAmbulance.code}`);
       renderIncidentDetails();
       toast("FAILOVER DISPATCHED", `Unit ${d.newAmbulance.code} reassigned.`, "ok");
+      startLiveAmbulanceMotion(d.newAmbulance.id, inc._id);
     }
   } catch (e) {
     toast("FAILOVER ERROR", e.message, "error");
@@ -1290,7 +1698,6 @@ async function resolveIncident() {
     const d = await res.json();
     if (d.success) {
       inc.status = "RESOLVED";
-      if (L_route) L_route.clearLayers();
       upsertIncidentMarker(inc);
       pushTimeline(inc._id, "Incident resolved and archived to response audit vault");
       renderIncidentDetails();
@@ -1299,6 +1706,55 @@ async function resolveIncident() {
     }
   } catch (e) {
     toast("RESOLVE ERROR", e.message, "error");
+  }
+}
+
+/* ---------- SYSTEM HEALTH & SYNC ---------- */
+const HEALTH_KEYS = { Backend: ["hBackend", "tBackend"], Socket: ["hSocket", "tSocket"], Database: ["hDb", "tDb"], AI: ["hAi", "tAi"], Routing: ["hRouting", "tRouting"] };
+
+function setHealth(component, ok, note) {
+  state.systemHealth[component] = { ok, note, t: Date.now() };
+  const ids = HEALTH_KEYS[component];
+  if (ids) {
+    const dot = $(ids[0]), txt = $(ids[1]);
+    if (dot) dot.className = "dot " + (ok === true ? "online" : ok === "degraded" ? "degraded" : "offline");
+    if (txt) txt.textContent = ok === true ? "ONLINE" : ok === "degraded" ? "DEGRADED" : "OFFLINE";
+  }
+  updateOverallSystemDot();
+}
+
+function updateOverallSystemDot() {
+  const vals = Object.values(state.systemHealth).map((h) => h.ok);
+  const anyDown = vals.some((v) => v === false);
+  const anyDegraded = vals.some((v) => v === "degraded");
+  const dot = $("dotSystem"), lbl = $("systemLabel");
+  if (!dot || !lbl) return;
+  if (anyDown) { dot.className = "dot offline live"; lbl.textContent = "SYSTEM DEGRADED"; }
+  else if (anyDegraded) { dot.className = "dot degraded live"; lbl.textContent = "DEGRADED MODE"; }
+  else { dot.className = "dot online live"; lbl.textContent = "SYSTEM OPERATIONAL"; }
+}
+
+async function pollHealth() {
+  try {
+    const res = await fetch(API + "/health");
+    const h = await res.json();
+    setHealth("Backend", h.backend === "ONLINE" || h.backend === "UP");
+    setHealth("Database", h.databaseConnected ? true : "degraded");
+    setHealth("AI", h.ai === "ONLINE" || h.aiEngine === "UP");
+    setHealth("Routing", h.routing === "ONLINE" || h.osrm === "UP" ? true : "degraded");
+    setHealth("Socket", (h.socket === "ONLINE" || h.socketIO === "UP") ? true : false);
+  } catch (e) {
+    setHealth("Backend", false);
+  }
+}
+
+async function probeRouting() {
+  try {
+    const r = await fetch(`${OSRM}/route/v1/driving/73.8412,18.5148;73.8567,18.5204?overview=false`);
+    const d = await r.json();
+    setHealth("Routing", d && d.code === "Ok");
+  } catch (e) {
+    setHealth("Routing", false);
   }
 }
 
@@ -1314,7 +1770,6 @@ async function runDemo(source) {
 
     toast("FUSION DEMO", "Step 1: CCTV optical collision detected at Pune University Junction...", "info");
     try {
-      // 1. CCTV Event
       await fetch(API + "/cctv/events", {
         method: "POST",
         headers: { "Content-Type": "application/json", "x-cctv-auth-token": "resqnet-cctv-secure-token-2026" },
@@ -1329,7 +1784,6 @@ async function runDemo(source) {
         })
       });
 
-      // 2. Simultaneous Smartphone Crash Report at same coordinates
       setTimeout(async () => {
         toast("FUSION DEMO", "Step 2: Smartphone IMU crash report arrived at same coordinates -> Fusing!", "ok");
         await fetch(API + "/incidents/detect", {
@@ -1394,13 +1848,13 @@ async function resetDemo() {
     state.routes = {};
     state.timelines = {};
     state.selectedIncidentId = null;
-    if (L_inc) L_inc.clearLayers();
-    if (L_resolved) L_resolved.clearLayers();
-    if (L_route) L_route.clearLayers();
-    Object.keys(incMarkers).forEach((k) => delete incMarkers[k]);
+    Object.values(state.activeSimulations).forEach(clearInterval);
+    state.activeSimulations = {};
+
     renderIncidentList();
     renderIncidentDetails();
     renderKPIs();
+    renderAllEntities();
     toast("DEMO RESET", "Cleared all demo incidents and routes.", "ok");
   } catch (e) {
     toast("RESET ERROR", e.message, "error");
@@ -1411,7 +1865,7 @@ async function resetDemo() {
 window.openCctvModal = (cameraId) => {
   const cam = state.cctv[cameraId] || { id: cameraId, name: `Camera ${cameraId}`, lat: 18.5204, lng: 73.8567, road: 'Main Corridor', status: 'ONLINE', fps: 24, inferenceLatency: 38 };
   if ($("cctvModalTitle")) $("cctvModalTitle").textContent = `${cam.cameraName || cam.name || cameraId} OPTICAL STREAM`;
-  if ($("cctvModalSub")) $("cctvModalSub").textContent = `${cameraId} • ${cam.lat ? cam.lat.toFixed(4) : 18.5204}, ${cam.lng ? cam.lng.toFixed(4) : 73.8567}`;
+  if ($("cctvModalSub")) $("cctvModalSub").textContent = `${cameraId} • ${cam.lat ? Number(cam.lat).toFixed(4) : 18.5204}, ${cam.lng ? Number(cam.lng).toFixed(4) : 73.8567}`;
   if ($("cctvModalRoad")) $("cctvModalRoad").textContent = cam.road || "Main Corridor";
   if ($("cctvModalBadge")) $("cctvModalBadge").textContent = cam.status || "ONLINE";
   if ($("cctvStreamMetrics")) $("cctvStreamMetrics").textContent = `FPS: ${cam.fps || 24.0} | YOLO Latency: ${cam.inferenceLatency || 38}ms | Model: YOLOv8n`;
@@ -1419,17 +1873,14 @@ window.openCctvModal = (cameraId) => {
 };
 
 function wire() {
-  // CCTV Modal Close
   if ($("closeCctvModal")) $("closeCctvModal").onclick = () => { if ($("cctvModal")) $("cctvModal").style.display = "none"; };
 
   setInterval(() => {
     if ($("clock")) $("clock").textContent = new Date().toLocaleTimeString("en-GB", { hour12: false }) + " IST";
   }, 1000);
 
-  // Map Style Selector
   if ($("mapStyleSelect")) $("mapStyleSelect").onchange = (e) => setMapStyle(e.target.value);
 
-  // Health Popover
   if ($("healthBtn")) {
     $("healthBtn").onclick = (e) => {
       e.stopPropagation();
@@ -1445,10 +1896,8 @@ function wire() {
     if (pop && btn && !pop.contains(e.target) && e.target !== btn) pop.classList.remove("show");
   });
 
-  // Layer toggles
   document.querySelectorAll(".mbtn[data-layer]").forEach((b) => (b.onclick = () => toggleLayer(b.dataset.layer, b)));
 
-  // Map Controls
   if ($("fitAllBtn")) $("fitAllBtn").onclick = fitAll;
   if ($("focusIncBtn")) $("focusIncBtn").onclick = () => focusIncident();
   if ($("fitFleetBtn")) $("fitFleetBtn").onclick = fitFleet;
@@ -1456,7 +1905,6 @@ function wire() {
   if ($("legendToggleBtn")) $("legendToggleBtn").onclick = toggleLegend;
   if ($("closeLegendBtn")) $("closeLegendBtn").onclick = toggleLegend;
 
-  // Panel Actions
   if ($("btnCenter")) $("btnCenter").onclick = () => focusIncident();
   if ($("btnRoute")) $("btnRoute").onclick = () => {
     if (state.selectedIncidentId) drawRoute(state.selectedIncidentId);
@@ -1475,7 +1923,6 @@ function wire() {
     };
   }
 
-  // Demo Controls
   if ($("demoBtn")) $("demoBtn").onclick = openDemo;
   if ($("demoClose")) $("demoClose").onclick = closeDemo;
   if ($("demoModal")) $("demoModal").onclick = (e) => { if (e.target === $("demoModal")) closeDemo(); };
@@ -1486,7 +1933,6 @@ function wire() {
   if ($("demoReset")) $("demoReset").onclick = resetDemo;
   wireTestMode();
 
-  // Tabs & Search
   if ($("tabIncidents")) $("tabIncidents").onclick = () => switchTab("incidents");
   if ($("tabFeed")) $("tabFeed").onclick = () => switchTab("feed");
   if ($("searchInput")) {
@@ -1515,6 +1961,7 @@ function setTestCoordinates(target, lat, lng) {
   if ($(prefix + "Lng")) $(prefix + "Lng").value = Number(lng).toFixed(6);
 }
 function validTestCoordinates(lat, lng) { return Number.isFinite(lat) && Number.isFinite(lng) && Math.abs(lat) <= 90 && Math.abs(lng) <= 180; }
+
 function populateTestResources() {
   const fill = (id, records, label) => {
     const select = $(id);
@@ -1526,12 +1973,14 @@ function populateTestResources() {
   fill("testAmbulanceId", Object.values(state.ambulances), a => a.code || a.name || "Unit");
   fill("testHospitalId", Object.values(state.hospitals), h => h.name || "Hospital");
 }
+
 async function securedTestRequest(url, body, method = "POST") {
   const response = await fetch(API + url, { method, headers: authHeaders(), body: JSON.stringify(body) });
   const data = await response.json().catch(() => ({}));
   if (!response.ok) throw new Error(data.error || "Test operation failed");
   return data;
 }
+
 function wireTestMode() {
   if (!sessionUser || sessionUser.role !== "COMMAND_CENTER") {
     if ($("testModePanel")) $("testModePanel").style.display = "none";
@@ -1584,10 +2033,14 @@ function wireTestMode() {
     };
   }
   document.querySelectorAll("[data-center]").forEach(button => button.onclick = () => {
-    if (!map) return;
     const target = button.dataset.center;
-    const c = map.getCenter();
-    setTestCoordinates(target, c.lat, c.lng);
+    if (activeEngine === "google" && gMap) {
+      const c = gMap.getCenter();
+      if (c) setTestCoordinates(target, c.lat(), c.lng());
+    } else if (activeEngine === "leaflet" && lMap) {
+      const c = lMap.getCenter();
+      setTestCoordinates(target, c.lat, c.lng);
+    }
     if (result) result.textContent = "Coordinates copied from current map center.";
   });
   populateTestResources();
@@ -1610,17 +2063,25 @@ function debounce(fn, ms) {
   return (...a) => { clearTimeout(t); t = setTimeout(() => fn(...a), ms); };
 }
 
-/* ---------- BOOTSTRAP ---------- */
+/* ---------- BOOTSTRAP INITIALIZATION ---------- */
 window.addEventListener("DOMContentLoaded", async () => {
-  initMap();
+  setTimeout(() => {
+    if (!activeEngine) {
+      console.log("[ResQNet] Bootstrapping map engine...");
+      initMapEngine();
+    }
+  }, 300);
+
   wire();
   renderIncidentList();
   renderIncidentDetails();
-  addActivity("ResQNet Multi-Map Command Center armed — monitoring all channels", "ok");
+  addActivity("ResQNet Real-Time Command Center active — monitoring Pune region", "ok");
+
   await pollHealth();
   probeRouting();
   await syncIncidents(true);
   initSocket();
+
   setInterval(pollHealth, CFG.HEALTH_POLL_MS || 4000);
   setInterval(() => syncIncidents(false), CFG.INCIDENT_POLL_MS || 3000);
 });

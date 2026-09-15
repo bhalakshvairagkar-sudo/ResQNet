@@ -6,7 +6,6 @@ const Hospital = require('../models/Hospital');
 const Camera = require('../models/Camera');
 const ResponseHistory = require('../models/ResponseHistory');
 const EmergencyAlert = require('../models/EmergencyAlert');
-const User = require('../models/User');
 
 class DataStore {
     constructor() {
@@ -37,11 +36,7 @@ class DataStore {
                 fovAngle: 65,
                 heading: 50,
                 coverageRadiusMeters: 200,
-                lastDetection: {
-                    timestamp: new Date().toISOString(),
-                    detected: false,
-                    confidence: 0.94
-                }
+                lastDetection: { timestamp: new Date().toISOString(), detected: false, confidence: 0.94 }
             },
             {
                 id: 'CCTV-02',
@@ -54,11 +49,7 @@ class DataStore {
                 fovAngle: 75,
                 heading: 180,
                 coverageRadiusMeters: 220,
-                lastDetection: {
-                    timestamp: new Date().toISOString(),
-                    detected: false,
-                    confidence: 0.91
-                }
+                lastDetection: { timestamp: new Date().toISOString(), detected: false, confidence: 0.91 }
             },
             {
                 id: 'CCTV-03',
@@ -71,11 +62,7 @@ class DataStore {
                 fovAngle: 55,
                 heading: 90,
                 coverageRadiusMeters: 175,
-                lastDetection: {
-                    timestamp: new Date().toISOString(),
-                    detected: false,
-                    confidence: 0.96
-                }
+                lastDetection: { timestamp: new Date().toISOString(), detected: false, confidence: 0.96 }
             },
             {
                 id: 'CCTV-04',
@@ -88,11 +75,72 @@ class DataStore {
                 fovAngle: 50,
                 heading: 160,
                 coverageRadiusMeters: 260,
-                lastDetection: {
-                    timestamp: new Date().toISOString(),
-                    detected: false,
-                    confidence: 0.89
-                }
+                lastDetection: { timestamp: new Date().toISOString(), detected: false, confidence: 0.89 }
+            },
+            {
+                id: 'CCTV-05',
+                cameraId: 'CCTV-PUNE-FCROAD-05',
+                cameraName: 'FC Road / Deccan Gymkhana Junction Cam',
+                lat: 18.5167,
+                lng: 73.8415,
+                status: 'ONLINE',
+                sourceType: 'FIXED_OPTICAL_AI',
+                fovAngle: 60,
+                heading: 45,
+                coverageRadiusMeters: 190,
+                lastDetection: { timestamp: new Date().toISOString(), detected: false, confidence: 0.93 }
+            },
+            {
+                id: 'CCTV-06',
+                cameraId: 'CCTV-PUNE-SBROAD-06',
+                cameraName: 'Senapati Bapat Road Tech Corridor Cam',
+                lat: 18.5360,
+                lng: 73.8300,
+                status: 'ONLINE',
+                sourceType: 'FIXED_OPTICAL_AI',
+                fovAngle: 65,
+                heading: 120,
+                coverageRadiusMeters: 210,
+                lastDetection: { timestamp: new Date().toISOString(), detected: false, confidence: 0.92 }
+            },
+            {
+                id: 'CCTV-07',
+                cameraId: 'CCTV-PUNE-HADAPSAR-07',
+                cameraName: 'Hadapsar Magarpatta Junction Cam',
+                lat: 18.5080,
+                lng: 73.9250,
+                status: 'ONLINE',
+                sourceType: 'FIXED_OPTICAL_AI',
+                fovAngle: 70,
+                heading: 85,
+                coverageRadiusMeters: 230,
+                lastDetection: { timestamp: new Date().toISOString(), detected: false, confidence: 0.90 }
+            },
+            {
+                id: 'CCTV-08',
+                cameraId: 'CCTV-PUNE-HINJEWADI-08',
+                cameraName: 'Hinjewadi Phase-1 Expressway Cam',
+                lat: 18.5910,
+                lng: 73.7380,
+                status: 'ONLINE',
+                sourceType: 'FIXED_OPTICAL_AI',
+                fovAngle: 60,
+                heading: 210,
+                coverageRadiusMeters: 250,
+                lastDetection: { timestamp: new Date().toISOString(), detected: false, confidence: 0.95 }
+            },
+            {
+                id: 'CCTV-09',
+                cameraId: 'CCTV-PUNE-SHIVAJINAGAR-09',
+                cameraName: 'Shivajinagar ST Stand Flyover Cam',
+                lat: 18.5320,
+                lng: 73.8520,
+                status: 'ONLINE',
+                sourceType: 'FIXED_OPTICAL_AI',
+                fovAngle: 60,
+                heading: 300,
+                coverageRadiusMeters: 200,
+                lastDetection: { timestamp: new Date().toISOString(), detected: false, confidence: 0.94 }
             }
         ];
 
@@ -138,11 +186,13 @@ class DataStore {
 
     seedInitialFleet() {
         const initialAmbulances = [
-            { id: 'AMB-01', code: 'AMB-01', type: 'ALS', traumaReady: true, lat: 18.5300, lng: 73.8400, location: { type: 'Point', coordinates: [73.8400, 18.5300] }, status: 'AVAILABLE', eta: 4, speed: 0, heading: 0 },
-            { id: 'AMB-02', code: 'AMB-02', type: 'ALS', traumaReady: true, lat: 18.5100, lng: 73.8600, location: { type: 'Point', coordinates: [73.8600, 18.5100] }, status: 'AVAILABLE', eta: 5, speed: 0, heading: 0 },
-            { id: 'AMB-03', code: 'AMB-03', type: 'BLS', traumaReady: false, lat: 18.5400, lng: 73.8700, location: { type: 'Point', coordinates: [73.8700, 18.5400] }, status: 'AVAILABLE', eta: 8, speed: 0, heading: 0 },
-            { id: 'AMB-04', code: 'AMB-04', type: 'ALS', traumaReady: true, lat: 18.4900, lng: 73.8300, location: { type: 'Point', coordinates: [73.8300, 18.4900] }, status: 'UNAVAILABLE', eta: 12, speed: 0, heading: 0 },
-            { id: 'AMB-05', code: 'AMB-05', type: 'ALS', traumaReady: true, lat: 18.5500, lng: 73.8200, location: { type: 'Point', coordinates: [73.8200, 18.5500] }, status: 'AVAILABLE', eta: 6, speed: 0, heading: 0 }
+            { id: 'AMB-01', code: 'AMB-01', type: 'ALS', traumaReady: true, lat: 18.5300, lng: 73.8400, location: { type: 'Point', coordinates: [73.8400, 18.5300] }, status: 'AVAILABLE', eta: 4, speed: 0, heading: 0, station: 'Shivajinagar Hub' },
+            { id: 'AMB-02', code: 'AMB-02', type: 'ALS', traumaReady: true, lat: 18.5100, lng: 73.8600, location: { type: 'Point', coordinates: [73.8600, 18.5100] }, status: 'AVAILABLE', eta: 5, speed: 0, heading: 0, station: 'Swargate Central' },
+            { id: 'AMB-03', code: 'AMB-03', type: 'BLS', traumaReady: false, lat: 18.5400, lng: 73.8700, location: { type: 'Point', coordinates: [73.8700, 18.5400] }, status: 'AVAILABLE', eta: 8, speed: 0, heading: 0, station: 'Pune Station Base' },
+            { id: 'AMB-04', code: 'AMB-04', type: 'ALS', traumaReady: true, lat: 18.4900, lng: 73.8300, location: { type: 'Point', coordinates: [73.8300, 18.4900] }, status: 'AVAILABLE', eta: 7, speed: 0, heading: 0, station: 'Kothrud Depot' },
+            { id: 'AMB-05', code: 'AMB-05', type: 'ALS', traumaReady: true, lat: 18.5500, lng: 73.8200, location: { type: 'Point', coordinates: [73.8200, 18.5500] }, status: 'AVAILABLE', eta: 6, speed: 0, heading: 0, station: 'Aundh Smart Point' },
+            { id: 'AMB-06', code: 'AMB-06', type: 'ALS', traumaReady: true, lat: 18.5050, lng: 73.9280, location: { type: 'Point', coordinates: [73.9280, 18.5050] }, status: 'AVAILABLE', eta: 5, speed: 0, heading: 0, station: 'Hadapsar Rapid Hub' },
+            { id: 'AMB-07', code: 'AMB-07', type: 'ALS', traumaReady: true, lat: 18.5900, lng: 73.7400, location: { type: 'Point', coordinates: [73.7400, 18.5900] }, status: 'AVAILABLE', eta: 6, speed: 0, heading: 0, station: 'Hinjewadi IT Depot' }
         ];
 
         const initialHospitals = [

@@ -10,12 +10,11 @@ const CameraSchema = new mongoose.Schema({
     cameraId: {
         type: String,
         required: true,
-        unique: true,
         index: true
     },
     cameraName: {
         type: String,
-        default: 'Junction Cam'
+        required: true
     },
     lat: {
         type: Number,
@@ -25,42 +24,29 @@ const CameraSchema = new mongoose.Schema({
         type: Number,
         required: true
     },
-    latitude: {
-        type: Number
-    },
-    longitude: {
-        type: Number
-    },
-    road: {
-        type: String,
-        default: 'Main Corridor'
-    },
-    direction: {
-        type: String,
-        default: 'NORTHBOUND'
-    },
-    sourceType: {
-        type: String,
-        enum: ['webcam', 'file', 'rtsp', 'FIXED_OPTICAL_AI'],
-        default: 'FIXED_OPTICAL_AI'
+    location: {
+        type: {
+            type: String,
+            enum: ['Point'],
+            default: 'Point'
+        },
+        coordinates: {
+            type: [Number], // [lng, lat]
+            required: true
+        }
     },
     status: {
         type: String,
-        enum: ['ONLINE', 'OFFLINE', 'DEGRADED', 'NO_FRAMES', 'HIGH_LATENCY'],
-        default: 'ONLINE',
-        index: true
+        enum: ['ONLINE', 'DEGRADED', 'OFFLINE'],
+        default: 'ONLINE'
     },
-    fps: {
-        type: Number,
-        default: 0.0
-    },
-    inferenceLatency: {
-        type: Number,
-        default: 0.0
+    sourceType: {
+        type: String,
+        default: 'FIXED_OPTICAL_AI'
     },
     fovAngle: {
         type: Number,
-        default: 60
+        default: 65
     },
     heading: {
         type: Number,
@@ -70,16 +56,18 @@ const CameraSchema = new mongoose.Schema({
         type: Number,
         default: 200
     },
+    fps: {
+        type: Number,
+        default: 24.0
+    },
+    inferenceLatency: {
+        type: Number,
+        default: 38
+    },
     lastDetection: {
-        type: mongoose.Schema.Types.Mixed
-    },
-    lastFrameAt: {
-        type: Date,
-        default: Date.now
-    },
-    isDemo: {
-        type: Boolean,
-        default: false
+        timestamp: { type: String },
+        detected: { type: Boolean, default: false },
+        confidence: { type: Number, default: 0.94 }
     }
 }, {
     timestamps: true

@@ -12,6 +12,25 @@
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
 <script src="/js/config.js"></script>
+<script>
+  (function() {
+    const key = (window.RESQNET_CONFIG && window.RESQNET_CONFIG.GOOGLE_MAPS_KEY) || localStorage.getItem('GOOGLE_MAPS_API_KEY') || '';
+    const script = document.createElement('script');
+    script.src = `https://maps.googleapis.com/maps/api/js?key=${key}&libraries=geometry,places`;
+    script.async = true;
+    script.defer = true;
+    script.onerror = function() {
+      console.warn('[ResQNet] Google Maps JS API failed to load, defaulting to Leaflet.');
+      window.googleMapsFailed = true;
+      if (typeof window.onGoogleMapsReady === 'function') window.onGoogleMapsReady(false);
+    };
+    script.onload = function() {
+      window.googleMapsLoaded = true;
+      if (typeof window.onGoogleMapsReady === 'function') window.onGoogleMapsReady(true);
+    };
+    document.head.appendChild(script);
+  })();
+</script>
 </head>
 <body>
 
@@ -72,12 +91,14 @@
       <div class="ctrl-group">
         <label for="mapStyleSelect" class="sr-only">Map View Style</label>
         <select id="mapStyleSelect" class="mselect" data-testid="map-style-select" title="Change Map Provider / Style">
-          <option value="dark">🗺️ Dark Matter</option>
-          <option value="standard">🛣️ Standard Roads</option>
-          <option value="light">🏙️ Light Positron</option>
-          <option value="satellite">🛰️ Satellite Imagery</option>
-          <option value="hybrid">🛰️ Hybrid (Sat+Roads)</option>
-          <option value="terrain">⛰️ Topo Terrain</option>
+          <option value="google_dark" selected>🗺️ Google Maps (Dark + Live Traffic)</option>
+          <option value="google_roadmap">🛣️ Google Maps (Roads + Live Traffic)</option>
+          <option value="google_satellite">🛰️ Google Satellite</option>
+          <option value="google_hybrid">🛰️ Google Hybrid (Sat+Roads)</option>
+          <option value="google_terrain">⛰️ Google Terrain</option>
+          <option value="dark">🗺️ Leaflet Dark Matter</option>
+          <option value="standard">🛣️ Leaflet Standard Roads</option>
+          <option value="satellite">🛰️ Leaflet Satellite Esri</option>
         </select>
       </div>
 
@@ -89,7 +110,7 @@
         <button class="mbtn on" data-layer="routes" data-testid="layer-routes" title="Toggle 2-Leg OSRM Routes"><i class="fa-solid fa-route"></i> ROUTES</button>
         <button class="mbtn on" data-layer="cctv" data-testid="layer-cctv" title="Toggle CCTV Cameras & Detection Cones"><i class="fa-solid fa-video"></i> CCTV</button>
         <button class="mbtn on" data-layer="hotspots" data-testid="layer-hotspots" title="Toggle Crash Blackspots"><i class="fa-solid fa-fire"></i> BLACKSPOTS</button>
-        <button class="mbtn" data-layer="traffic" data-testid="layer-traffic" title="Toggle Traffic Context"><i class="fa-solid fa-car"></i> TRAFFIC</button>
+        <button class="mbtn on" data-layer="traffic" data-testid="layer-traffic" title="Toggle Real-Time Traffic Layer"><i class="fa-solid fa-car"></i> TRAFFIC</button>
       </div>
 
       <span class="map-spacer"></span>
