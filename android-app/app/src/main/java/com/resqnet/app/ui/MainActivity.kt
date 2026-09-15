@@ -3,12 +3,14 @@ package com.resqnet.app.ui
 import android.Manifest
 import android.content.Context
 import android.content.Intent
+import android.net.Uri
 import android.hardware.Sensor
 import android.hardware.SensorEvent
 import android.hardware.SensorEventListener
 import android.hardware.SensorManager
 import android.os.Build
 import android.os.Bundle
+import android.os.PowerManager
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -33,6 +35,7 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.lifecycleScope
 import com.resqnet.app.data.api.ApiClient
 import com.resqnet.app.data.api.AppEnvironment
+import com.resqnet.app.data.local.UserSessionManager
 import com.resqnet.app.data.repository.IncidentRepository
 import com.resqnet.app.domain.model.CrashDetectionResult
 import com.resqnet.app.domain.model.SubmissionStatus
@@ -118,6 +121,24 @@ class MainActivity : ComponentActivity(), SensorEventListener {
             }
         }
 
+        // Keep-Alive Background Heartbeat & Online Status Confirmation
+        lifecycleScope.launch {
+            while (true) {
+                try {
+                    val resp = ApiClient.api.checkHealth()
+                    if (resp.isSuccessful) {
+                        networkMonitor.setOnline(true)
+                    }
+                } catch (e: Exception) {
+                    android.util.Log.d("ResQNet", "Render health check ping: ${e.message}")
+                    if (networkMonitor.checkCurrentConnectivity()) {
+                        networkMonitor.setOnline(true)
+                    }
+                }
+                delay(15000L) // Ping every 15 seconds
+            }
+        }
+
         setContent {
             MaterialTheme(
                 colorScheme = darkColorScheme(
@@ -160,7 +181,20 @@ class MainActivity : ComponentActivity(), SensorEventListener {
                         ApiClient.setBaseUrl(url)
                         Toast.makeText(this, "Custom URL Updated: $url", Toast.LENGTH_SHORT).show()
                     },
+                    onOpenCitizenWebPortal = {
+                        val intent = Intent(this, CitizenWebPortalActivity::class.java).apply {
+                            putExtra(CitizenWebPortalActivity.EXTRA_URL, ApiClient.getBaseUrl())
+                        }
+                        startActivity(intent)
+                    },
                     onOpenOperationsPortal = { startActivity(Intent(this, RolePortalActivity::class.java)) },
+                    onOpenUrl = { url ->
+                        try {
+                            startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
+                        } catch (e: Exception) {
+                            Toast.makeText(this, "Could not open browser: ${e.message}", Toast.LENGTH_SHORT).show()
+                        }
+                    },
                     onFlushRetries = {
                         lifecycleScope.launch {
                             val flushed = repository.flushPendingRetries()
@@ -188,10 +222,30 @@ class MainActivity : ComponentActivity(), SensorEventListener {
             needed.add(Manifest.permission.POST_NOTIFICATIONS)
         }
         permissionLauncher.launch(needed.toTypedArray())
+        requestBatteryOptimizationExemption()
+    }
+
+    private fun requestBatteryOptimizationExemption() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            val powerManager = getSystemService(Context.POWER_SERVICE) as? PowerManager
+            if (powerManager != null && !powerManager.isIgnoringBatteryOptimizations(packageName)) {
+                try {
+                    val intent = Intent(android.provider.Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS).apply {
+                        data = Uri.parse("package:$packageName")
+                    }
+                    startActivity(intent)
+                } catch (e: Exception) {
+                    android.util.Log.w("ResQNet", "Could not request battery optimization whitelist: ${e.message}")
+                }
+            }
+        }
     }
 
     override fun onResume() {
         super.onResume()
+        if (networkMonitor.checkCurrentConnectivity()) {
+            networkMonitor.setOnline(true)
+        }
         accelerometer?.let {
             sensorManager.registerListener(this, it, SensorManager.SENSOR_DELAY_UI)
         }
@@ -317,7 +371,9 @@ fun ResQNetAppUI(
     onToggleShield: (Boolean) -> Unit,
     onSelectEnvironment: (AppEnvironment) -> Unit,
     onUpdateBackendUrl: (String) -> Unit,
+    onOpenCitizenWebPortal: () -> Unit,
     onOpenOperationsPortal: () -> Unit,
+    onOpenUrl: (String) -> Unit,
     onFlushRetries: () -> Unit
 ) {
     var backendUrlInput by remember { mutableStateOf(ApiClient.getBaseUrl()) }
@@ -602,15 +658,80 @@ fun ResQNetAppUI(
 
         Spacer(modifier = Modifier.height(14.dp))
 
-        OutlinedButton(
-            onClick = onOpenOperationsPortal,
-            modifier = Modifier.fillMaxWidth().height(46.dp),
-            shape = RoundedCornerShape(12.dp),
-            colors = ButtonDefaults.outlinedButtonColors(contentColor = Color(0xFF38BDF8))
+        // Operations & Role Portals Card
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(containerColor = Color(0xFF0C1220)),
+            shape = RoundedCornerShape(12.dp)
         ) {
-            Icon(Icons.Default.LocalHospital, contentDescription = null)
-            Spacer(modifier = Modifier.width(6.dp))
-            Text("AMBULANCE / HOSPITAL OPERATIONS PORTAL", fontWeight = FontWeight.Bold, fontSize = 11.sp)
+            Column(modifier = Modifier.padding(14.dp)) {
+                Text(
+                    text = "EMERGENCY OPERATIONS & PORTALS",
+                    color = Color(0xFF38BDF8),
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Bold
+                )
+                Spacer(modifier = Modifier.height(10.dp))
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    // Ambulance Portal Button
+                    Button(
+                        onClick = { onOpenUrl("${ApiClient.getBaseUrl()}ambulance.html") },
+                        modifier = Modifier.weight(1f).height(42.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1E293B)),
+                        shape = RoundedCornerShape(8.dp),
+                        contentPadding = PaddingValues(horizontal = 4.dp, vertical = 2.dp)
+                    ) {
+                        Icon(Icons.Default.DirectionsCar, contentDescription = null, tint = Color(0xFF38BDF8), modifier = Modifier.size(16.dp))
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text("AMBULANCE", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                    }
+
+                    // Hospital Portal Button
+                    Button(
+                        onClick = { onOpenUrl("${ApiClient.getBaseUrl()}hospital.html") },
+                        modifier = Modifier.weight(1f).height(42.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1E293B)),
+                        shape = RoundedCornerShape(8.dp),
+                        contentPadding = PaddingValues(horizontal = 4.dp, vertical = 2.dp)
+                    ) {
+                        Icon(Icons.Default.LocalHospital, contentDescription = null, tint = Color(0xFF10B981), modifier = Modifier.size(16.dp))
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text("HOSPITAL", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                // Central Command Center
+                OutlinedButton(
+                    onClick = { onOpenUrl("${ApiClient.getBaseUrl()}dashboard.html") },
+                    modifier = Modifier.fillMaxWidth().height(42.dp),
+                    shape = RoundedCornerShape(8.dp),
+                    colors = ButtonDefaults.outlinedButtonColors(contentColor = Color(0xFF38BDF8))
+                ) {
+                    Icon(Icons.Default.Map, contentDescription = null, modifier = Modifier.size(16.dp))
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text("CENTRAL COMMAND CENTER (LIVE MAP)", fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                }
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                // Native In-App Portal Sign-In
+                Button(
+                    onClick = onOpenOperationsPortal,
+                    modifier = Modifier.fillMaxWidth().height(42.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF0284C7)),
+                    shape = RoundedCornerShape(8.dp)
+                ) {
+                    Icon(Icons.Default.Lock, contentDescription = null, modifier = Modifier.size(16.dp))
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text("IN-APP MOBILE ROLE SIGN-IN", fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                }
+            }
         }
 
         Spacer(modifier = Modifier.height(14.dp))

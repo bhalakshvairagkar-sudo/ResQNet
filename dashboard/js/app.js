@@ -669,24 +669,80 @@ function toggleLayer(name, btn) {
   }
 }
 
-/* ---------- AUTHORITATIVE ROUTE RENDERING (12A.8) ---------- */
+/* ---------- AUTHORITATIVE ROUTE RENDERING & LIVE OSRM ROAD ENGINE ---------- */
+async function fetchOsrmRoadRoute(ambPt, scenePt, hospPt) {
+  const pts = hospPt ? [ambPt, scenePt, hospPt] : [ambPt, scenePt];
+  const key = pts.map(p => `${Number(p[1]).toFixed(5)},${Number(p[0]).toFixed(5)}`).join(';');
+  const endpoints = [
+    `https://router.project-osrm.org/route/v1/driving/${key}?overview=full&geometries=geojson&steps=false`,
+    `https://routing.openstreetmap.de/routed-car/route/v1/driving/${key}?overview=full&geometries=geojson&steps=false`,
+    `${API}/route?startLng=${ambPt[1]}&startLat=${ambPt[0]}&endLng=${scenePt[1]}&endLat=${scenePt[0]}`
+  ];
+
+  for (const url of endpoints) {
+    try {
+      const res = await fetch(url);
+      if (res.ok) {
+        const data = await res.json();
+        const routeObj = data.routes ? data.routes[0] : (data.geometry ? data : null);
+        if (routeObj && routeObj.geometry && Array.isArray(routeObj.geometry.coordinates) && routeObj.geometry.coordinates.length > 5) {
+          return {
+            coords: routeObj.geometry.coordinates.map(c => [c[1], c[0]]),
+            distKm: (routeObj.distance / 1000).toFixed(1),
+            etaMin: Math.max(1, Math.round(routeObj.duration / 60)),
+            geometrySource: "OSRM REAL-TIME ROAD (TURN-BY-TURN)"
+          };
+        }
+      }
+    } catch (e) {}
+  }
+  return null;
+}
+
 async function drawRoute(id) {
   const inc = state.incidents[id];
-  const r = state.routes[id];
-  if (!inc || !r || inc.latitude === null) return;
+  const r = state.routes[id] || {};
+  if (!inc || inc.latitude === null) return;
 
   let coords = null, distKm = null, etaMin = r.etaMin, geometrySource = "ROUTE UNAVAILABLE";
 
   // Check backend authoritative route geometry first
-  if (inc.route && inc.route.geometry && Array.isArray(inc.route.geometry.coordinates) && inc.route.geometry.coordinates.length > 0) {
+  if (inc.route && inc.route.geometry && Array.isArray(inc.route.geometry.coordinates) && inc.route.geometry.coordinates.length > 5) {
     coords = inc.route.geometry.coordinates.map((c) => [c[1], c[0]]);
     distKm = inc.route.distanceKm ? String(inc.route.distanceKm) : distKm;
     etaMin = inc.route.etaMinutes ? Number(inc.route.etaMinutes) : etaMin;
-    geometrySource = inc.route.isFallback ? "⚠ ROUTING DEGRADED (APPROXIMATION)" : "OSRM ROAD";
+    geometrySource = inc.route.isFallback ? "⚠ ROUTING DEGRADED (APPROXIMATION)" : "OSRM REAL-TIME ROAD";
   }
-  const hospCoords = inc.hospitalRoute?.geometry?.coordinates?.map((c) => [c[1], c[0]]) || null;
 
-  state.routes[id] = { ...r, coords, hospCoords, distKm, etaMin, geometrySource };
+  const amb = state.ambulances[r.ambulanceId || inc.assignedAmbulance] || Object.values(state.ambulances)[0];
+  const hosp = state.hospitals[r.hospitalId || inc.assignedHospitalId || inc.hospitalId] || Object.values(state.hospitals).find(h => h.name === inc.assignedHospital) || Object.values(state.hospitals)[0];
+
+  const ambLat = amb ? amb.lat : 18.5300;
+  const ambLng = amb ? amb.lng : 73.8400;
+  const sceneLat = inc.latitude;
+  const sceneLng = inc.longitude;
+  const hospLat = hosp ? hosp.lat : (inc.hospitalLatitude || 18.5280);
+  const hospLng = hosp ? hosp.lng : (inc.hospitalLongitude || 73.8720);
+
+  // If coords missing or has <= 5 points (straight line), dynamically resolve via OSRM turn-by-turn routing
+  if (!coords || coords.length <= 5) {
+    const liveOsrm = await fetchOsrmRoadRoute([ambLat, ambLng], [sceneLat, sceneLng], [hospLat, hospLng]);
+    if (liveOsrm && liveOsrm.coords && liveOsrm.coords.length > 5) {
+      coords = liveOsrm.coords;
+      distKm = liveOsrm.distKm;
+      etaMin = liveOsrm.etaMin;
+      geometrySource = liveOsrm.geometrySource;
+      inc.route = {
+        ...inc.route,
+        distanceKm: Number(distKm),
+        etaMinutes: Number(etaMin),
+        geometry: { type: 'LineString', coordinates: coords.map(c => [c[1], c[0]]) }
+      };
+    }
+  }
+
+  const hospCoords = inc.hospitalRoute?.geometry?.coordinates?.map((c) => [c[1], c[0]]) || null;
+  state.routes[id] = { ...r, ambulanceId: amb?.id || r.ambulanceId, hospitalId: hosp?.id || r.hospitalId, coords, hospCoords, distKm, etaMin, geometrySource };
 
   // Clear previous route polylines
   routePolylines.forEach((p) => p.setMap(null));
@@ -694,12 +750,24 @@ async function drawRoute(id) {
 
   if (map && window.google && window.google.maps) {
     if (coords && coords.length > 0) {
+      // Glow background line
+      const glowLine = new google.maps.Polyline({
+        path: coords.map((c) => ({ lat: c[0], lng: c[1] })),
+        geodesic: false,
+        strokeColor: "#F59E0B",
+        strokeOpacity: 0.35,
+        strokeWeight: 10,
+        map: state.layers.routes ? map : null
+      });
+      routePolylines.push(glowLine);
+
+      // Main crisp turn-by-turn road polyline
       const line = new google.maps.Polyline({
         path: coords.map((c) => ({ lat: c[0], lng: c[1] })),
-        geodesic: true,
+        geodesic: false,
         strokeColor: "#FF9F0A",
-        strokeOpacity: 0.92,
-        strokeWeight: 6,
+        strokeOpacity: 0.95,
+        strokeWeight: 5,
         map: state.layers.routes ? map : null
       });
       routePolylines.push(line);
@@ -707,9 +775,9 @@ async function drawRoute(id) {
     if (hospCoords && hospCoords.length > 0) {
       const line2 = new google.maps.Polyline({
         path: hospCoords.map((c) => ({ lat: c[0], lng: c[1] })),
-        geodesic: true,
-        strokeColor: "#409CFF",
-        strokeOpacity: 0.85,
+        geodesic: false,
+        strokeColor: "#38BDF8",
+        strokeOpacity: 0.9,
         strokeWeight: 5,
         map: state.layers.routes ? map : null
       });
@@ -717,8 +785,6 @@ async function drawRoute(id) {
     }
   }
 
-  const amb = state.ambulances[r.ambulanceId];
-  const hosp = state.hospitals[r.hospitalId];
   if (amb) updateAmbulance({ id: amb.id, eta: etaMin });
   if (hosp) updateHospital({ id: hosp.id });
   renderKPIs();

@@ -311,12 +311,38 @@
       }
 
       showMsg('✓ Medical profile saved successfully! Forwarding to Portal...', 'success');
+      
+      // Update local storage user session
+      if (user) {
+        user.medicalProfile = payload;
+        user.hasCompletedMedicalProfile = true;
+        localStorage.resqnetUser = JSON.stringify(user);
+      }
+
+      // Seamless Android Native App Bridge Synchronization
+      if (window.AndroidBridge && typeof window.AndroidBridge.onMedicalProfileSaved === 'function') {
+        try {
+          window.AndroidBridge.onMedicalProfileSaved(
+            payload.fullName,
+            payload.bloodGroup,
+            payload.primaryContact.name,
+            payload.primaryContact.phone,
+            payload.allergies.join(', '),
+            payload.chronicConditions.join(', '),
+            payload.currentMedications,
+            payload.specialNotes
+          );
+        } catch (e) {
+          console.warn('AndroidBridge call error:', e);
+        }
+      }
+
       setTimeout(() => {
-        if (user.role === 'HOSPITAL') location.href = '/hospital.html';
-        else if (user.role === 'AMBULANCE') location.href = '/ambulance.html';
-        else if (user.role === 'COMMAND_CENTER') location.href = '/dashboard.html';
+        if (user && user.role === 'HOSPITAL') location.href = '/hospital.html';
+        else if (user && user.role === 'AMBULANCE') location.href = '/ambulance.html';
+        else if (user && user.role === 'COMMAND_CENTER') location.href = '/dashboard.html';
         else location.href = '/sos.html';
-      }, 1200);
+      }, 1000);
     } catch (err) {
       showMsg('Network error: ' + err.message, 'error');
       btn.disabled = false;

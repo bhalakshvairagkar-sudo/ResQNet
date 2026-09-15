@@ -3,6 +3,7 @@ package com.resqnet.app.ui
 import android.Manifest
 import android.content.Context
 import android.content.Intent
+import android.net.Uri
 import android.hardware.Sensor
 import android.hardware.SensorEvent
 import android.hardware.SensorEventListener
@@ -187,6 +188,13 @@ class MainActivity : ComponentActivity(), SensorEventListener {
                         startActivity(intent)
                     },
                     onOpenOperationsPortal = { startActivity(Intent(this, RolePortalActivity::class.java)) },
+                    onOpenUrl = { url ->
+                        try {
+                            startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
+                        } catch (e: Exception) {
+                            Toast.makeText(this, "Could not open browser: ${e.message}", Toast.LENGTH_SHORT).show()
+                        }
+                    },
                     onFlushRetries = {
                         lifecycleScope.launch {
                             val flushed = repository.flushPendingRetries()
@@ -365,6 +373,7 @@ fun ResQNetAppUI(
     onUpdateBackendUrl: (String) -> Unit,
     onOpenCitizenWebPortal: () -> Unit,
     onOpenOperationsPortal: () -> Unit,
+    onOpenUrl: (String) -> Unit,
     onFlushRetries: () -> Unit
 ) {
     var backendUrlInput by remember { mutableStateOf(ApiClient.getBaseUrl()) }
@@ -649,15 +658,80 @@ fun ResQNetAppUI(
 
         Spacer(modifier = Modifier.height(14.dp))
 
-        OutlinedButton(
-            onClick = onOpenOperationsPortal,
-            modifier = Modifier.fillMaxWidth().height(46.dp),
-            shape = RoundedCornerShape(12.dp),
-            colors = ButtonDefaults.outlinedButtonColors(contentColor = Color(0xFF38BDF8))
+        // Operations & Role Portals Card
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(containerColor = Color(0xFF0C1220)),
+            shape = RoundedCornerShape(12.dp)
         ) {
-            Icon(Icons.Default.LocalHospital, contentDescription = null)
-            Spacer(modifier = Modifier.width(6.dp))
-            Text("AMBULANCE / HOSPITAL OPERATIONS PORTAL", fontWeight = FontWeight.Bold, fontSize = 11.sp)
+            Column(modifier = Modifier.padding(14.dp)) {
+                Text(
+                    text = "EMERGENCY OPERATIONS & PORTALS",
+                    color = Color(0xFF38BDF8),
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Bold
+                )
+                Spacer(modifier = Modifier.height(10.dp))
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    // Ambulance Portal Button
+                    Button(
+                        onClick = { onOpenUrl("${ApiClient.getBaseUrl()}ambulance.html") },
+                        modifier = Modifier.weight(1f).height(42.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1E293B)),
+                        shape = RoundedCornerShape(8.dp),
+                        contentPadding = PaddingValues(horizontal = 4.dp, vertical = 2.dp)
+                    ) {
+                        Icon(Icons.Default.DirectionsCar, contentDescription = null, tint = Color(0xFF38BDF8), modifier = Modifier.size(16.dp))
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text("AMBULANCE", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                    }
+
+                    // Hospital Portal Button
+                    Button(
+                        onClick = { onOpenUrl("${ApiClient.getBaseUrl()}hospital.html") },
+                        modifier = Modifier.weight(1f).height(42.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1E293B)),
+                        shape = RoundedCornerShape(8.dp),
+                        contentPadding = PaddingValues(horizontal = 4.dp, vertical = 2.dp)
+                    ) {
+                        Icon(Icons.Default.LocalHospital, contentDescription = null, tint = Color(0xFF10B981), modifier = Modifier.size(16.dp))
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text("HOSPITAL", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                // Central Command Center
+                OutlinedButton(
+                    onClick = { onOpenUrl("${ApiClient.getBaseUrl()}dashboard.html") },
+                    modifier = Modifier.fillMaxWidth().height(42.dp),
+                    shape = RoundedCornerShape(8.dp),
+                    colors = ButtonDefaults.outlinedButtonColors(contentColor = Color(0xFF38BDF8))
+                ) {
+                    Icon(Icons.Default.Map, contentDescription = null, modifier = Modifier.size(16.dp))
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text("CENTRAL COMMAND CENTER (LIVE MAP)", fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                }
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                // Native In-App Portal Sign-In
+                Button(
+                    onClick = onOpenOperationsPortal,
+                    modifier = Modifier.fillMaxWidth().height(42.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF0284C7)),
+                    shape = RoundedCornerShape(8.dp)
+                ) {
+                    Icon(Icons.Default.Lock, contentDescription = null, modifier = Modifier.size(16.dp))
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text("IN-APP MOBILE ROLE SIGN-IN", fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                }
+            }
         }
 
         Spacer(modifier = Modifier.height(14.dp))

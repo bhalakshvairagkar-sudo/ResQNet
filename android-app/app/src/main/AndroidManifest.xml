@@ -1,56 +1,90 @@
 <?xml version="1.0" encoding="utf-8"?>
+
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
-    <!-- Permissions for Sensor, Location, and Emergency Network Transmission -->
+    <!-- Network -->
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+
+    <!-- Location -->
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
     <uses-permission android:name="android.permission.ACCESS_BACKGROUND_LOCATION" />
+
+    <!-- Sensors & Continuous Background Processing -->
+    <uses-permission android:name="android.permission.BODY_SENSORS" />
     <uses-permission android:name="android.permission.HIGH_SAMPLING_RATE_SENSORS" />
-    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
-    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION" />
-    <uses-permission android:name="android.permission.VIBRATE" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
+    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
+    <uses-permission android:name="android.permission.VIBRATE" />
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+    <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT" />
+
+    <!-- Notifications -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
+    <!-- Foreground Service -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION" />
+
     <application
-        android:name="com.resqnet.app.ResQNetApp"
         android:allowBackup="true"
         android:icon="@mipmap/ic_launcher"
-        android:label="ResQNet AI"
         android:roundIcon="@mipmap/ic_launcher_round"
+        android:label="ResQNet"
         android:supportsRtl="true"
-        android:theme="@style/Theme.ResQNet"
-        android:usesCleartextTraffic="true">
+        android:theme="@style/Theme.ResQNet">
 
-        <!-- Authenticated role gateway: backend determines USER / AMBULANCE / HOSPITAL. -->
+        <!-- 1. App Entry Router: Determines 1st-time (Image 2) vs Returning User (Image 1) -->
         <activity
-            android:name="com.resqnet.app.ui.RolePortalActivity"
+            android:name=".ui.SplashActivity"
             android:exported="true"
-            android:theme="@style/Theme.ResQNet">
+            android:theme="@android:style/Theme.NoDisplay">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
 
-        <!-- User crash-protection dashboard is reached only from the authenticated User Portal. -->
-        <activity android:name="com.resqnet.app.ui.MainActivity" android:exported="false" />
-        <!-- Fullscreen Crash Interception Countdown Dialog -->
+        <!-- 2. Main Live Sensor Cadence & Crash Detection Shield (Image 1 - as original) -->
         <activity
-            android:name="com.resqnet.app.ui.CrashCountdownActivity"
+            android:name=".ui.MainActivity"
+            android:exported="true" />
+
+        <!-- 3. Citizen Registration & Medical Details Form (Image 2 - 1st time for new user) -->
+        <activity
+            android:name=".ui.CitizenWebPortalActivity"
+            android:exported="false" />
+
+        <!-- 4. Emergency Countdown & Alert (Wakes screen up over lockscreen) -->
+        <activity
+            android:name=".ui.CrashCountdownActivity"
             android:exported="false"
             android:showOnLockScreen="true"
-            android:turnScreenOn="true"
-            android:theme="@style/Theme.ResQNet.Fullscreen" />
+            android:showWhenLocked="true"
+            android:turnScreenOn="true" />
 
-        <!-- Background Continuous G-Sensor & Accelerometer Detection Service -->
+        <activity
+            android:name=".ui.DispatchTrackingActivity"
+            android:exported="false" />
+
+        <activity
+            android:name=".ui.RolePortalActivity"
+            android:exported="false" />
+
+        <activity
+            android:name="com.example.resqnet.CrashConfirmationActivity"
+            android:exported="false" />
+
+        <activity
+            android:name="com.example.resqnet.MainActivity"
+            android:exported="false" />
+
         <service
-            android:name="com.resqnet.app.service.CrashDetectionService"
-            android:enabled="true"
-            android:exported="false"
-            android:foregroundServiceType="location" />
+            android:name=".service.CrashDetectionService"
+            android:foregroundServiceType="location"
+            android:exported="false" />
 
     </application>
+
 </manifest>

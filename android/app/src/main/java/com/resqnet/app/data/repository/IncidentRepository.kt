@@ -6,7 +6,8 @@ import android.provider.Settings
 import android.util.Log
 import com.resqnet.app.data.api.ApiClient
 import com.resqnet.app.data.api.EmergencyPayload
-import com.resqnet.app.data.api.IncidentDto
+import com.resqnet.app.data.api.PatientProfileDto
+import com.resqnet.app.data.api.EmergencyContactDto
 import com.resqnet.app.data.local.LocalIncidentRecord
 import com.resqnet.app.data.local.LocalIncidentStore
 import com.resqnet.app.data.local.UserSessionManager
@@ -15,278 +16,1166 @@ import com.resqnet.app.domain.model.LocationQuality
 import com.resqnet.app.domain.model.SubmissionStatus
 import com.resqnet.app.location.LocationData
 import com.resqnet.app.network.NetworkMonitor
-import kotlinx.coroutines.*
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.text.SimpleDateFormat
-import java.util.*
+import java.util.Date
+import java.util.Locale
+import java.util.TimeZone
+import java.util.UUID
 import kotlin.math.min
 import kotlin.math.pow
 
-class IncidentRepository(private val context: Context) {
+class IncidentRepository(
+    private val context: Context
+) {
 
-    private val localStore = LocalIncidentStore(context)
-    private val networkMonitor = NetworkMonitor.getInstance(context)
-    private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
+    private val localStore =
+        LocalIncidentStore(context)
+
+    private val networkMonitor =
+        NetworkMonitor.getInstance(context)
+
+    private val scope =
+        CoroutineScope(
+            Dispatchers.IO + SupervisorJob()
+        )
+
 
     companion object {
-        private const val TAG = "ResQNet_Repository"
-        const val MAX_RETRIES = 10
-        const val BASE_RETRY_DELAY_MS = 2000L // 2 seconds
-        const val MAX_RETRY_DELAY_MS = 60000L // 60 seconds
+
+        private const val TAG =
+            "ResQNet_Repository"
+
+        private const val MAX_RETRIES =
+            10
+
+        private const val BASE_RETRY_DELAY_MS =
+            2_000L
+
+        private const val MAX_RETRY_DELAY_MS =
+            60_000L
     }
 
-    init {
-        // Automatically flush pending retries when network connectivity is restored
-        networkMonitor.setOnNetworkRestoredListener {
-            Log.d(TAG, "[ResQNet] Network restored listener fired. Resuming pending emergency submissions...")
-            scope.launch {
-                flushPendingRetries()
-            }
-        }
-    }
+
+    // =========================================================
+    // DEVICE ID
+    // =========================================================
 
     val deviceId: String by lazy {
+
         try {
-            Settings.Secure.getString(context.contentResolver, Settings.Secure.ANDROID_ID) ?: Build.MODEL
-        } catch (e: Exception) {
+
+            Settings.Secure.getString(
+                context.contentResolver,
+                Settings.Secure.ANDROID_ID
+            ) ?: Build.MODEL
+
+        } catch (
+            e: Exception
+        ) {
+
             "DEVICE_${Build.MANUFACTURER}_${Build.MODEL}"
         }
     }
 
-    /**
-     * MODULE B: LOCAL PERSISTENCE FIRST.
-     * Safely saves the emergency incident to disk before any network transmission starts.
-     */
+
+    // =========================================================
+    // INITIALIZATION
+    // =========================================================
+
+    init {
+
+        networkMonitor
+            .setOnNetworkRestoredListener {
+
+                Log.d(
+                    TAG,
+                    "[NETWORK] Connectivity restored"
+                )
+
+                scope.launch {
+
+                    flushPendingRetries()
+                }
+            }
+    }
+
+
+    // =========================================================
+    // CREATE LOCAL INCIDENT
+    // =========================================================
+
     fun createAndSaveLocalIncident(
         crashResult: CrashDetectionResult,
         location: LocationData,
         userMedicalInfo: String? = null
     ): LocalIncidentRecord {
-        val uniqueIncidentId = "RNQ-${UUID.randomUUID().toString().take(8).uppercase()}"
+        val resolvedMedical = userMedicalInfo ?: UserSessionManager.getMedicalSummary(context)
 
-        val title = if (crashResult.isRollover) {
-            "Severe Vehicle Rollover Collision (Android Sensor Alert)"
-        } else {
-            "High-Impact Collision Detected (${crashResult.peakGForce.toInt()}G Shock)"
-        }
 
-        val record = LocalIncidentRecord(
-            incidentId = uniqueIncidentId,
-            deviceId = deviceId,
-            userId = "USER_${deviceId.takeLast(6)}",
-            eventType = "ACCIDENT",
-            source = "SMARTPHONE",
-            title = title,
-            timestamp = crashResult.timestamp,
-            latitude = if (location.quality != LocationQuality.UNAVAILABLE) location.latitude else null,
-            longitude = if (location.quality != LocationQuality.UNAVAILABLE) location.longitude else null,
-            locationAccuracy = location.accuracy,
-            locationQuality = location.quality,
-            speedKmh = location.speedKmh,
-            speedAvailable = location.isSpeedAvailable,
-            speedDeltaKmh = crashResult.speedDeltaKmh,
-            gForce = crashResult.peakGForce,
-            rollover = crashResult.isRollover,
-            confidence = crashResult.confidence,
-            severity = crashResult.severityScore,
-            userMedicalInfo = userMedicalInfo,
-            submissionStatus = SubmissionStatus.CREATED,
-            retryCount = 0,
-            createdAt = System.currentTimeMillis()
+        val incidentId =
+            "RNQ-${
+                UUID.randomUUID()
+                    .toString()
+                    .replace("-", "")
+                    .take(8)
+                    .uppercase()
+            }"
+
+
+        val title =
+            if (
+                crashResult.isRollover
+            ) {
+
+                "Severe Vehicle Rollover Collision"
+
+            } else {
+
+                "High-Impact Collision Detected"
+            }
+
+
+        val record =
+            LocalIncidentRecord(
+
+                incidentId =
+                    incidentId,
+
+                deviceId =
+                    deviceId,
+
+                userId =
+                    "USER_${deviceId.takeLast(6)}",
+
+                eventType =
+                    "ACCIDENT",
+
+                source =
+                    "SMARTPHONE",
+
+                title =
+                    title,
+
+                timestamp =
+                    crashResult.timestamp,
+
+                latitude =
+                    if (
+                        location.quality !=
+                        LocationQuality.UNAVAILABLE
+                    ) {
+
+                        location.latitude
+
+                    } else {
+
+                        null
+                    },
+
+                longitude =
+                    if (
+                        location.quality !=
+                        LocationQuality.UNAVAILABLE
+                    ) {
+
+                        location.longitude
+
+                    } else {
+
+                        null
+                    },
+
+                locationAccuracy =
+                    location.accuracy,
+
+                locationQuality =
+                    location.quality,
+
+                speedKmh =
+                    location.speedKmh,
+
+                speedAvailable =
+                    location.isSpeedAvailable,
+
+                speedDeltaKmh =
+                    crashResult.speedDeltaKmh,
+
+                gForce =
+                    crashResult.peakGForce,
+
+                rollover =
+                    crashResult.isRollover,
+
+                confidence =
+                    crashResult.confidence,
+
+                severity =
+                    crashResult.severityScore,
+
+                userMedicalInfo =
+                    resolvedMedical,
+
+                submissionStatus =
+                    SubmissionStatus.CREATED,
+
+                retryCount =
+                    0
+            )
+
+
+        // =====================================================
+        // CRITICAL:
+        // SAVE BEFORE NETWORK
+        // =====================================================
+
+        localStore.saveIncident(
+            record
         )
 
-        localStore.saveIncident(record)
-        Log.d(TAG, "[LOCAL_STORE] Emergency incident ${record.incidentId} safely recorded locally FIRST.")
+
+        Log.d(
+            TAG,
+            "[LOCAL] Incident saved BEFORE API call: " +
+                    incidentId
+        )
+
+
         return record
     }
 
-    /**
-     * MODULE D & E: RELIABLE SUBMISSION & CONTROLLED EXPONENTIAL RETRY.
-     */
+
+    // =========================================================
+    // SUBMIT INCIDENT
+    // =========================================================
+
     suspend fun submitIncidentReliably(
         record: LocalIncidentRecord,
-        onStatusUpdate: ((SubmissionStatus, LocalIncidentRecord) -> Unit)? = null
-    ): Result<LocalIncidentRecord> = withContext(Dispatchers.IO) {
-        localStore.updateStatus(record.incidentId, SubmissionStatus.SUBMITTING)
-        record.submissionStatus = SubmissionStatus.SUBMITTING
-        onStatusUpdate?.invoke(SubmissionStatus.SUBMITTING, record)
+        onStatusUpdate:
+        ((SubmissionStatus, LocalIncidentRecord) -> Unit)? =
+            null
+    ): Result<LocalIncidentRecord> =
+        withContext(Dispatchers.IO) {
 
-        val payload = buildPayloadFromRecord(record)
 
-        try {
-            Log.d(TAG, "[ResQNet] Submitting incident ${record.incidentId} to backend (Attempt ${record.retryCount + 1})...")
-            val response = ApiClient.api.reportCrash(payload, ApiClient.crashUploadAuthorization())
+            try {
 
-            if (response.isSuccessful && response.body()?.success == true) {
-                val body = response.body()!!
-                val amb = body.incident?.ambulanceCode ?: body.incident?.ambulanceId
-                val hosp = body.incident?.assignedHospital ?: body.incident?.hospitalId
-                localStore.updateStatus(
-                    incidentId = record.incidentId,
-                    status = SubmissionStatus.CONFIRMED,
-                    backendId = body.incidentId ?: record.incidentId,
-                    ambulance = amb,
-                    hospital = hosp
+                // =================================================
+                // STEP 1 — SAVE SUBMITTING
+                // =================================================
+
+                record.submissionStatus =
+                    SubmissionStatus.SUBMITTING
+
+                record.lastAttemptAt =
+                    System.currentTimeMillis()
+
+                localStore.saveIncident(
+                    record
                 )
-                record.submissionStatus = SubmissionStatus.CONFIRMED
-                record.backendIncidentId = body.incidentId ?: record.incidentId
-                record.assignedAmbulance = amb
-                record.assignedHospital = hosp
 
-                Log.d(TAG, "[ResQNet] ✓ Backend confirmed incident ${record.incidentId}. Assigned: ${record.assignedAmbulance}")
-                onStatusUpdate?.invoke(SubmissionStatus.CONFIRMED, record)
-                return@withContext Result.success(record)
-            } else {
-                val err = response.errorBody()?.string() ?: "HTTP ${response.code()}"
-                return@withContext handleSubmissionFailure(record, "Backend HTTP Error: $err", onStatusUpdate)
+                onStatusUpdate?.invoke(
+                    SubmissionStatus.SUBMITTING,
+                    record
+                )
+
+
+                // =================================================
+                // STEP 2 — CREATE PAYLOAD
+                // =================================================
+
+                val payload =
+                    buildPayloadFromRecord(
+                        record
+                    )
+
+
+                Log.d(
+                    TAG,
+                    "========================================"
+                )
+
+                Log.d(
+                    TAG,
+                    "[API] SUBMITTING INCIDENT"
+                )
+
+                Log.d(
+                    TAG,
+                    "[API] Incident ID = ${record.incidentId}"
+                )
+
+                Log.d(
+                    TAG,
+                    "[API] Base URL = ${ApiClient.getBaseUrl()}"
+                )
+
+                Log.d(
+                    TAG,
+                    "[API] Endpoint = api/incidents/detect"
+                )
+
+                Log.d(
+                    TAG,
+                    "[API] Attempt = ${record.retryCount + 1}"
+                )
+
+                Log.d(
+                    TAG,
+                    "[API] Lat = ${payload.latitude}"
+                )
+
+                Log.d(
+                    TAG,
+                    "[API] Lng = ${payload.longitude}"
+                )
+
+                Log.d(
+                    TAG,
+                    "[API] GForce = ${payload.gForce}"
+                )
+
+                Log.d(
+                    TAG,
+                    "[API] Severity = ${payload.severity}"
+                )
+
+                Log.d(
+                    TAG,
+                    "[API] Confidence = ${payload.confidence}"
+                )
+
+                Log.d(
+                    TAG,
+                    "========================================"
+                )
+
+
+                // =================================================
+                // STEP 3 — API REQUEST
+                // =================================================
+
+                val response =
+                    ApiClient.api.reportCrash(
+                        payload
+                    )
+
+
+                Log.d(
+                    TAG,
+                    "========================================"
+                )
+
+                Log.d(
+                    TAG,
+                    "[API] RESPONSE"
+                )
+
+                Log.d(
+                    TAG,
+                    "[API] HTTP = ${response.code()}"
+                )
+
+                Log.d(
+                    TAG,
+                    "[API] Successful = ${response.isSuccessful}"
+                )
+
+                Log.d(
+                    TAG,
+                    "[API] Message = ${response.message()}"
+                )
+
+                Log.d(
+                    TAG,
+                    "========================================"
+                )
+
+
+                // =================================================
+                // SUCCESS
+                // =================================================
+
+                if (
+                    response.isSuccessful
+                ) {
+
+                    val body =
+                        response.body()
+
+
+                    if (
+                        body != null &&
+                        body.success
+                    ) {
+
+
+                        record.submissionStatus =
+                            SubmissionStatus.CONFIRMED
+
+
+                        record.backendIncidentId =
+                            body.incidentId
+                                ?: body.incident?.incidentId
+                                        ?: record.incidentId
+
+
+                        record.assignedAmbulance =
+                            body.assignedAmbulance
+                                ?: body.incident?.assignedAmbulance
+
+
+                        record.assignedHospital =
+                            body.assignedHospital
+                                ?: body.incident?.assignedHospital
+
+
+                        record.lastErrorMessage =
+                            null
+
+
+                        record.nextRetryAt =
+                            0L
+
+
+                        localStore.saveIncident(
+                            record
+                        )
+
+
+                        Log.d(
+                            TAG,
+                            "[API] ✓ INCIDENT CONFIRMED"
+                        )
+
+                        Log.d(
+                            TAG,
+                            "[API] Backend ID = " +
+                                    record.backendIncidentId
+                        )
+
+                        Log.d(
+                            TAG,
+                            "[API] Ambulance = " +
+                                    record.assignedAmbulance
+                        )
+
+                        Log.d(
+                            TAG,
+                            "[API] Hospital = " +
+                                    record.assignedHospital
+                        )
+
+
+                        onStatusUpdate?.invoke(
+                            SubmissionStatus.CONFIRMED,
+                            record
+                        )
+
+
+                        return@withContext Result.success(
+                            record
+                        )
+                    }
+                }
+
+
+                // =================================================
+                // HTTP FAILURE
+                // =================================================
+
+                val errorBody =
+                    try {
+
+                        response
+                            .errorBody()
+                            ?.string()
+
+                    } catch (
+                        _: Exception
+                    ) {
+
+                        null
+                    }
+
+
+                val errorMessage =
+                    buildString {
+
+                        append(
+                            "HTTP ${response.code()}"
+                        )
+
+                        if (
+                            response.message()
+                                .isNotBlank()
+                        ) {
+
+                            append(
+                                " ${response.message()}"
+                            )
+                        }
+
+                        if (
+                            !errorBody.isNullOrBlank()
+                        ) {
+
+                            append(
+                                " | $errorBody"
+                            )
+                        }
+                    }
+
+
+                Log.e(
+                    TAG,
+                    "[API] ✗ SERVER ERROR: $errorMessage"
+                )
+
+
+                handleFailure(
+                    record =
+                        record,
+
+                    errorMessage =
+                        errorMessage,
+
+                    httpCode =
+                        response.code(),
+
+                    onStatusUpdate =
+                        onStatusUpdate
+                )
+
+            } catch (
+                e: Exception
+            ) {
+
+
+                // =================================================
+                // NETWORK FAILURE
+                // =================================================
+
+                val errorMessage =
+                    "${e.javaClass.simpleName}: " +
+                            "${e.message ?: "Unknown network error"}"
+
+
+                Log.e(
+                    TAG,
+                    "[API] ✗ NETWORK ERROR"
+                )
+
+                Log.e(
+                    TAG,
+                    "[API] $errorMessage",
+                    e
+                )
+
+
+                handleFailure(
+                    record =
+                        record,
+
+                    errorMessage =
+                        errorMessage,
+
+                    httpCode =
+                        null,
+
+                    onStatusUpdate =
+                        onStatusUpdate
+                )
             }
-        } catch (e: Exception) {
-            return@withContext handleSubmissionFailure(record, "Network Connectivity Failure: ${e.message}", onStatusUpdate)
         }
-    }
 
-    private fun handleSubmissionFailure(
+
+    // =========================================================
+    // HANDLE FAILURE
+    // =========================================================
+
+    private fun handleFailure(
         record: LocalIncidentRecord,
         errorMessage: String,
-        onStatusUpdate: ((SubmissionStatus, LocalIncidentRecord) -> Unit)?
+        httpCode: Int?,
+        onStatusUpdate:
+        ((SubmissionStatus, LocalIncidentRecord) -> Unit)?
     ): Result<LocalIncidentRecord> {
-        val newRetryCount = record.retryCount + 1
-        val isTerminal = newRetryCount >= MAX_RETRIES
 
-        val nextStatus = if (isTerminal) SubmissionStatus.FAILED else SubmissionStatus.RETRY_REQUIRED
-        val delayMs = calculateExponentialBackoff(newRetryCount)
-        record.nextRetryAt = System.currentTimeMillis() + delayMs
-        record.retryCount = newRetryCount
-        record.submissionStatus = nextStatus
 
-        localStore.updateStatus(
-            incidentId = record.incidentId,
-            status = nextStatus,
-            retryCount = newRetryCount,
-            errorMessage = errorMessage
-        )
+        // =======================================================
+        // DETERMINE RETRY
+        // =======================================================
 
-        Log.w(TAG, "[ResQNet] Incident ${record.incidentId} submission failed: $errorMessage. Status -> $nextStatus (Next retry in ${delayMs / 1000}s)")
-        onStatusUpdate?.invoke(nextStatus, record)
+        val retryable =
+            when (httpCode) {
 
-        if (!isTerminal) {
-            scheduleDelayedRetry(record, delayMs)
+                400,
+                401,
+                403,
+                404,
+                422 -> false
+
+                408,
+                409,
+                425,
+                429,
+                500,
+                502,
+                503,
+                504 -> true
+
+                null -> true
+
+                else -> true
+            }
+
+
+        // =======================================================
+        // NON-RETRYABLE ERROR
+        // =======================================================
+
+        if (!retryable) {
+
+            record.submissionStatus =
+                SubmissionStatus.FAILED
+
+            record.lastAttemptAt =
+                System.currentTimeMillis()
+
+            record.lastErrorMessage =
+                errorMessage
+
+            record.nextRetryAt =
+                0L
+
+            localStore.saveIncident(
+                record
+            )
+
+
+            onStatusUpdate?.invoke(
+                SubmissionStatus.FAILED,
+                record
+            )
+
+
+            return Result.failure(
+                Exception(
+                    errorMessage
+                )
+            )
         }
 
-        return Result.failure(Exception(errorMessage))
+
+        // =======================================================
+        // RETRY COUNT
+        // =======================================================
+
+        val nextRetryCount =
+            record.retryCount + 1
+
+
+        if (
+            nextRetryCount >=
+            MAX_RETRIES
+        ) {
+
+            record.retryCount =
+                nextRetryCount
+
+            record.submissionStatus =
+                SubmissionStatus.FAILED
+
+            record.lastAttemptAt =
+                System.currentTimeMillis()
+
+            record.lastErrorMessage =
+                "Maximum retries reached. $errorMessage"
+
+            record.nextRetryAt =
+                0L
+
+            localStore.saveIncident(
+                record
+            )
+
+
+            onStatusUpdate?.invoke(
+                SubmissionStatus.FAILED,
+                record
+            )
+
+
+            return Result.failure(
+                Exception(
+                    record.lastErrorMessage
+                )
+            )
+        }
+
+
+        // =======================================================
+        // EXPONENTIAL BACKOFF
+        // =======================================================
+
+        val delayMs =
+            calculateExponentialBackoff(
+                nextRetryCount
+            )
+
+
+        record.retryCount =
+            nextRetryCount
+
+        record.submissionStatus =
+            SubmissionStatus.RETRY_REQUIRED
+
+        record.lastAttemptAt =
+            System.currentTimeMillis()
+
+        record.lastErrorMessage =
+            errorMessage
+
+        record.nextRetryAt =
+            System.currentTimeMillis() +
+                    delayMs
+
+
+        // =======================================================
+        // CRITICAL:
+        // SAVE RETRY STATE
+        // =======================================================
+
+        localStore.saveIncident(
+            record
+        )
+
+
+        Log.w(
+            TAG,
+            "[RETRY] Incident=${record.incidentId}"
+        )
+
+        Log.w(
+            TAG,
+            "[RETRY] Count=${record.retryCount}"
+        )
+
+        Log.w(
+            TAG,
+            "[RETRY] Next retry=${delayMs / 1000}s"
+        )
+
+
+        onStatusUpdate?.invoke(
+            SubmissionStatus.RETRY_REQUIRED,
+            record
+        )
+
+
+        scheduleRetry(
+            record,
+            delayMs
+        )
+
+
+        return Result.failure(
+            Exception(
+                errorMessage
+            )
+        )
     }
 
-    /**
-     * Calculates exponential backoff delay: 2^n * 2 seconds capped at 60s.
-     */
-    fun calculateExponentialBackoff(attempt: Int): Long {
-        val multiplier = 2.0.pow(min(attempt.toDouble(), 5.0)).toLong()
-        val delay = BASE_RETRY_DELAY_MS * multiplier
-        return min(delay, MAX_RETRY_DELAY_MS)
+
+    // =========================================================
+    // BACKOFF
+    // =========================================================
+
+    private fun calculateExponentialBackoff(
+        attempt: Int
+    ): Long {
+
+        val multiplier =
+            2.0.pow(
+                min(
+                    attempt,
+                    5
+                ).toDouble()
+            )
+
+
+        return min(
+            BASE_RETRY_DELAY_MS *
+                    multiplier.toLong(),
+
+            MAX_RETRY_DELAY_MS
+        )
     }
 
-    private fun scheduleDelayedRetry(record: LocalIncidentRecord, delayMs: Long) {
+
+    // =========================================================
+    // SCHEDULE RETRY
+    // =========================================================
+
+    private fun scheduleRetry(
+        record: LocalIncidentRecord,
+        delayMs: Long
+    ) {
+
         scope.launch {
-            delay(delayMs)
-            val current = localStore.getIncident(record.incidentId)
-            if (current != null && current.submissionStatus == SubmissionStatus.RETRY_REQUIRED) {
-                if (networkMonitor.isOnline.value) {
-                    Log.d(TAG, "[ResQNet] Executing scheduled retry for ${record.incidentId}...")
-                    submitIncidentReliably(current)
-                } else {
-                    Log.d(TAG, "[ResQNet] Scheduled retry deferred: Device is currently offline.")
+
+            delay(
+                delayMs
+            )
+
+
+            val current =
+                localStore.getIncident(
+                    record.incidentId
+                )
+
+
+            if (
+                current == null
+            ) {
+
+                return@launch
+            }
+
+
+            if (
+                current.submissionStatus !=
+                SubmissionStatus.RETRY_REQUIRED
+            ) {
+
+                return@launch
+            }
+
+
+            if (
+                networkMonitor.isOnline.value
+            ) {
+
+                Log.d(
+                    TAG,
+                    "[RETRY] Retrying " +
+                            current.incidentId
+                )
+
+
+                submitIncidentReliably(
+                    current
+                )
+
+            } else {
+
+                Log.d(
+                    TAG,
+                    "[RETRY] Still offline. " +
+                            "Incident remains locally stored."
+                )
+            }
+        }
+    }
+
+
+    // =========================================================
+    // RECOVER PENDING INCIDENTS
+    // =========================================================
+
+    suspend fun flushPendingRetries():
+            Int =
+        withContext(Dispatchers.IO) {
+
+
+            val pending =
+                localStore
+                    .getPendingOrRetryRequired()
+
+
+            if (
+                pending.isEmpty()
+            ) {
+
+                Log.d(
+                    TAG,
+                    "[RECOVERY] No pending incidents"
+                )
+
+                return@withContext 0
+            }
+
+
+            Log.d(
+                TAG,
+                "[RECOVERY] Found ${pending.size} pending incidents"
+            )
+
+
+            var confirmed =
+                0
+
+
+            for (
+            incident in pending
+            ) {
+
+
+                // Don't retry a future scheduled retry immediately.
+                if (
+                    incident.submissionStatus ==
+                    SubmissionStatus.RETRY_REQUIRED &&
+
+                    incident.nextRetryAt > 0L &&
+
+                    System.currentTimeMillis() <
+                    incident.nextRetryAt
+                ) {
+
+                    continue
+                }
+
+
+                val result =
+                    submitIncidentReliably(
+                        incident
+                    )
+
+
+                if (
+                    result.isSuccess
+                ) {
+
+                    confirmed++
                 }
             }
-        }
-    }
 
-    /**
-     * MODULE K: PROCESS RESTART RECOVERY.
-     * Scans local disk store and resumes any unconfirmed emergency submissions.
-     */
-    suspend fun flushPendingRetries(): Int = withContext(Dispatchers.IO) {
-        val pendingList = localStore.getPendingOrRetryRequired()
-        if (pendingList.isEmpty()) return@withContext 0
 
-        Log.d(TAG, "[ResQNet] Found ${pendingList.size} unconfirmed incidents. Resuming submissions...")
-        var confirmedCount = 0
-
-        for (record in pendingList) {
-            val result = submitIncidentReliably(record)
-            if (result.isSuccess) {
-                confirmedCount++
-            }
+            confirmed
         }
 
-        return@withContext confirmedCount
+
+    // =========================================================
+    // GET INCIDENTS
+    // =========================================================
+
+    fun getAllLocalIncidents():
+            List<LocalIncidentRecord> {
+
+        return localStore
+            .getAllIncidents()
     }
 
-    fun getAllLocalIncidents(): List<LocalIncidentRecord> = localStore.getAllIncidents()
 
-    fun getLocalIncident(id: String): LocalIncidentRecord? = localStore.getIncident(id)
+    fun getLocalIncident(
+        id: String
+    ): LocalIncidentRecord? {
 
-    private fun buildPayloadFromRecord(record: LocalIncidentRecord): EmergencyPayload {
-        val isoTimestamp = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", Locale.US).apply {
-            timeZone = TimeZone.getTimeZone("UTC")
-        }.format(Date(record.timestamp))
+        return localStore
+            .getIncident(id)
+    }
+
+
+    // =========================================================
+    // PAYLOAD
+    // =========================================================
+
+    private fun buildPayloadFromRecord(
+        record: LocalIncidentRecord
+    ): EmergencyPayload {
+
+
+        val timestamp =
+            SimpleDateFormat(
+                "yyyy-MM-dd'T'HH:mm:ss.SSS'Z'",
+                Locale.US
+            ).apply {
+
+                timeZone =
+                    TimeZone.getTimeZone("UTC")
+
+            }.format(
+                Date(
+                    record.timestamp
+                )
+            )
+
 
         return EmergencyPayload(
-            id = record.incidentId,
-            incidentId = record.incidentId,
-            deviceId = record.deviceId,
-            userId = record.userId,
-            eventType = record.eventType,
-            source = "smartphone",
-            sourceType = "smartphone",
-            title = record.title,
-            latitude = record.latitude,
-            longitude = record.longitude,
-            gpsAccuracy = record.locationAccuracy,
-            locationQuality = record.locationQuality.name,
-            gForce = record.gForce,
-            speedKmh = record.speedKmh,
-            speedDeltaKmh = record.speedDeltaKmh,
-            speedAvailable = record.speedAvailable,
-            rollover = record.rollover,
-            confidence = record.confidence,
-            severity = record.severity,
-            status = "DETECTED",
-            userMedicalInfo = record.userMedicalInfo ?: UserSessionManager.getMedicalSummary(context),
-            timestamp = isoTimestamp,
-            isDemo = false
+
+            id =
+                record.incidentId,
+
+            incidentId =
+                record.incidentId,
+
+            deviceId =
+                record.deviceId,
+
+            userId =
+                record.userId,
+
+            eventType =
+                record.eventType,
+
+            source =
+                "smartphone",
+
+            sourceType =
+                "smartphone",
+
+            title =
+                record.title,
+
+            latitude =
+                record.latitude,
+
+            longitude =
+                record.longitude,
+
+            gpsAccuracy =
+                record.locationAccuracy,
+
+            locationQuality =
+                record.locationQuality.name,
+
+            gForce =
+                record.gForce,
+
+            speedKmh =
+                record.speedKmh,
+
+            speedDeltaKmh =
+                record.speedDeltaKmh,
+
+            speedAvailable =
+                record.speedAvailable,
+
+            rollover =
+                record.rollover,
+
+            confidence =
+                record.confidence,
+
+            severity =
+                record.severity,
+
+            status =
+                "DETECTED",
+
+            userMedicalInfo =
+                record.userMedicalInfo ?: UserSessionManager.getMedicalSummary(context),
+
+            patientProfile = run {
+                val s = UserSessionManager.getSessionData(context)
+                PatientProfileDto(
+                    fullName = s.fullName ?: s.username ?: "Registered Citizen",
+                    bloodGroup = s.bloodGroup ?: "O+ POSITIVE",
+                    allergies = s.allergies?.split(",")?.map { it.trim() }?.filter { it.isNotEmpty() } ?: listOf("None Reported"),
+                    chronicConditions = s.chronicConditions?.split(",")?.map { it.trim() }?.filter { it.isNotEmpty() } ?: listOf("None Reported"),
+                    currentMedications = s.medications ?: "None Reported",
+                    primaryContact = EmergencyContactDto(
+                        name = s.emergencyContact ?: "Emergency Next-of-Kin",
+                        phone = s.emergencyPhone ?: "+91 98220 12345",
+                        relation = "Next-of-Kin"
+                    ),
+                    specialNotes = s.specialNotes ?: "Emergency Profile Armed"
+                )
+            },
+
+            timestamp =
+                timestamp,
+
+            isDemo =
+                false
         )
     }
 
-    fun generateEmergencyMessage(record: LocalIncidentRecord): String {
-        val timeString = SimpleDateFormat("HH:mm:ss", Locale.getDefault()).format(Date(record.timestamp))
-        val locStr = when (record.locationQuality) {
-            LocationQuality.FRESH_GPS -> {
-                if (record.latitude != null && record.longitude != null) {
-                    "${"%.4f".format(record.latitude)}, ${"%.4f".format(record.longitude)} (±${record.locationAccuracy?.toInt() ?: 5}m Live GPS)"
-                } else "Location Unavailable"
-            }
-            LocationQuality.LAST_KNOWN -> {
-                if (record.latitude != null && record.longitude != null) {
-                    "${"%.4f".format(record.latitude)}, ${"%.4f".format(record.longitude)} (Last Known Location)"
-                } else "Location Unavailable"
-            }
-            LocationQuality.UNAVAILABLE -> "Location Temporarily Unavailable"
-        }
 
-        val gForceStr = if (record.gForce != null) "${"%.1f".format(record.gForce)}G" else "Unavailable"
-        val deltaVStr = if (record.speedDeltaKmh != null) "${"%.1f".format(record.speedDeltaKmh)} km/h" else "Unavailable"
-        val confStr = if (record.confidence != null) "${(record.confidence * 100).toInt()}%" else "Unavailable"
-        val sevStr = if (record.severity != null) "${record.severity}/100" else "Unavailable"
+    // =========================================================
+    // EMERGENCY MESSAGE
+    // =========================================================
+
+    fun generateEmergencyMessage(
+        record: LocalIncidentRecord
+    ): String {
+
+
+        val time =
+            SimpleDateFormat(
+                "HH:mm:ss",
+                Locale.getDefault()
+            ).format(
+                Date(
+                    record.timestamp
+                )
+            )
+
+
+        val location =
+            if (
+                record.latitude != null &&
+                record.longitude != null
+            ) {
+
+                "${"%.4f".format(record.latitude)}, " +
+                        "${"%.4f".format(record.longitude)}"
+
+            } else {
+
+                "Unavailable"
+            }
+
+
+        val gForce =
+            record.gForce?.let {
+
+                "${"%.1f".format(it)}G"
+
+            } ?: "Unavailable"
+
+
+        val deltaV =
+            record.speedDeltaKmh?.let {
+
+                "${"%.1f".format(it)} km/h"
+
+            } ?: "Unavailable"
+
+
+        val confidence =
+            record.confidence?.let {
+
+                "${(it * 100).toInt()}%"
+
+            } ?: "Unavailable"
+
+
+        val severity =
+            record.severity?.let {
+
+                "$it/100"
+
+            } ?: "Unavailable"
+
 
         return """
             🚨 RESQNET EMERGENCY ALERT 🚨
+
             Possible road collision autonomously detected.
 
-            📍 Location: $locStr
-            📊 Impact Force: $gForceStr
-            ⚡ Deceleration Δv: $deltaVStr
-            🎯 Confidence: $confStr
-            ⚠️ Severity: $sevStr
-            🕒 Time: $timeString
+            📍 Location: $location
+            📊 Impact Force: $gForce
+            ⚡ Deceleration Δv: $deltaV
+            🎯 Confidence: $confidence
+            ⚠️ Severity: $severity
+            🕒 Time: $time
             📱 Incident ID: ${record.incidentId}
             🩺 Medical: ${record.userMedicalInfo ?: "None reported"}
         """.trimIndent()

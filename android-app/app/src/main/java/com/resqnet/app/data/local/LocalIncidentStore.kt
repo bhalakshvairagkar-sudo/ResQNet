@@ -140,5 +140,6 @@ class LocalIncidentStore(private val context: Context) {
         } catch (e: Exception) {
             Log.e(TAG, "[ResQNet] Error writing incident records to disk", e)
         }
+
     }
 }

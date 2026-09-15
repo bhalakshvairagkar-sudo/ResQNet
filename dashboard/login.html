@@ -308,6 +308,20 @@
       localStorage.resqnetToken = data.token;
       localStorage.resqnetUser = JSON.stringify(data.user);
 
+      if (window.AndroidBridge && typeof window.AndroidBridge.onAccountRegistered === 'function') {
+        try {
+          window.AndroidBridge.onAccountRegistered(
+            data.token,
+            data.user.username,
+            data.user.role,
+            data.user.fullName || data.user.name,
+            data.user.phone,
+            data.user.medicalProfile?.bloodGroup || '',
+            data.user.medicalProfile?.primaryContact?.name || ''
+          );
+        } catch (e) {}
+      }
+
       // Check if citizen hasn't completed medical profile
       if (data.user.role === 'USER' && !data.user.hasCompletedMedicalProfile) {
         location.href = '/medical-profile.html';
@@ -354,6 +368,20 @@
 
       localStorage.resqnetToken = data.token;
       localStorage.resqnetUser = JSON.stringify(data.user);
+
+      if (window.AndroidBridge && typeof window.AndroidBridge.onAccountRegistered === 'function') {
+        try {
+          window.AndroidBridge.onAccountRegistered(
+            data.token,
+            data.user.username,
+            data.user.role,
+            data.user.fullName || data.user.name,
+            data.user.phone,
+            data.user.medicalProfile?.bloodGroup || '',
+            data.user.medicalProfile?.primaryContact?.name || ''
+          );
+        } catch (e) {}
+      }
 
       // Directly prompt new user with Google Form Medical Intake!
       location.href = '/medical-profile.html';

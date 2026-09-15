@@ -4,46 +4,14 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>ResQNet — Emergency Command Center</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 <link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
 <link rel="stylesheet" href="/css/resqnet.css" />
-<script src="/js/config.js"></script>
-<script>
-  /* Real-Time Google Maps JavaScript API Dynamic Loader & Dialog Suppressor */
-  window.gm_authFailure = function() {
-    console.info("[Google Maps] Operating in ResQNet Tactical Telemetry Mode.");
-  };
-
-  (function() {
-    // Check localStorage for user-provided Google Maps API Key or runtime config
-    const customKey = localStorage.getItem('resqnetGoogleMapsKey') || (window.RESQNET_CONFIG && window.RESQNET_CONFIG.GOOGLE_MAPS_API_KEY) || '';
-    const keyParam = customKey ? `&key=${customKey}` : '';
-    const script = document.createElement('script');
-    script.src = `https://maps.googleapis.com/maps/api/js?v=weekly${keyParam}&libraries=geometry`;
-    script.async = true;
-    script.defer = true;
-    script.onerror = function() {
-      console.warn("[Google Maps] Operating in local telemetry fallback mode.");
-    };
-    document.head.appendChild(script);
-
-    // Continuous dialog & watermark modal dismissal observer
-    const observer = new MutationObserver(function(mutations) {
-      const dismissBtns = document.querySelectorAll('.dismissButton, button[aria-label="Close"], .gm-style div[role="dialog"] button');
-      dismissBtns.forEach(btn => {
-        try { btn.click(); } catch(e){}
-      });
-      const errorContainers = document.querySelectorAll('.gm-err-container, .gm-err-content');
-      errorContainers.forEach(el => {
-        el.style.display = 'none';
-        el.remove();
-      });
-    });
-    observer.observe(document.documentElement, { childList: true, subtree: true });
-  })();
-</script>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+<script src="/js/config.js"></script>
 </head>
 <body>
 
@@ -63,9 +31,6 @@
   </div>
 
   <div class="header-right">
-    <button class="pill" id="mapKeyBtn" onclick="openKeyModal()" style="border-color:#38BDF8;color:#38BDF8;">
-      <i class="fa-solid fa-key"></i> <span>MAP KEY</span>
-    </button>
     <button class="pill" id="healthBtn" data-testid="system-health-button" aria-haspopup="true" aria-expanded="false">
       <span class="dot live online" id="dotSystem"></span><span id="systemLabel">SYSTEM OPERATIONAL</span>
     </button>
@@ -81,7 +46,6 @@
     <div class="health-row"><span>Socket.IO</span><span class="val"><span class="dot online" id="hSocket"></span><i id="tSocket">ONLINE</i></span></div>
     <div class="health-row"><span>Database</span><span class="val"><span class="dot online" id="hDb"></span><i id="tDb">ONLINE</i></span></div>
     <div class="health-row"><span>AI Engine</span><span class="val"><span class="dot online" id="hAi"></span><i id="tAi">ONLINE</i></span></div>
-    <div class="health-row"><span>YOLO CCTV AI</span><span class="val"><span class="dot online" id="hCctv"></span><i id="tCctv">ONLINE</i></span></div>
     <div class="health-row"><span>Routing (OSRM)</span><span class="val"><span class="dot online" id="hRouting"></span><i id="tRouting">ONLINE</i></span></div>
     <p class="note" id="healthNote">Statuses are reported by <span class="mono">GET /api/health</span> and live probes. Components that do not report are shown as UNKNOWN — never assumed online.</p>
   </div>
@@ -107,11 +71,12 @@
       <!-- CLUSTER 1: MAP PROVIDER SELECTOR -->
       <div class="ctrl-group">
         <label for="mapStyleSelect" class="sr-only">Map View Style</label>
-        <select id="mapStyleSelect" class="mselect" data-testid="map-style-select" title="Change Google Map Style">
-          <option value="dark">🗺️ Tactical Dark Mode</option>
-          <option value="roadmap">🛣️ Standard Roadmap</option>
+        <select id="mapStyleSelect" class="mselect" data-testid="map-style-select" title="Change Map Provider / Style">
+          <option value="dark">🗺️ Dark Matter</option>
+          <option value="standard">🛣️ Standard Roads</option>
+          <option value="light">🏙️ Light Positron</option>
           <option value="satellite">🛰️ Satellite Imagery</option>
-          <option value="hybrid">🛰️ Hybrid (Sat + Roads)</option>
+          <option value="hybrid">🛰️ Hybrid (Sat+Roads)</option>
           <option value="terrain">⛰️ Topo Terrain</option>
         </select>
       </div>
@@ -313,10 +278,6 @@
       <div><div class="t"><i class="fa-solid fa-user-shield" style="color:var(--orange)"></i> CITIZEN REPORT</div><div class="s">Human SOS with location and patient count</div></div>
       <i class="fa-solid fa-arrow-right" style="color:var(--text-3)"></i>
     </button>
-    <button class="dbtn" id="demoFusion" data-testid="demo-fusion">
-      <div><div class="t"><i class="fa-solid fa-code-merge" style="color:var(--green)"></i> CCTV + SMARTPHONE FUSION</div><div class="s">Simultaneous optical AI + IMU crash merging into 1 incident</div></div>
-      <i class="fa-solid fa-arrow-right" style="color:var(--text-3)"></i>
-    </button>
     <div class="flowline"><span class="f"></span> SAME DOWNSTREAM PIPELINE <span class="f"></span></div>
     <button class="dbtn" id="demoReset" data-testid="demo-reset" style="margin-top:10px">
       <div><div class="t"><i class="fa-solid fa-rotate-left" style="color:var(--red)"></i> RESET DEMO</div><div class="s">Clears demo incidents, routes, markers, feed and fleet</div></div>
@@ -325,73 +286,9 @@
   </div>
 </div>
 
-<!-- CCTV LIVE STREAM / OPTICAL PREVIEW MODAL -->
-<div id="cctvModal" class="popover" style="display:none;position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);width:min(640px,94vw);background:#0f172a;border:1px solid #334155;border-radius:12px;box-shadow:0 25px 50px -12px rgba(0,0,0,0.7);z-index:9999;padding:16px;">
-  <div style="display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid #1e293b;padding-bottom:10px;margin-bottom:12px;">
-    <div>
-      <h3 style="margin:0;font-size:15px;color:#fff;font-weight:700;display:flex;align-items:center;gap:8px;">
-        <i class="fa-solid fa-video" style="color:#38bdf8;"></i> <span id="cctvModalTitle">CCTV OPTICAL STREAM</span>
-      </h3>
-      <small id="cctvModalSub" style="color:#94a3b8;font-size:11px;font-family:monospace;">CAM-01 • 18.5308, 73.8290</small>
-    </div>
-    <button id="closeCctvModal" style="background:none;border:none;color:#94a3b8;font-size:18px;cursor:pointer;">✕</button>
-  </div>
-  
-  <div style="position:relative;background:#020617;border-radius:8px;overflow:hidden;min-height:260px;display:flex;align-items:center;justify-content:center;border:1px solid #1e293b;">
-    <div id="cctvStreamCanvas" style="width:100%;height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:20px;text-align:center;">
-      <i class="fa-solid fa-satellite-dish" style="font-size:36px;color:#38bdf8;margin-bottom:10px;"></i>
-      <div style="font-family:monospace;font-size:13px;color:#f8fafc;font-weight:600;" id="cctvStreamStatus">REAL-TIME OPTICAL FEED ACTIVE</div>
-      <div style="font-family:monospace;font-size:11px;color:#94a3b8;margin-top:6px;" id="cctvStreamMetrics">FPS: 24.0 | YOLO Latency: 38ms | Model: YOLOv8n</div>
-      <div style="margin-top:14px;padding:6px 12px;background:rgba(56,189,248,0.1);border:1px solid rgba(56,189,248,0.3);border-radius:6px;font-size:11px;color:#38bdf8;">
-        <i class="fa-solid fa-shield-halved"></i> Optical Collision Telemetry Live
-      </div>
-    </div>
-  </div>
-
-  <div style="display:flex;justify-content:space-between;align-items:center;margin-top:12px;font-size:11px;color:#64748b;">
-    <span>Target Corridor: <b id="cctvModalRoad" style="color:#cbd5e1;">Ganeshkhind Road</b></span>
-    <span id="cctvModalBadge" style="padding:2px 8px;border-radius:4px;background:#10b981;color:#fff;font-weight:700;">ONLINE</span>
-  </div>
-</div>
-
-<!-- GOOGLE MAPS API KEY CONFIGURATION MODAL -->
-<div id="keyConfigModal" class="popover" style="display:none;position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);width:min(480px,92vw);background:#0f172a;border:1px solid #334155;border-radius:12px;box-shadow:0 25px 50px -12px rgba(0,0,0,0.8);z-index:10000;padding:20px;">
-  <div style="display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid #1e293b;padding-bottom:10px;margin-bottom:14px;">
-    <h3 style="margin:0;font-size:15px;color:#fff;font-weight:700;display:flex;align-items:center;gap:8px;">
-      <i class="fa-solid fa-key" style="color:#38bdf8;"></i> Google Maps API Configuration
-    </h3>
-    <button onclick="closeKeyModal()" style="background:none;border:none;color:#94a3b8;font-size:18px;cursor:pointer;">✕</button>
-  </div>
-  <p style="font-size:12px;color:#94a3b8;line-height:1.5;margin-bottom:12px;">
-    Enter your Google Maps JavaScript API key below to unlock full high-resolution map tiles. (Your key is saved securely in local storage).
-  </p>
-  <input id="inputGoogleMapsKey" type="text" placeholder="AIzaSy..." style="width:100%;box-sizing:border-box;background:#030712;border:1px solid #334155;border-radius:6px;padding:10px;color:#fff;font-size:13px;outline:none;margin-bottom:14px;">
-  <div style="display:flex;gap:8px;justify-content:flex-end;">
-    <button onclick="clearKey()" style="background:#1e293b;border:1px solid #334155;color:#cbd5e1;padding:8px 14px;border-radius:6px;font-size:12px;cursor:pointer;">Reset Default</button>
-    <button onclick="saveKey()" style="background:#38bdf8;border:none;color:#040810;padding:8px 16px;border-radius:6px;font-size:12px;font-weight:700;cursor:pointer;">Save & Reload</button>
-  </div>
-</div>
-
-<script>
-  function openKeyModal() {
-    const k = localStorage.getItem('resqnetGoogleMapsKey') || '';
-    document.getElementById('inputGoogleMapsKey').value = k;
-    document.getElementById('keyConfigModal').style.display = 'block';
-  }
-  function closeKeyModal() {
-    document.getElementById('keyConfigModal').style.display = 'none';
-  }
-  function saveKey() {
-    const k = document.getElementById('inputGoogleMapsKey').value.trim();
-    if (k) localStorage.setItem('resqnetGoogleMapsKey', k);
-    else localStorage.removeItem('resqnetGoogleMapsKey');
-    location.reload();
-  }
-  function clearKey() {
-    localStorage.removeItem('resqnetGoogleMapsKey');
-    location.reload();
-  }
-</script>
+<style>
+.test-mode-panel{border-top:1px solid var(--border);margin-top:14px;padding-top:4px}.test-note{font-size:9.5px!important;margin:6px 0 10px!important;color:var(--orange)!important}.test-grid{display:grid;grid-template-columns:1fr 1fr;gap:9px}.test-form{display:flex;flex-wrap:wrap;gap:6px;padding:9px;background:var(--bg-inset);border:1px solid var(--border);border-radius:7px}.test-form h4{width:100%;font-size:9px;letter-spacing:.11em;color:var(--blue);margin:0 0 2px}.test-form input,.test-form select,.test-form textarea{min-width:0;flex:1 1 42%;box-sizing:border-box;background:var(--bg-card);border:1px solid var(--border-bright);border-radius:4px;color:var(--text);padding:6px;font:10px var(--font-mono)}.test-form textarea{flex-basis:100%;resize:vertical;min-height:38px}.test-form button{flex:1 1 42%;justify-content:center}.test-incident{grid-column:1/-1}.test-result{font:10px var(--font-mono);color:var(--green);margin:8px 0 2px;min-height:13px}@media(max-width:650px){.test-grid{grid-template-columns:1fr}}
+</style>
 
 <script src="/js/app.js"></script>
 </body>

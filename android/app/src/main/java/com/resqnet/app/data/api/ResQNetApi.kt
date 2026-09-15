@@ -83,6 +83,9 @@ data class EmergencyPayload(
     @SerializedName("userMedicalInfo")
     val userMedicalInfo: String? = null,
 
+    @SerializedName("patientProfile")
+    val patientProfile: PatientProfileDto? = null,
+
     @SerializedName("timestamp")
     val timestamp: String? = null,
 
