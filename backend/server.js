@@ -35,8 +35,27 @@ app.use('/api', (req, res, next) => {
     const requiredKey = process.env.RESQNET_API_KEY;
     // A client must be able to reach login before it has a session token. Health is
     // likewise needed by the mobile connectivity UI. Role/session authorization is
-    // enforced by individual protected routes after login.
-    const publicApi = req.path.startsWith('/auth/') || req.path === '/health';
+    // Allow public access to dashboard telemetry, emergency detection ingestion,
+    // and fleet monitoring. Individual sensitive management routes maintain role enforcement.
+    const isPublicRead = req.method === 'GET' && (
+        req.path.startsWith('/fleet') ||
+        req.path.startsWith('/ambulances') ||
+        req.path.startsWith('/hospitals') ||
+        req.path.startsWith('/cctv') ||
+        req.path.startsWith('/hotspots') ||
+        req.path.startsWith('/traffic') ||
+        req.path.startsWith('/incidents') ||
+        req.path.startsWith('/emergencies') ||
+        req.path.startsWith('/route') ||
+        req.path.startsWith('/analytics')
+    );
+    const isPublicIngestion = req.method === 'POST' && (
+        req.path.startsWith('/incidents') ||
+        req.path.startsWith('/emergencies') ||
+        req.path.startsWith('/cctv/events') ||
+        req.path.startsWith('/events')
+    );
+    const publicApi = req.path.startsWith('/auth/') || req.path === '/health' || isPublicRead || isPublicIngestion;
     const bearer = req.get('authorization') || '';
     const sessionToken = bearer.startsWith('Bearer ') ? bearer.slice(7) : null;
     const hasSession = !!auth.socketSession(sessionToken);

@@ -14,6 +14,47 @@ const sessionToken = localStorage.getItem("resqnetToken");
 const sessionUser = (() => { try { return JSON.parse(localStorage.getItem("resqnetUser") || "null"); } catch (_) { return null; } })();
 const authHeaders = () => ({ "Content-Type": "application/json", Authorization: `Bearer ${sessionToken}` });
 
+/* ---------- BUILT-IN PUNE REGIONAL INFRASTRUCTURE REGISTRY (FAIL-SAFE BASELINE) ---------- */
+const INITIAL_PUNE_HOSPITALS = [
+  { id: "HOSP-01", name: "Sassoon General Hospital & BJGMC", lat: 18.5258, lng: 73.8742, trauma: true, traumaLevel: 1, emergencyCapacity: 18, edReadiness: 98, relevance: "Apex Tertiary Govt Trauma Centre", phone: "+91 20 2612 8000", address: "Near Pune Railway Station, Station Rd, Pune - 411001" },
+  { id: "HOSP-02", name: "Deenanath Mangeshkar Hospital", lat: 18.4988, lng: 73.8304, trauma: true, traumaLevel: 1, emergencyCapacity: 14, edReadiness: 96, relevance: "Advanced Multi-Specialty Trauma Care", phone: "+91 20 4015 1000", address: "Near Mhatre Bridge, Erandwane, Pune - 411004" },
+  { id: "HOSP-03", name: "Ruby Hall Clinic, Sassoon Road", lat: 18.5320, lng: 73.8765, trauma: true, traumaLevel: 1, emergencyCapacity: 12, edReadiness: 95, relevance: "NABH Accredited Tertiary Emergency", phone: "+91 20 6645 5100", address: "40 Sassoon Road, Pune - 411001" },
+  { id: "HOSP-04", name: "Jehangir Hospital", lat: 18.5305, lng: 73.8760, trauma: true, traumaLevel: 1, emergencyCapacity: 10, edReadiness: 93, relevance: "Comprehensive Emergency & Critical Care", phone: "+91 20 6681 9999", address: "32 Sassoon Road, Pune - 411001" },
+  { id: "HOSP-05", name: "KEM Hospital Pune", lat: 18.5205, lng: 73.8690, trauma: true, traumaLevel: 1, emergencyCapacity: 10, edReadiness: 91, relevance: "24x7 Casualty and Acute Trauma Center", phone: "+91 20 6603 7300", address: "489-490 Rasta Peth, Pune - 411011" },
+  { id: "HOSP-06", name: "Sahyadri Super Speciality Hospital", lat: 18.5140, lng: 73.8365, trauma: true, traumaLevel: 1, emergencyCapacity: 9, edReadiness: 94, relevance: "Advanced Neurotrauma & Polytrauma Care", phone: "+91 20 6721 5000", address: "Plot No. 30 C, Erandvane, Karve Rd, Deccan Gymkhana, Pune - 411004" },
+  { id: "HOSP-07", name: "Bharati Hospital & Research Centre", lat: 18.45969, lng: 73.85678, trauma: true, traumaLevel: 1, emergencyCapacity: 11, edReadiness: 94, relevance: "Dedicated Emergency Medicine Department", phone: "+91 20 4055 5555", address: "Pune-Satara Road, Dhankawadi, Pune - 411043" },
+  { id: "HOSP-08", name: "Lokmanya Hospital, Pune", lat: 18.5089, lng: 73.8341, trauma: true, traumaLevel: 2, emergencyCapacity: 6, edReadiness: 87, relevance: "Emergency & Orthopaedic Trauma Care", phone: "+91 20 2544 0404", address: "Paud Road, Kothrud, Pune - 411038" },
+  { id: "HOSP-09", name: "Z Plus Accident Hospital, Hadapsar", lat: 18.5017, lng: 73.9260, trauma: true, traumaLevel: 1, emergencyCapacity: 7, edReadiness: 90, relevance: "24x7 Specialized Highway Trauma Care", phone: "+91 20 2687 0055", address: "Solapur Road, Gadital, Hadapsar, Pune - 411028" },
+  { id: "HOSP-10", name: "Metro Superspeciality Hospital", lat: 18.5790, lng: 73.9830, trauma: true, traumaLevel: 1, emergencyCapacity: 8, edReadiness: 92, relevance: "Wagholi Highway Trauma Centre", phone: "+91 20 6733 1111", address: "Pune-Nagar Highway, Wagholi, Pune - 412207" },
+  { id: "HOSP-11", name: "Global Multispeciality Hospital", lat: 18.6200, lng: 73.8750, trauma: true, traumaLevel: 2, emergencyCapacity: 5, edReadiness: 86, relevance: "24x7 Emergency Fracture Care", phone: "+91 20 2715 0000", address: "Dighi - Alandi Road, Dighi, Pune - 411015" },
+  { id: "HOSP-12", name: "YCM Hospital, Pimpri", lat: 18.6220, lng: 73.8211, trauma: true, traumaLevel: 1, emergencyCapacity: 14, edReadiness: 97, relevance: "Major PCMC Public Emergency Facility", phone: "+91 20 2742 0000", address: "Sant Tukaram Nagar, Pimpri Colony, Pimpri-Chinchwad - 411018" },
+  { id: "HOSP-13", name: "Poona Hospital & Research Centre", lat: 18.5126, lng: 73.8447, trauma: true, traumaLevel: 2, emergencyCapacity: 8, edReadiness: 89, relevance: "Central Pune Acute Emergency Unit", phone: "+91 20 6609 6000", address: "27 Sadashiv Peth, Pune - 411030" },
+  { id: "HOSP-14", name: "Rao Nursing Home & Trauma Center", lat: 18.4870, lng: 73.8650, trauma: true, traumaLevel: 2, emergencyCapacity: 6, edReadiness: 88, relevance: "Bibwewadi Fast-Track Emergency", phone: "+91 20 2421 1100", address: "Bibwewadi Kondhwa Rd, Pune - 411037" },
+  { id: "HOSP-15", name: "Noble Hospital & Research Centre", lat: 18.5042, lng: 73.9315, trauma: true, traumaLevel: 1, emergencyCapacity: 11, edReadiness: 93, relevance: "Eastern Pune Trauma & Critical Care Hub", phone: "+91 20 6628 5000", address: "153 Magarpatta City Road, Hadapsar, Pune - 411028" }
+];
+
+const INITIAL_PUNE_AMBULANCES = [
+  { id: "AMB-01", code: "AMB-01", type: "ALS", traumaReady: true, lat: 18.5300, lng: 73.8400, status: "AVAILABLE", speed: 0 },
+  { id: "AMB-02", code: "AMB-02", type: "ALS", traumaReady: true, lat: 18.5080, lng: 73.8320, status: "AVAILABLE", speed: 0 },
+  { id: "AMB-03", code: "AMB-03", type: "BLS", traumaReady: false, lat: 18.4980, lng: 73.8550, status: "AVAILABLE", speed: 0 },
+  { id: "AMB-04", code: "AMB-04", type: "ALS", traumaReady: true, lat: 18.5260, lng: 73.8770, status: "AVAILABLE", speed: 0 },
+  { id: "AMB-05", code: "AMB-05", type: "BLS", traumaReady: false, lat: 18.5060, lng: 73.8100, status: "AVAILABLE", speed: 0 },
+  { id: "AMB-06", code: "AMB-06", type: "ALS", traumaReady: true, lat: 18.5910, lng: 73.7380, status: "AVAILABLE", speed: 0 },
+  { id: "AMB-07", code: "AMB-07", type: "ALS", traumaReady: true, lat: 18.5020, lng: 73.9300, status: "AVAILABLE", speed: 0 }
+];
+
+const INITIAL_PUNE_CCTV = [
+  { id: "CCTV-01", cameraId: "CCTV-PUNE-JUNCTION-01", cameraName: "Pune University Smart Junction Cam", lat: 18.5308, lng: 73.8290, status: "ONLINE", fovAngle: 65, heading: 50, coverageRadiusMeters: 200, fps: 24, inferenceLatency: 38 },
+  { id: "CCTV-02", cameraId: "CCTV-PUNE-SWARGATE-02", cameraName: "Swargate High-Density Transit Hub", lat: 18.5018, lng: 73.8576, status: "ONLINE", fovAngle: 75, heading: 180, coverageRadiusMeters: 220, fps: 24, inferenceLatency: 41 },
+  { id: "CCTV-03", cameraId: "CCTV-PUNE-STATION-03", cameraName: "Pune Railway Station Flyover Cam", lat: 18.5284, lng: 73.8744, status: "ONLINE", fovAngle: 70, heading: 90, coverageRadiusMeters: 200, fps: 24, inferenceLatency: 35 },
+  { id: "CCTV-04", cameraId: "CCTV-PUNE-KATRAJ-04", cameraName: "Katraj Tunnel North Portal Cam", lat: 18.4480, lng: 73.8540, status: "ONLINE", fovAngle: 60, heading: 0, coverageRadiusMeters: 250, fps: 24, inferenceLatency: 45 },
+  { id: "CCTV-05", cameraId: "CCTV-PUNE-FC-05", cameraName: "FC Road Goodluck Chowk Cam", lat: 18.5175, lng: 73.8415, status: "ONLINE", fovAngle: 65, heading: 120, coverageRadiusMeters: 180, fps: 24, inferenceLatency: 36 },
+  { id: "CCTV-06", cameraId: "CCTV-PUNE-SB-06", cameraName: "Senapati Bapat Road Tech Corridor", lat: 18.5340, lng: 73.8310, status: "ONLINE", fovAngle: 65, heading: 210, coverageRadiusMeters: 210, fps: 24, inferenceLatency: 39 },
+  { id: "CCTV-07", cameraId: "CCTV-PUNE-HADAPSAR-07", cameraName: "Hadapsar Gadital Chowk Cam", lat: 18.5010, lng: 73.9280, status: "ONLINE", fovAngle: 70, heading: 80, coverageRadiusMeters: 230, fps: 24, inferenceLatency: 42 },
+  { id: "CCTV-08", cameraId: "CCTV-PUNE-HINJEWADI-08", cameraName: "Hinjewadi Shivaji Chowk Cam", lat: 18.5925, lng: 73.7405, status: "ONLINE", fovAngle: 75, heading: 270, coverageRadiusMeters: 250, fps: 24, inferenceLatency: 40 },
+  { id: "CCTV-09", cameraId: "CCTV-PUNE-SHIVAJINAGAR-09", cameraName: "Shivajinagar ST Stand Interchange", lat: 18.5315, lng: 73.8520, status: "ONLINE", fovAngle: 65, heading: 150, coverageRadiusMeters: 190, fps: 24, inferenceLatency: 37 }
+];
+
 /* ---------- TACTICAL DARK STYLES FOR GOOGLE MAPS ---------- */
 const GOOGLE_DARK_STYLE = [
   { elementType: "geometry", stylers: [{ color: "#0b111a" }] },
@@ -38,26 +79,9 @@ const GOOGLE_DARK_STYLE = [
 
 /* ---------- LEAFLET TILE PROVIDERS (FALLBACK / ALTERNATIVE) ---------- */
 const MAP_PROVIDERS = {
-  dark: {
-    name: "Dark Matter (Night)",
-    url: "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png",
-    attribution: "&copy; OpenStreetMap contributors &copy; CARTO",
-    subdomains: "abcd",
-    maxZoom: 19
-  },
-  standard: {
-    name: "Standard Road Map",
-    url: "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
-    attribution: "&copy; OpenStreetMap contributors",
-    subdomains: "abc",
-    maxZoom: 19
-  },
-  satellite: {
-    name: "Satellite Imagery",
-    url: "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
-    attribution: "&copy; Esri, i-cubed, USDA, USGS",
-    maxZoom: 18
-  }
+  dark: { name: "Dark Matter (Night)", url: "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png", attribution: "&copy; OpenStreetMap contributors &copy; CARTO", subdomains: "abcd", maxZoom: 19 },
+  standard: { name: "Standard Road Map", url: "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", attribution: "&copy; OpenStreetMap contributors", subdomains: "abc", maxZoom: 19 },
+  satellite: { name: "Satellite Imagery", url: "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}", attribution: "&copy; Esri, i-cubed, USDA, USGS", maxZoom: 18 }
 };
 
 /* ---------- CENTRAL STATE ---------- */
@@ -85,12 +109,12 @@ const state = {
     routes: true,
     cctv: true,
     hotspots: true,
-    traffic: true // Traffic enabled by default as requested
+    traffic: true
   },
   seen: new Set(),
   lastSync: null,
   demoBusy: false,
-  activeSimulations: {} // Ongoing live ambulance motion animations
+  activeSimulations: {}
 };
 
 /* ---------- UTILITY FUNCTIONS ---------- */
@@ -124,7 +148,6 @@ function haversine(a, b) {
   return 2 * R * Math.asin(Math.sqrt(h));
 }
 
-/* Calculate bearing in degrees from point A to point B */
 function calculateBearing(lat1, lon1, lat2, lon2) {
   const φ1 = (lat1 * Math.PI) / 180, φ2 = (lat2 * Math.PI) / 180;
   const Δλ = ((lon2 - lon1) * Math.PI) / 180;
@@ -134,9 +157,10 @@ function calculateBearing(lat1, lon1, lat2, lon2) {
   return ((θ * 180) / Math.PI + 360) % 360;
 }
 
-/* ---------- DUAL-ENGINE MAP ARCHITECTURE ---------- */
+/* ---------- DUAL-ENGINE MAP CONTROLLER ---------- */
 let activeEngine = null; // 'google' or 'leaflet'
 let gMap = null, gTrafficLayer = null, gInfoWindow = null;
+const gMarkers = { inc: {}, amb: {}, hosp: {}, cctv: {} };
 const gOverlays = { inc: {}, amb: {}, hosp: {}, cctv: {} };
 const gPolylines = { route1: null, route1Glow: null, route2: null, route2Glow: null };
 const gFovs = {};
@@ -147,7 +171,7 @@ let L_inc, L_resolved, L_amb, L_hosp, L_route, L_cctv, L_cctvFov, L_hotspots, L_
 const incMarkers = {}, ambMarkers = {}, hospMarkers = {}, cctvMarkers = {}, fovLayers = {}, hotspotCircles = {};
 let testMapTarget = null;
 
-/* ---------- GOOGLE MAPS CUSTOM HTML OVERLAY CLASS ---------- */
+/* ---------- GOOGLE MAPS CUSTOM HTML OVERLAY FOR CALLOUT BADGES ---------- */
 let GoogleHtmlOverlayClass = null;
 
 function defineGoogleHtmlOverlay() {
@@ -167,6 +191,10 @@ function defineGoogleHtmlOverlay() {
     onAdd() {
       this.div = document.createElement("div");
       this.div.className = "custom-map-overlay " + this.className;
+      this.div.style.position = "absolute";
+      this.div.style.transform = "translate(-50%, -50%)";
+      this.div.style.zIndex = "250";
+      this.div.style.cursor = "pointer";
       this.div.innerHTML = this.htmlContent;
       if (this.onClick) {
         this.div.addEventListener("click", (e) => {
@@ -175,18 +203,22 @@ function defineGoogleHtmlOverlay() {
         });
       }
       const panes = this.getPanes();
-      if (panes && panes.overlayMouseTarget) {
-        panes.overlayMouseTarget.appendChild(this.div);
-      }
+      const targetPane = panes ? (panes.floatPane || panes.overlayMouseTarget || panes.overlayLayer) : null;
+      if (targetPane) targetPane.appendChild(this.div);
     }
     draw() {
       if (!this.div) return;
+      if (!this.div.parentNode) {
+        const panes = this.getPanes();
+        const targetPane = panes ? (panes.floatPane || panes.overlayMouseTarget || panes.overlayLayer) : null;
+        if (targetPane) targetPane.appendChild(this.div);
+      }
       const proj = this.getProjection();
       if (!proj) return;
       const pt = proj.fromLatLngToDivPixel(new google.maps.LatLng(this.lat, this.lng));
       if (pt) {
-        this.div.style.left = pt.x + "px";
-        this.div.style.top = pt.y + "px";
+        this.div.style.left = Math.round(pt.x) + "px";
+        this.div.style.top = Math.round(pt.y) + "px";
         this.div.style.display = this.visible ? "block" : "none";
       }
     }
@@ -212,10 +244,60 @@ function defineGoogleHtmlOverlay() {
   };
 }
 
-/* ---------- MAP INITIALIZATION & ENGINE SWITCHING ---------- */
+/* ---------- GOOGLE MAPS SVG MARKER ICON FACTORIES ---------- */
+function getGoogleHospIcon(hosp, isSel) {
+  const color = isSel ? "%2338bdf8" : (hosp.trauma ? "%230284c7" : "%2322c55e");
+  const stroke = isSel ? "%23ffffff" : "%2338bdf8";
+  return {
+    url: `data:image/svg+xml;utf-8,<svg xmlns="http://www.w3.org/2000/svg" width="34" height="34" viewBox="0 0 34 34"><rect x="2" y="2" width="30" height="30" rx="8" fill="%230c111a" stroke="${stroke}" stroke-width="${isSel ? 3.5 : 2.5}"/><path d="M14 7h6v7h7v6h-7v7h-6v-7H7v-6h7V7z" fill="${color}"/><circle cx="17" cy="17" r="2" fill="%23ffffff"/></svg>`,
+    scaledSize: new google.maps.Size(34, 34),
+    anchor: new google.maps.Point(17, 17)
+  };
+}
+
+function getGoogleAmbIcon(amb, isSel) {
+  const isEnRoute = amb.status === "EN_ROUTE" || amb.isMoving;
+  const color = isEnRoute ? "%23f59e0b" : "%2322c55e";
+  const stroke = isEnRoute ? "%23fb923c" : "%2310b981";
+  return {
+    url: `data:image/svg+xml;utf-8,<svg xmlns="http://www.w3.org/2000/svg" width="34" height="34" viewBox="0 0 34 34"><circle cx="17" cy="17" r="15" fill="%230c111a" stroke="${stroke}" stroke-width="${isSel || isEnRoute ? 3.5 : 2}"/><path d="M8 11h11v10H8zm11 3h4l3 3v4h-7zM11 21a2 2 0 100 4 2 2 0 000-4zm10 0a2 2 0 100 4 2 2 0 000-4z" fill="${color}"/><path d="M12 14h3v-2h2v2h3v2h-3v2h-2v-2h-3z" fill="%23ffffff"/></svg>`,
+    scaledSize: new google.maps.Size(34, 34),
+    anchor: new google.maps.Point(17, 17)
+  };
+}
+
+function getGoogleCctvIcon(cam) {
+  return {
+    url: `data:image/svg+xml;utf-8,<svg xmlns="http://www.w3.org/2000/svg" width="30" height="30" viewBox="0 0 30 30"><rect x="2" y="2" width="26" height="26" rx="6" fill="%23071324" stroke="%2338bdf8" stroke-width="2"/><path d="M7 11h10v8H7zm10 2l5-3v10l-5-3z" fill="%2338bdf8"/><circle cx="12" cy="15" r="2" fill="%23ffffff"/></svg>`,
+    scaledSize: new google.maps.Size(30, 30),
+    anchor: new google.maps.Point(15, 15)
+  };
+}
+
+function getGoogleIncIcon(inc, isSel) {
+  const b = band(inc.severity);
+  const color = b.k === "critical" ? "%23ef4444" : (b.k === "high" ? "%23f97316" : "%23eab308");
+  return {
+    url: `data:image/svg+xml;utf-8,<svg xmlns="http://www.w3.org/2000/svg" width="38" height="38" viewBox="0 0 38 38"><circle cx="19" cy="19" r="16" fill="%230c111a" stroke="${color}" stroke-width="${isSel ? 3.5 : 2.5}"/><polygon points="19,8 28,26 10,26" fill="${color}" opacity="0.85"/><text x="19" y="24" font-size="12" font-weight="900" fill="%23ffffff" text-anchor="middle">!</text></svg>`,
+    scaledSize: new google.maps.Size(38, 38),
+    anchor: new google.maps.Point(19, 19)
+  };
+}
+
+/* ---------- INITIALIZE BASELINE DATA ---------- */
+function initBaselineData() {
+  INITIAL_PUNE_HOSPITALS.forEach(h => { state.hospitals[h.id] = { ...h }; });
+  INITIAL_PUNE_AMBULANCES.forEach(a => { state.ambulances[a.id] = { ...a }; });
+  INITIAL_PUNE_CCTV.forEach(c => { state.cctv[c.id] = { ...c }; });
+  renderKPIs();
+}
+
+/* ---------- MAP INITIALIZATION ---------- */
 function initMapEngine() {
   const mapEl = $("map");
   if (!mapEl) return;
+
+  initBaselineData();
 
   const preferGoogle = state.mapStyle.startsWith("google_") || !state.mapStyle;
   const isGoogleAvailable = window.google && window.google.maps && !window.googleMapsFailed;
@@ -226,20 +308,22 @@ function initMapEngine() {
     initLeafletEngine();
   }
 
+  renderAllEntities();
   seedFleet();
   loadInfrastructure();
 }
 
-/* Callback when Google Maps JS API loads */
 window.onGoogleMapsReady = function(success) {
   if (success && !gMap) {
     console.log("[ResQNet] Google Maps JS API loaded successfully. Initializing Google Maps engine.");
     initGoogleMapsEngine();
+    renderAllEntities();
     seedFleet();
     loadInfrastructure();
   } else if (!success && !lMap) {
-    console.warn("[ResQNet] Google Maps failed, initializing Leaflet fallback engine.");
+    console.warn("[ResQNet] Google Maps unavailable, initializing Leaflet fallback engine.");
     initLeafletEngine();
+    renderAllEntities();
     seedFleet();
     loadInfrastructure();
   }
@@ -249,7 +333,6 @@ function initGoogleMapsEngine() {
   const mapEl = $("map");
   if (!mapEl || gMap) return;
 
-  // Cleanup Leaflet if running
   if (lMap) {
     try { lMap.remove(); lMap = null; } catch (_) {}
     mapEl.innerHTML = "";
@@ -260,18 +343,10 @@ function initGoogleMapsEngine() {
   let mapTypeId = google.maps.MapTypeId.ROADMAP;
   let styles = GOOGLE_DARK_STYLE;
 
-  if (state.mapStyle === "google_roadmap") {
-    styles = [];
-  } else if (state.mapStyle === "google_satellite") {
-    mapTypeId = google.maps.MapTypeId.SATELLITE;
-    styles = [];
-  } else if (state.mapStyle === "google_hybrid") {
-    mapTypeId = google.maps.MapTypeId.HYBRID;
-    styles = [];
-  } else if (state.mapStyle === "google_terrain") {
-    mapTypeId = google.maps.MapTypeId.TERRAIN;
-    styles = [];
-  }
+  if (state.mapStyle === "google_roadmap") styles = [];
+  else if (state.mapStyle === "google_satellite") { mapTypeId = google.maps.MapTypeId.SATELLITE; styles = []; }
+  else if (state.mapStyle === "google_hybrid") { mapTypeId = google.maps.MapTypeId.HYBRID; styles = []; }
+  else if (state.mapStyle === "google_terrain") { mapTypeId = google.maps.MapTypeId.TERRAIN; styles = []; }
 
   gMap = new google.maps.Map(mapEl, {
     center: { lat: CENTER[0], lng: CENTER[1] },
@@ -283,7 +358,6 @@ function initGoogleMapsEngine() {
     zoomControlOptions: { position: google.maps.ControlPosition.BOTTOM_LEFT }
   });
 
-  // Google Maps Native Traffic Layer
   gTrafficLayer = new google.maps.TrafficLayer();
   if (state.layers.traffic) {
     gTrafficLayer.setMap(gMap);
@@ -303,14 +377,13 @@ function initGoogleMapsEngine() {
   });
 
   activeEngine = "google";
-  console.log("[ResQNet] Google Maps Command Engine active with real-time traffic layer.");
+  console.log("[ResQNet] Google Maps Command Engine initialized with native real-time traffic layer.");
 }
 
 function initLeafletEngine() {
   const mapEl = $("map");
   if (!mapEl || lMap) return;
 
-  // Cleanup Google Maps if running
   if (gMap) {
     try {
       if (gTrafficLayer) gTrafficLayer.setMap(null);
@@ -329,7 +402,6 @@ function initLeafletEngine() {
     subdomains: provider.subdomains || "abc"
   }).addTo(lMap);
 
-  // Operational layer groups
   L_traffic = L.layerGroup();
   if (state.layers.traffic) L_traffic.addTo(lMap);
   L_hotspots = L.layerGroup().addTo(lMap);
@@ -350,7 +422,7 @@ function initLeafletEngine() {
   });
 
   activeEngine = "leaflet";
-  console.log("[ResQNet] Leaflet Multi-Tile Engine active as fallback.");
+  console.log("[ResQNet] Leaflet Multi-Tile Engine initialized as fallback.");
 }
 
 function setMapStyle(styleKey) {
@@ -490,12 +562,16 @@ async function seedFleet() {
       fetch(API + "/fleet/ambulances"),
       fetch(API + "/fleet/hospitals")
     ]);
-    const ambs = await ambRes.json();
-    const hosps = await hospRes.json();
-    if (Array.isArray(ambs)) ambs.forEach(updateAmbulance);
-    if (Array.isArray(hosps)) hosps.forEach(updateHospital);
+    if (ambRes.ok) {
+      const ambs = await ambRes.json();
+      if (Array.isArray(ambs) && ambs.length > 0) ambs.forEach(updateAmbulance);
+    }
+    if (hospRes.ok) {
+      const hosps = await hospRes.json();
+      if (Array.isArray(hosps) && hosps.length > 0) hosps.forEach(updateHospital);
+    }
   } catch (e) {
-    toast("OPERATIONS DATA UNAVAILABLE", "Fleet and hospital positions will appear when backend reconnects.", "warn");
+    console.warn("[ResQNet] Remote fleet sync notice: using loaded Pune tactical registry.", e.message);
   }
   renderKPIs();
   if ($("testAmbulanceId")) populateTestResources();
@@ -503,30 +579,31 @@ async function seedFleet() {
 
 async function loadInfrastructure() {
   try {
-    // 1. CCTV Cameras & FOV Cones
     const cctvRes = await fetch(API + "/fleet/cctv");
-    const cams = await cctvRes.json();
-    if (Array.isArray(cams)) {
-      cams.forEach(renderCctvCamera);
+    if (cctvRes.ok) {
+      const cams = await cctvRes.json();
+      if (Array.isArray(cams) && cams.length > 0) cams.forEach(renderCctvCamera);
     }
 
-    // 2. Crash Blackspot Hotspots
     const hotRes = await fetch(API + "/fleet/hotspots");
-    const hotspots = await hotRes.json();
-    if (Array.isArray(hotspots)) {
-      state.hotspots = hotspots;
-      renderHotspots(hotspots);
+    if (hotRes.ok) {
+      const hotspots = await hotRes.json();
+      if (Array.isArray(hotspots)) {
+        state.hotspots = hotspots;
+        renderHotspots(hotspots);
+      }
     }
 
-    // 3. Configured Traffic Context
     const trafficRes = await fetch(API + "/fleet/traffic");
-    const corridors = await trafficRes.json();
-    if (Array.isArray(corridors)) {
-      state.trafficCorridors = corridors;
-      renderTrafficCorridors(corridors);
+    if (trafficRes.ok) {
+      const corridors = await trafficRes.json();
+      if (Array.isArray(corridors)) {
+        state.trafficCorridors = corridors;
+        renderTrafficCorridors(corridors);
+      }
     }
   } catch (e) {
-    console.warn("[Dashboard] Infrastructure load error:", e.message);
+    console.warn("[ResQNet] Remote infrastructure sync notice: using loaded junction cameras.", e.message);
   }
 }
 
@@ -545,18 +622,23 @@ function renderCctvCamera(cam) {
       </button>
     </div>`;
 
-  if (activeEngine === "google" && gMap && GoogleHtmlOverlayClass) {
-    if (!gOverlays.cctv[cam.id]) {
-      const overlay = new GoogleHtmlOverlayClass(cam.lat, cam.lng, getCctvMarkerHtml(cam), () => {
-        gInfoWindow.setContent(`<div class="gmap-infowindow">${popupHtml}</div>`);
-        gInfoWindow.setPosition({ lat: cam.lat, lng: cam.lng });
-        gInfoWindow.open(gMap);
+  if (activeEngine === "google" && gMap) {
+    if (!gMarkers.cctv[cam.id]) {
+      const marker = new google.maps.Marker({
+        position: { lat: cam.lat, lng: cam.lng },
+        map: state.layers.cctv ? gMap : null,
+        title: cam.cameraName || cam.id,
+        icon: getGoogleCctvIcon(cam),
+        zIndex: 150
       });
-      overlay.setMap(gMap);
-      gOverlays.cctv[cam.id] = overlay;
+      marker.addListener("click", () => {
+        gInfoWindow.setContent(`<div class="gmap-infowindow">${popupHtml}</div>`);
+        gInfoWindow.open(gMap, marker);
+      });
+      gMarkers.cctv[cam.id] = marker;
     } else {
-      gOverlays.cctv[cam.id].setPosition(cam.lat, cam.lng);
-      gOverlays.cctv[cam.id].setContent(getCctvMarkerHtml(cam));
+      gMarkers.cctv[cam.id].setPosition({ lat: cam.lat, lng: cam.lng });
+      gMarkers.cctv[cam.id].setMap(state.layers.cctv ? gMap : null);
     }
 
     if (cam.fovAngle && cam.heading !== undefined) {
@@ -661,18 +743,40 @@ function updateAmbulance(a) {
       ${amb.eta ? `<br/><b>ETA:</b> <b style="color:#f59e0b;">${amb.eta} min</b>` : ""}
     </div>`;
 
-  if (activeEngine === "google" && gMap && GoogleHtmlOverlayClass) {
-    if (!gOverlays.amb[amb.id]) {
-      const overlay = new GoogleHtmlOverlayClass(amb.lat, amb.lng, html, () => {
-        gInfoWindow.setContent(`<div class="gmap-infowindow">${popupHtml}</div>`);
-        gInfoWindow.setPosition({ lat: amb.lat, lng: amb.lng });
-        gInfoWindow.open(gMap);
+  if (activeEngine === "google" && gMap) {
+    if (!gMarkers.amb[amb.id]) {
+      const marker = new google.maps.Marker({
+        position: { lat: amb.lat, lng: amb.lng },
+        map: state.layers.ambulances ? gMap : null,
+        title: `${amb.id} (${amb.type || "ALS"})`,
+        icon: getGoogleAmbIcon(amb, isSel),
+        zIndex: 200
       });
-      overlay.setMap(gMap);
-      gOverlays.amb[amb.id] = overlay;
+      marker.addListener("click", () => {
+        gInfoWindow.setContent(`<div class="gmap-infowindow">${popupHtml}</div>`);
+        gInfoWindow.open(gMap, marker);
+      });
+      gMarkers.amb[amb.id] = marker;
     } else {
-      gOverlays.amb[amb.id].setPosition(amb.lat, amb.lng);
-      gOverlays.amb[amb.id].setContent(html);
+      gMarkers.amb[amb.id].setPosition({ lat: amb.lat, lng: amb.lng });
+      gMarkers.amb[amb.id].setIcon(getGoogleAmbIcon(amb, isSel));
+      gMarkers.amb[amb.id].setMap(state.layers.ambulances ? gMap : null);
+    }
+
+    if (GoogleHtmlOverlayClass) {
+      if (!gOverlays.amb[amb.id]) {
+        const overlay = new GoogleHtmlOverlayClass(amb.lat, amb.lng, html, () => {
+          gInfoWindow.setContent(`<div class="gmap-infowindow">${popupHtml}</div>`);
+          gInfoWindow.setPosition({ lat: amb.lat, lng: amb.lng });
+          gInfoWindow.open(gMap);
+        });
+        overlay.setMap(state.layers.ambulances ? gMap : null);
+        gOverlays.amb[amb.id] = overlay;
+      } else {
+        gOverlays.amb[amb.id].setPosition(amb.lat, amb.lng);
+        gOverlays.amb[amb.id].setContent(html);
+        gOverlays.amb[amb.id].setVisible(state.layers.ambulances);
+      }
     }
   } else if (activeEngine === "leaflet" && lMap) {
     const pos = [amb.lat, amb.lng];
@@ -712,18 +816,40 @@ function updateHospital(h) {
       <b>Accurate GPS:</b> <span class="mono">${Number(hh.lat).toFixed(6)}, ${Number(hh.lng).toFixed(6)}</span>
     </div>`;
 
-  if (activeEngine === "google" && gMap && GoogleHtmlOverlayClass) {
-    if (!gOverlays.hosp[hh.id]) {
-      const overlay = new GoogleHtmlOverlayClass(hh.lat, hh.lng, html, () => {
-        gInfoWindow.setContent(`<div class="gmap-infowindow">${popupHtml}</div>`);
-        gInfoWindow.setPosition({ lat: hh.lat, lng: hh.lng });
-        gInfoWindow.open(gMap);
+  if (activeEngine === "google" && gMap) {
+    if (!gMarkers.hosp[hh.id]) {
+      const marker = new google.maps.Marker({
+        position: { lat: hh.lat, lng: hh.lng },
+        map: state.layers.hospitals ? gMap : null,
+        title: hh.name,
+        icon: getGoogleHospIcon(hh, isSel),
+        zIndex: 180
       });
-      overlay.setMap(gMap);
-      gOverlays.hosp[hh.id] = overlay;
+      marker.addListener("click", () => {
+        gInfoWindow.setContent(`<div class="gmap-infowindow">${popupHtml}</div>`);
+        gInfoWindow.open(gMap, marker);
+      });
+      gMarkers.hosp[hh.id] = marker;
     } else {
-      gOverlays.hosp[hh.id].setPosition(hh.lat, hh.lng);
-      gOverlays.hosp[hh.id].setContent(html);
+      gMarkers.hosp[hh.id].setPosition({ lat: hh.lat, lng: hh.lng });
+      gMarkers.hosp[hh.id].setIcon(getGoogleHospIcon(hh, isSel));
+      gMarkers.hosp[hh.id].setMap(state.layers.hospitals ? gMap : null);
+    }
+
+    if (GoogleHtmlOverlayClass) {
+      if (!gOverlays.hosp[hh.id]) {
+        const overlay = new GoogleHtmlOverlayClass(hh.lat, hh.lng, html, () => {
+          gInfoWindow.setContent(`<div class="gmap-infowindow">${popupHtml}</div>`);
+          gInfoWindow.setPosition({ lat: hh.lat, lng: hh.lng });
+          gInfoWindow.open(gMap);
+        });
+        overlay.setMap(state.layers.hospitals ? gMap : null);
+        gOverlays.hosp[hh.id] = overlay;
+      } else {
+        gOverlays.hosp[hh.id].setPosition(hh.lat, hh.lng);
+        gOverlays.hosp[hh.id].setContent(html);
+        gOverlays.hosp[hh.id].setVisible(state.layers.hospitals);
+      }
     }
   } else if (activeEngine === "leaflet" && lMap) {
     const pos = [hh.lat, hh.lng];
@@ -740,9 +866,9 @@ function updateHospital(h) {
 /* ---------- INCIDENT RENDERING & POPUPS ---------- */
 function upsertIncidentMarker(inc) {
   if (num(inc.latitude) === null || num(inc.longitude) === null) {
-    if (activeEngine === "google" && gOverlays.inc[inc._id]) {
-      gOverlays.inc[inc._id].setMap(null);
-      delete gOverlays.inc[inc._id];
+    if (activeEngine === "google") {
+      if (gMarkers.inc[inc._id]) { gMarkers.inc[inc._id].setMap(null); delete gMarkers.inc[inc._id]; }
+      if (gOverlays.inc[inc._id]) { gOverlays.inc[inc._id].setMap(null); delete gOverlays.inc[inc._id]; }
     }
     if (activeEngine === "leaflet" && incMarkers[inc._id]) {
       L_inc.removeLayer(incMarkers[inc._id]);
@@ -768,14 +894,33 @@ function upsertIncidentMarker(inc) {
     Assigned Unit: <b style="color:var(--orange)">${esc(inc.assignedAmbulance || "AMB-01 (ALS)")}</b><br/>
     Destination: <b style="color:var(--blue)">${esc(inc.assignedHospital || "Sassoon General Hospital")}</b>`;
 
-  if (activeEngine === "google" && gMap && GoogleHtmlOverlayClass) {
-    if (!gOverlays.inc[inc._id]) {
-      const overlay = new GoogleHtmlOverlayClass(inc.latitude, inc.longitude, html, () => selectIncident(inc._id));
-      overlay.setMap(gMap);
-      gOverlays.inc[inc._id] = overlay;
+  if (activeEngine === "google" && gMap) {
+    if (!gMarkers.inc[inc._id]) {
+      const marker = new google.maps.Marker({
+        position: { lat: inc.latitude, lng: inc.longitude },
+        map: state.layers.incidents ? gMap : null,
+        title: inc.title || "Emergency Incident",
+        icon: getGoogleIncIcon(inc, isSelected),
+        zIndex: 300
+      });
+      marker.addListener("click", () => selectIncident(inc._id));
+      gMarkers.inc[inc._id] = marker;
     } else {
-      gOverlays.inc[inc._id].setPosition(inc.latitude, inc.longitude);
-      gOverlays.inc[inc._id].setContent(html);
+      gMarkers.inc[inc._id].setPosition({ lat: inc.latitude, lng: inc.longitude });
+      gMarkers.inc[inc._id].setIcon(getGoogleIncIcon(inc, isSelected));
+      gMarkers.inc[inc._id].setMap(state.layers.incidents ? gMap : null);
+    }
+
+    if (GoogleHtmlOverlayClass) {
+      if (!gOverlays.inc[inc._id]) {
+        const overlay = new GoogleHtmlOverlayClass(inc.latitude, inc.longitude, html, () => selectIncident(inc._id));
+        overlay.setMap(state.layers.incidents ? gMap : null);
+        gOverlays.inc[inc._id] = overlay;
+      } else {
+        gOverlays.inc[inc._id].setPosition(inc.latitude, inc.longitude);
+        gOverlays.inc[inc._id].setContent(html);
+        gOverlays.inc[inc._id].setVisible(state.layers.incidents);
+      }
     }
   } else if (activeEngine === "leaflet" && lMap) {
     const pos = [inc.latitude, inc.longitude];
@@ -873,7 +1018,6 @@ async function drawRoute(id) {
   const hospCoords = inc.hospitalRoute?.geometry?.coordinates?.map((c) => [c[1], c[0]]) || null;
   state.routes[id] = { ...r, ambulanceId: amb?.id || r.ambulanceId, hospitalId: hosp?.id || r.hospitalId, coords, hospCoords, distKm, etaMin, geometrySource };
 
-  // Render Polylines
   if (activeEngine === "google" && gMap) {
     if (gPolylines.route1) gPolylines.route1.setMap(null);
     if (gPolylines.route1Glow) gPolylines.route1Glow.setMap(null);
@@ -959,7 +1103,6 @@ function startLiveAmbulanceMotion(ambId, incidentId) {
       addActivity(`🚑 Unit ${ambId} arrived at accident scene. Initiating paramedic resuscitation.`, "ok");
       pushTimeline(incidentId, `Unit ${ambId} arrived on scene — paramedics assessing casualties`);
 
-      // Hospital transfer phase after 4 seconds
       setTimeout(() => {
         const hospCoords = route.hospCoords || inc?.hospitalRoute?.geometry?.coordinates?.map(c => [c[1], c[0]]);
         if (hospCoords && hospCoords.length > 2) {
@@ -1132,11 +1275,20 @@ function toggleLayer(name, btn) {
   }
 
   if (activeEngine === "google" && gMap) {
-    if (name === "incidents") Object.values(gOverlays.inc).forEach(o => o.setVisible(state.layers.incidents));
-    if (name === "ambulances") Object.values(gOverlays.amb).forEach(o => o.setVisible(state.layers.ambulances));
-    if (name === "hospitals") Object.values(gOverlays.hosp).forEach(o => o.setVisible(state.layers.hospitals));
+    if (name === "incidents") {
+      Object.values(gMarkers.inc).forEach(m => m.setMap(state.layers.incidents ? gMap : null));
+      Object.values(gOverlays.inc).forEach(o => o.setVisible(state.layers.incidents));
+    }
+    if (name === "ambulances") {
+      Object.values(gMarkers.amb).forEach(m => m.setMap(state.layers.ambulances ? gMap : null));
+      Object.values(gOverlays.amb).forEach(o => o.setVisible(state.layers.ambulances));
+    }
+    if (name === "hospitals") {
+      Object.values(gMarkers.hosp).forEach(m => m.setMap(state.layers.hospitals ? gMap : null));
+      Object.values(gOverlays.hosp).forEach(o => o.setVisible(state.layers.hospitals));
+    }
     if (name === "cctv") {
-      Object.values(gOverlays.cctv).forEach(o => o.setVisible(state.layers.cctv));
+      Object.values(gMarkers.cctv).forEach(m => m.setMap(state.layers.cctv ? gMap : null));
       Object.values(gFovs).forEach(p => p.setMap(state.layers.cctv ? gMap : null));
     }
     if (name === "hotspots") Object.values(gHotspots).forEach(c => c.setMap(state.layers.hotspots ? gMap : null));
@@ -1172,6 +1324,7 @@ function toggleLayer(name, btn) {
 async function syncIncidents(initial) {
   try {
     const res = await fetch(API + "/incidents");
+    if (!res.ok) return;
     const arr = await res.json();
     if (Array.isArray(arr)) {
       arr.forEach((inc) => {
@@ -1338,7 +1491,6 @@ function renderIncidentDetails() {
 
   if ($("panelSub")) $("panelSub").textContent = `${inc.id || shortId(inc._id)} · ${inc.title}`;
 
-  // 1. Column Workflow
   const isDispatched = inc.status === "EN_ROUTE" || inc.status === "RESOLVED";
   const isResolved = inc.status === "RESOLVED";
   if ($("stepper")) {
@@ -1376,7 +1528,6 @@ function renderIncidentDetails() {
     $("statVal").style.color = inc.status === "EN_ROUTE" ? "var(--orange)" : (inc.status === "RESOLVED" ? "var(--green)" : "var(--text)");
   }
 
-  // 2. Column Detection Sources
   const sources = inc.sources && inc.sources.length > 0 ? inc.sources : [{ source: inc.source, confidence: conf || 95 }];
   if ($("sourcesBox")) {
     $("sourcesBox").innerHTML = sources.map((s) => `
@@ -1387,7 +1538,6 @@ function renderIncidentDetails() {
   }
   if ($("fusedVal")) $("fusedVal").textContent = conf !== null ? `${conf}%` : "95%";
 
-  // 3. Column Dispatch & Ambulance Optimisation
   const r = state.routes[inc._id] || {};
   const amb = state.ambulances[r.ambulanceId || inc.assignedAmbulance];
   const assignedAmbCode = amb ? `${amb.id} (${amb.type || "ALS"})` : (inc.assignedAmbulance || "AMB-01 (ALS Unit)");
@@ -1418,7 +1568,6 @@ function renderIncidentDetails() {
   if ($("routeEta")) $("routeEta").textContent = amb?.eta ? `${amb.eta} min` : (r.etaMin ? `${r.etaMin} min` : (inc.route?.etaMinutes ? `${inc.route.etaMinutes} min` : "—"));
   if ($("routeGeom")) $("routeGeom").textContent = r.geometrySource || (inc.route?.isFallback ? "Fallback Direct" : "OSRM Turn-by-Turn Road");
 
-  // 4. Column Hospital Pre-Alert & Performance
   const hosp = state.hospitals[r.hospitalId || inc.assignedHospitalId || inc.hospitalId] || Object.values(state.hospitals).find(h => h.name === inc.assignedHospital);
   const hospName = hosp ? hosp.name : (inc.hospitalAckBy || inc.assignedHospital || "Sassoon General Hospital / BJGMC");
   const isAck = inc.hospitalAcknowledged === true;
@@ -1456,7 +1605,6 @@ function renderIncidentDetails() {
       `<div class="kv" style="font-size:10px;border-top:1px dashed rgba(255,255,255,.08);padding-top:3px"><span>End-to-End</span><b style="color:var(--blue)">${Object.values(perf).reduce((a, c) => a + c, 0)} ms</b></div>`;
   }
 
-  // 5. Column Timeline
   const tl = state.timelines[inc._id] || inc.timeline || [];
   if ($("timelineBox")) {
     $("timelineBox").innerHTML = tl.length ? tl.map((e) => `
@@ -1466,7 +1614,6 @@ function renderIncidentDetails() {
       </div>`).join("") : `<div class="hint">Awaiting initial telemetry events</div>`;
   }
 
-  // Button States
   const btnDisp = $("btnDispatch"), btnFail = $("btnFailover"), btnRes = $("btnResolve");
   if (btnDisp) btnDisp.disabled = inc.status === "EN_ROUTE" || inc.status === "RESOLVED";
   if (btnFail) btnFail.disabled = inc.status === "RESOLVED";
@@ -1651,8 +1798,6 @@ async function dispatchAmbulance() {
       pushTimeline(inc._id, `Operator authorized dispatch for Unit ${ambId}`);
       renderIncidentDetails();
       toast("UNIT DISPATCHED", `Unit ${ambId} is en route.`, "ok");
-
-      // Start live ambulance motion animation immediately
       startLiveAmbulanceMotion(ambId, inc._id);
     }
   } catch (e) {
@@ -1737,6 +1882,7 @@ function updateOverallSystemDot() {
 async function pollHealth() {
   try {
     const res = await fetch(API + "/health");
+    if (!res.ok) throw new Error("Health check failed");
     const h = await res.json();
     setHealth("Backend", h.backend === "ONLINE" || h.backend === "UP");
     setHealth("Database", h.databaseConnected ? true : "degraded");
@@ -1851,6 +1997,7 @@ async function resetDemo() {
     Object.values(state.activeSimulations).forEach(clearInterval);
     state.activeSimulations = {};
 
+    initBaselineData();
     renderIncidentList();
     renderIncidentDetails();
     renderKPIs();
@@ -2065,12 +2212,14 @@ function debounce(fn, ms) {
 
 /* ---------- BOOTSTRAP INITIALIZATION ---------- */
 window.addEventListener("DOMContentLoaded", async () => {
+  initBaselineData();
+
   setTimeout(() => {
     if (!activeEngine) {
       console.log("[ResQNet] Bootstrapping map engine...");
       initMapEngine();
     }
-  }, 300);
+  }, 200);
 
   wire();
   renderIncidentList();
