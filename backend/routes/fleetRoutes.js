@@ -150,6 +150,28 @@ module.exports = (io) => {
         return res.json(cam);
     });
 
+    router.post(['/cctv/events', '/events'], async (req, res) => {
+        try {
+            const { id, cameraId, latitude, longitude, confidence, evidence, isDemo } = req.body;
+            const cam = await db.getCCTV(cameraId || 'CCTV-01');
+            const eventPayload = {
+                id: id || `RNQ-CCTV-${Date.now().toString().slice(-4)}`,
+                cameraId: cameraId || cam?.cameraId || 'CCTV-PUNE-JUNCTION-01',
+                cameraName: cam?.cameraName || 'Junction Optical AI',
+                latitude: Number(latitude || cam?.lat || 18.5308),
+                longitude: Number(longitude || cam?.lng || 73.8290),
+                confidence: confidence ? (confidence > 1 ? confidence : Math.round(confidence * 100)) : 94,
+                evidence: evidence || { spatial_collision: true },
+                isDemo: isDemo ?? false,
+                timestamp: new Date().toISOString()
+            };
+            io.emit('cctv:accident', eventPayload);
+            return res.json({ success: true, event: eventPayload });
+        } catch (e) {
+            return res.status(500).json({ error: e.message });
+        }
+    });
+
     // 7. Crash Blackspot Hotspots Registry
     router.get('/hotspots', async (req, res) => {
         const hotspots = await db.getAllHotspots();

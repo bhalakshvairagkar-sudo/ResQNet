@@ -193,6 +193,10 @@ module.exports = (io) => {
             const preAlert = (selectedAmb && selectedHosp) ? 
                 AIEngine.buildHospitalPreAlert(incidentTemp, selectedAmb, selectedHosp, citizenProfile) : null;
 
+            const formattedAllergies = Array.isArray(citizenProfile.allergies) ? citizenProfile.allergies.join(', ') : (citizenProfile.allergies || 'None Reported');
+            const formattedIce = citizenProfile.emergencyContact || (citizenProfile.primaryContact ? `${citizenProfile.primaryContact.name} (${citizenProfile.primaryContact.phone})` : 'Emergency Next-of-Kin');
+            const clinicalSummary = body.userMedicalInfo || `Blood: ${citizenProfile.bloodGroup || 'O+'} | Allergies: ${formattedAllergies} | ICE: ${formattedIce}`;
+
             // Construct state-machine compliant Incident record
             const incidentRecord = {
                 id: incId,
@@ -226,7 +230,7 @@ module.exports = (io) => {
                 hospitalPreAlert: preAlert,
                 patientCount: body.patients ?? body.patientCount ?? 1,
                 patientProfile: citizenProfile,
-                userMedicalInfo: body.userMedicalInfo ?? `Blood: ${citizenProfile.bloodGroup} | Allergies: ${(citizenProfile.allergies || []).join(', ')} | ICE: ${citizenProfile.primaryContact?.name} (${citizenProfile.primaryContact?.phone})`,
+                userMedicalInfo: clinicalSummary,
                 isDemo: body.isDemo ?? false,
                 sources: sources,
                 timeline: [
@@ -264,7 +268,7 @@ module.exports = (io) => {
                     accidentLongitude: lng || 73.8290,
                     patientCount: body.patients ?? 1,
                     patientProfile: citizenProfile,
-                    patientMedicalInfo: body.userMedicalInfo || `Blood: ${citizenProfile.bloodGroup} | Allergies: ${(citizenProfile.allergies || []).join(', ')} | ICE: ${citizenProfile.primaryContact?.name} (${citizenProfile.primaryContact?.phone})`,
+                    patientMedicalInfo: clinicalSummary,
                     helpMessage: title,
                     destinationHospital: selectedHosp ? selectedHosp.name : 'Pune Trauma Center',
                     assignedHospital: selectedHosp ? selectedHosp.name : 'Pune Trauma Center',
@@ -295,7 +299,7 @@ module.exports = (io) => {
                     accidentLongitude: lng || 73.8290,
                     patientCount: body.patients ?? 1,
                     patientProfile: citizenProfile,
-                    patientMedicalInfo: body.userMedicalInfo || `Blood: ${citizenProfile.bloodGroup} | Allergies: ${(citizenProfile.allergies || []).join(', ')} | ICE: ${citizenProfile.primaryContact?.name} (${citizenProfile.primaryContact?.phone})`,
+                    patientMedicalInfo: clinicalSummary,
                     helpMessage: title,
                     destinationHospital: selectedHosp.name,
                     assignedHospital: selectedHosp.name,
@@ -456,7 +460,7 @@ module.exports = (io) => {
                         accidentLongitude: i.longitude || 73.8290,
                         patientCount: i.patientCount || i.patients || 1,
                         patientProfile: prof,
-                        patientMedicalInfo: i.userMedicalInfo || `Blood: ${prof.bloodGroup} | Allergies: ${(prof.allergies || []).join(', ') || 'None'} | ICE: ${prof.primaryContact?.name || 'Next-of-Kin'} (${prof.primaryContact?.phone || '+91 98220 12345'})`,
+                        patientMedicalInfo: i.userMedicalInfo || `Blood: ${prof.bloodGroup || 'O+'} | Allergies: ${Array.isArray(prof.allergies) ? prof.allergies.join(', ') : (prof.allergies || 'None')} | ICE: ${prof.emergencyContact || prof.primaryContact?.name || 'Next-of-Kin'} (${prof.primaryContact?.phone || '+91 98220 12345'})`,
                         helpMessage: i.title || i.type || 'High-Impact Road Collision',
                         destinationHospital: destinationHospName,
                         assignedHospital: destinationHospName,

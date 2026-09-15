@@ -52,10 +52,15 @@ class AIEngine {
     static buildHospitalPreAlert(incident, ambulance, hospital, patientProfile = null) {
         const profile = patientProfile || incident.patientProfile || null;
         const blood = profile?.bloodGroup || incident.userMedicalInfo?.match(/blood\s*:\s*([ABO][+-]?\s*(?:positive|negative)?)/i)?.[1] || 'O+ POSITIVE';
-        const allergies = profile?.allergies?.join(', ') || (incident.userMedicalInfo?.match(/allerg(?:y|ies)\s*:\s*([^|]+)/i)?.[1]?.trim()) || 'None Reported';
-        const conditions = profile?.chronicConditions?.join(', ') || 'None Reported';
-        const medications = profile?.currentMedications || 'None Reported';
-        const ice = profile?.primaryContact ? `${profile.primaryContact.name} (${profile.primaryContact.phone})` : 'Emergency Next-of-Kin';
+        const allergies = Array.isArray(profile?.allergies) ? profile.allergies.join(', ') : (profile?.allergies || (incident.userMedicalInfo?.match(/allerg(?:y|ies)\s*:\s*([^|]+)/i)?.[1]?.trim()) || 'None Reported');
+        const conditions = Array.isArray(profile?.chronicConditions) ? profile.chronicConditions.join(', ') : (profile?.chronicConditions || 'None Reported');
+        const medications = Array.isArray(profile?.currentMedications) ? profile.currentMedications.join(', ') : (profile?.currentMedications || 'None Reported');
+        const ice = profile?.emergencyContact || (profile?.primaryContact ? `${profile.primaryContact.name} (${profile.primaryContact.phone})` : (profile?.iceContact || 'Emergency Next-of-Kin'));
+
+        const hospId = hospital?.id || 'HOSP-01';
+        const hospName = hospital?.name || 'Sassoon General Hospital / BJGMC';
+        const hospLat = hospital?.lat || 18.5253295;
+        const hospLng = hospital?.lng || 73.8705450;
 
         return {
             id: incident.incidentId || incident.id,
@@ -67,17 +72,17 @@ class AIEngine {
             confidence: incident.confidence || 95,
             incomingAmbulance: ambulance ? `${ambulance.code || ambulance.id} (${ambulance.type || 'ALS'} Unit)` : 'AMB-01 (ALS Unit)',
             destinationHospital: {
-                id: hospital.id,
-                name: hospital.name,
-                traumaLevel: hospital.traumaLevel ?? 1,
-                address: hospital.address || 'Pune Metropolitan Area',
-                phone: hospital.phone || '+91 20 2612 8000',
-                emergencyCapacity: hospital.emergencyCapacity || 8
+                id: hospId,
+                name: hospName,
+                traumaLevel: hospital?.traumaLevel ?? 1,
+                address: hospital?.address || 'Near Pune Railway Station, Sassoon Road, Pune - 411001',
+                phone: hospital?.phone || '+91 20 2612 8000',
+                emergencyCapacity: hospital?.emergencyCapacity || 8
             },
             assignedUnit: {
-                id: ambulance.id,
-                code: ambulance.code || ambulance.id,
-                type: ambulance.type || 'ALS',
+                id: ambulance?.id || 'AMB-01',
+                code: ambulance?.code || ambulance?.id || 'AMB-01',
+                type: ambulance?.type || 'ALS',
                 etaMinutes: incident.route?.etaMinutes ?? 4,
                 distanceKm: incident.route?.distanceKm ?? 3.2
             },
@@ -101,7 +106,7 @@ class AIEngine {
             accidentLatitude: incident.latitude || 18.5308,
             accidentLongitude: incident.longitude || 73.8290,
             mapUrl: `https://www.google.com/maps/dir/?api=1&destination=${incident.latitude || 18.5308},${incident.longitude || 73.8290}`,
-            hospitalMapUrl: `https://www.google.com/maps/dir/?api=1&destination=${hospital.lat || 18.5280},${hospital.lng || 73.8720}`,
+            hospitalMapUrl: `https://www.google.com/maps/dir/?api=1&destination=${hospLat},${hospLng}`,
             acknowledged: false
         };
     }
