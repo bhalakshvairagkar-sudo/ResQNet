@@ -1,0 +1,241 @@
+﻿<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Download ResQNet AI — Official Android App</title>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Archivo:wght@600;700;800;900&family=IBM+Plex+Mono:wght@500;600;700&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background: #040811;
+      color: #e2e8f0;
+      font-family: 'Inter', -apple-system, sans-serif;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 24px 16px;
+    }
+    .container {
+      max-width: 480px;
+      width: 100%;
+      background: #0a1120;
+      border: 1px solid #1e293b;
+      border-radius: 20px;
+      padding: 32px 24px;
+      box-shadow: 0 10px 40px rgba(0,0,0,0.6), 0 0 30px rgba(56,189,248,0.1);
+      text-align: center;
+    }
+    .app-icon {
+      width: 80px;
+      height: 80px;
+      background: linear-gradient(135deg, #0284c7, #0f172a);
+      border: 2px solid #38bdf8;
+      border-radius: 20px;
+      margin: 0 auto 18px auto;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 38px;
+      color: #38bdf8;
+      box-shadow: 0 0 25px rgba(56,189,248,0.3);
+    }
+    .brand-title {
+      font-family: 'Archivo', sans-serif;
+      font-size: 26px;
+      font-weight: 900;
+      letter-spacing: 0.05em;
+      color: #fff;
+      margin-bottom: 4px;
+    }
+    .brand-title b { color: #38bdf8; }
+    .brand-sub {
+      font-size: 13px;
+      color: #94a3b8;
+      font-weight: 600;
+      margin-bottom: 20px;
+    }
+    .meta-badges {
+      display: flex;
+      justify-content: center;
+      gap: 8px;
+      flex-wrap: wrap;
+      margin-bottom: 24px;
+    }
+    .badge {
+      background: #0f172a;
+      border: 1px solid #334155;
+      color: #cbd5e1;
+      font-size: 11px;
+      font-weight: 700;
+      padding: 5px 10px;
+      border-radius: 6px;
+      font-family: 'IBM Plex Mono', monospace;
+    }
+    .badge.green { border-color: #10b981; color: #34d399; }
+    .badge.blue { border-color: #0284c7; color: #38bdf8; }
+    .btn-download {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 12px;
+      background: linear-gradient(135deg, #10b981, #059669);
+      color: #fff;
+      text-decoration: none;
+      font-family: 'Archivo', sans-serif;
+      font-size: 16px;
+      font-weight: 900;
+      letter-spacing: 0.05em;
+      padding: 16px 24px;
+      border-radius: 12px;
+      box-shadow: 0 4px 20px rgba(16,185,129,0.4);
+      transition: all 0.2s ease;
+      margin-bottom: 18px;
+    }
+    .btn-download:hover {
+      background: linear-gradient(135deg, #059669, #047857);
+      box-shadow: 0 6px 25px rgba(16,185,129,0.6);
+      transform: translateY(-1px);
+    }
+    .qr-card {
+      background: #060b16;
+      border: 1px solid #1e293b;
+      border-radius: 12px;
+      padding: 16px;
+      margin-top: 18px;
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      text-align: left;
+    }
+    .qr-img {
+      width: 88px;
+      height: 88px;
+      background: #fff;
+      border-radius: 8px;
+      padding: 4px;
+      flex-shrink: 0;
+    }
+    .qr-text {
+      font-size: 11px;
+      color: #94a3b8;
+      line-height: 1.4;
+    }
+    .qr-text b { color: #fff; }
+    .steps {
+      margin-top: 24px;
+      text-align: left;
+      background: #060b16;
+      border: 1px solid #1e293b;
+      border-radius: 12px;
+      padding: 16px;
+    }
+    .steps-title {
+      font-size: 12px;
+      font-weight: 800;
+      color: #38bdf8;
+      margin-bottom: 8px;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+    .step-item {
+      font-size: 11px;
+      color: #cbd5e1;
+      margin-bottom: 6px;
+      display: flex;
+      align-items: flex-start;
+      gap: 8px;
+      line-height: 1.4;
+    }
+    .step-item i { color: #10b981; margin-top: 2px; }
+    .footer-links {
+      margin-top: 20px;
+      display: flex;
+      justify-content: center;
+      gap: 16px;
+      font-size: 11px;
+    }
+    .footer-links a {
+      color: #64748b;
+      text-decoration: none;
+      transition: color 0.15s;
+    }
+    .footer-links a:hover { color: #38bdf8; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="app-icon">
+      <i class="fa-solid fa-shield-heart"></i>
+    </div>
+    <div class="brand-title">RES<b>Q</b>NET AI</div>
+    <div class="brand-sub">Real-Time Autonomous Crash Shield & Emergency Dispatch</div>
+
+    <div class="meta-badges">
+      <span class="badge green"><i class="fa-solid fa-circle-check"></i> v3.4.0 VERIFIED</span>
+      <span class="badge blue"><i class="fa-brands fa-android"></i> ANDROID 8.0+</span>
+      <span class="badge">APK ~16.9 MB</span>
+    </div>
+
+    <!-- Direct Download Button -->
+    <a href="/resqnet.apk" download="ResQNet-v3.4.0.apk" class="btn-download">
+      <i class="fa-solid fa-download"></i> DOWNLOAD ANDROID APP (APK)
+    </a>
+
+    <!-- Direct URL Box for Copying -->
+    <div style="background:#030712;border:1px solid #1e293b;border-radius:8px;padding:8px 12px;font-size:11px;color:#94a3b8;font-family:'IBM Plex Mono',monospace;word-break:break-all;display:flex;align-items:center;justify-content:space-between;gap:8px;">
+      <span id="directUrl">https://resqnet-backend-pyqc.onrender.com/resqnet.apk</span>
+      <button onclick="copyUrl()" style="background:#1e293b;border:none;color:#38bdf8;padding:4px 8px;border-radius:4px;cursor:pointer;font-size:10px;font-weight:700;">COPY</button>
+    </div>
+
+    <!-- Mobile QR Code Scan -->
+    <div class="qr-card">
+      <img src="https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=https://resqnet-backend-pyqc.onrender.com/resqnet.apk" alt="Scan QR code to download" class="qr-img">
+      <div class="qr-text">
+        <b>Scan to Download Directly</b><br>
+        Open your phone's camera to scan this QR code and download the APK installer directly onto your Android device.
+      </div>
+    </div>
+
+    <!-- Install Steps -->
+    <div class="steps">
+      <div class="steps-title"><i class="fa-solid fa-circle-info"></i> How to Install on Android</div>
+      <div class="step-item">
+        <i class="fa-solid fa-check"></i>
+        <span>1. Tap the green <b>Download APK</b> button or scan the QR code.</span>
+      </div>
+      <div class="step-item">
+        <i class="fa-solid fa-check"></i>
+        <span>2. When prompted by Chrome ("File might be harmful"), tap <b>Download anyway</b>.</span>
+      </div>
+      <div class="step-item">
+        <i class="fa-solid fa-check"></i>
+        <span>3. Open the downloaded file from Notifications or Downloads and tap <b>Install</b>.</span>
+      </div>
+      <div class="step-item">
+        <i class="fa-solid fa-check"></i>
+        <span>4. Grant Sensor and Location permissions for continuous 24/7 crash shield protection.</span>
+      </div>
+    </div>
+
+    <div class="footer-links">
+      <a href="/dashboard.html"><i class="fa-solid fa-desktop"></i> Command Center</a>
+      <a href="/login.html"><i class="fa-solid fa-lock"></i> Operations Portal</a>
+      <a href="/sos.html"><i class="fa-solid fa-tower-broadcast"></i> Citizen SOS</a>
+    </div>
+  </div>
+
+  <script>
+    function copyUrl() {
+      const url = document.getElementById('directUrl').textContent;
+      navigator.clipboard.writeText(url).then(() => {
+        alert('Direct APK download link copied to clipboard!');
+      });
+    }
+  </script>
+</body>
+</html>

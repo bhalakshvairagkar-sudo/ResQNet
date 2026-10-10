@@ -133,8 +133,13 @@ class CitizenWebPortalActivity : ComponentActivity() {
         webView.webViewClient = object : WebViewClient() {
             override fun shouldOverrideUrlLoading(view: WebView?, request: WebResourceRequest?): Boolean {
                 val url = request?.url?.toString() ?: return false
+<<<<<<< HEAD
                 // Intercept any redirection to sos.html and open the native MainActivity instead!
                 if (url.contains("sos.html")) {
+=======
+                // Intercept any redirection to sos.html or dashboard and open the native MainActivity (Image 1) instead!
+                if (url.contains("sos.html") || url.contains("dashboard.html")) {
+>>>>>>> c65c78488f66982f29ff94d058197b528026acc0
                     UserSessionManager.setOnboardingCompleted(this@CitizenWebPortalActivity, true)
                     startActivity(Intent(this@CitizenWebPortalActivity, MainActivity::class.java))
                     finish()
@@ -156,7 +161,11 @@ class CitizenWebPortalActivity : ComponentActivity() {
 
     private fun loadPortalUrl() {
         val customUrl = intent.getStringExtra(EXTRA_URL)
+<<<<<<< HEAD
         val targetUrl = customUrl ?: "${ApiClient.getBaseUrl()}login.html?mode=register"
+=======
+        val targetUrl = customUrl ?: ApiClient.getBaseUrl()
+>>>>>>> c65c78488f66982f29ff94d058197b528026acc0
         webView.loadUrl(targetUrl)
     }
 
@@ -180,12 +189,20 @@ class CitizenWebPortalActivity : ComponentActivity() {
                     fullName = fullName,
                     phone = phone,
                     bloodGroup = bloodGroup,
+<<<<<<< HEAD
                     emergencyContact = emergencyContact,
                     isOnboarded = false // Do not mark onboarded yet; medical intake must be completed!
                 )
                 Toast.makeText(this@CitizenWebPortalActivity, "✓ Account Verified! Please complete your Patient Medical Intake.", Toast.LENGTH_SHORT).show()
                 // DO NOT finish() or startActivity(MainActivity) here!
                 // The web page will automatically navigate to /medical-profile.html.
+=======
+                    emergencyContact = emergencyContact
+                )
+                Toast.makeText(this@CitizenWebPortalActivity, "✓ Account Created & Medical Vault Active!", Toast.LENGTH_LONG).show()
+                startActivity(Intent(this@CitizenWebPortalActivity, MainActivity::class.java))
+                finish()
+>>>>>>> c65c78488f66982f29ff94d058197b528026acc0
             }
         }
 
@@ -215,11 +232,17 @@ class CitizenWebPortalActivity : ComponentActivity() {
                     allergies = allergies ?: current.allergies,
                     chronicConditions = conditions ?: current.chronicConditions,
                     medications = medications ?: current.medications,
+<<<<<<< HEAD
                     specialNotes = specialNotes ?: current.specialNotes,
                     isOnboarded = true // Medical profile intake completed!
                 )
                 UserSessionManager.setOnboardingCompleted(this@CitizenWebPortalActivity, true)
                 Toast.makeText(this@CitizenWebPortalActivity, "✓ Medical Emergency Vault Saved & Armed!", Toast.LENGTH_LONG).show()
+=======
+                    specialNotes = specialNotes ?: current.specialNotes
+                )
+                Toast.makeText(this@CitizenWebPortalActivity, "✓ Medical Emergency Vault Saved & Armed!", Toast.LENGTH_SHORT).show()
+>>>>>>> c65c78488f66982f29ff94d058197b528026acc0
                 startActivity(Intent(this@CitizenWebPortalActivity, MainActivity::class.java))
                 finish()
             }

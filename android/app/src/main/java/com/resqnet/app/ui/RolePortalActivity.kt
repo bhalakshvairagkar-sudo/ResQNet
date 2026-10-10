@@ -29,6 +29,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 class RolePortalActivity : ComponentActivity() {
+<<<<<<< HEAD
     companion object {
         const val EXTRA_INITIAL_ROLE = "extra_initial_role"
     }
@@ -36,6 +37,10 @@ class RolePortalActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         val initialRole = intent.getStringExtra(EXTRA_INITIAL_ROLE)
+=======
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+>>>>>>> c65c78488f66982f29ff94d058197b528026acc0
         setContent {
             MaterialTheme(
                 colorScheme = darkColorScheme(
@@ -45,7 +50,10 @@ class RolePortalActivity : ComponentActivity() {
                 )
             ) {
                 Portal(
+<<<<<<< HEAD
                     initialRole = initialRole,
+=======
+>>>>>>> c65c78488f66982f29ff94d058197b528026acc0
                     openMap = { url ->
                         if (!url.isNullOrBlank()) {
                             try {
@@ -73,6 +81,7 @@ class RolePortalActivity : ComponentActivity() {
     }
 }
 
+<<<<<<< HEAD
 data class DemoAmbulanceCredential(
     val id: String,
     val name: String,
@@ -92,6 +101,8 @@ val PUNE_AMBULANCES = listOf(
     DemoAmbulanceCredential("AMB-07", "Ambulance 07 – Hinjewadi IT Depot", "ambulance7", "Amb07@RQN26!", "ALS Tier-1 Trauma Ready", "Hinjewadi IT Depot")
 )
 
+=======
+>>>>>>> c65c78488f66982f29ff94d058197b528026acc0
 data class DemoHospitalCredential(
     val id: String,
     val name: String,
@@ -120,11 +131,15 @@ val PUNE_HOSPITALS = listOf(
 
 @Composable
 private fun Portal(
+<<<<<<< HEAD
     initialRole: String? = null,
+=======
+>>>>>>> c65c78488f66982f29ff94d058197b528026acc0
     openMap: (String?) -> Unit,
     dialPhone: (String?) -> Unit,
     openProtection: () -> Unit
 ) {
+<<<<<<< HEAD
     val defaultAmb = PUNE_AMBULANCES.first()
     val defaultHosp = PUNE_HOSPITALS.first()
 
@@ -155,6 +170,11 @@ private fun Portal(
         )
     }
     var showAmbSheet by remember { mutableStateOf(false) }
+=======
+    var username by remember { mutableStateOf("") }
+    var password by remember { mutableStateOf("") }
+    var selectedHospName by remember { mutableStateOf<String?>(null) }
+>>>>>>> c65c78488f66982f29ff94d058197b528026acc0
     var showHospSheet by remember { mutableStateOf(false) }
     var token by remember { mutableStateOf<String?>(null) }
     var user by remember { mutableStateOf<SessionUser?>(null) }
@@ -263,6 +283,7 @@ private fun Portal(
                     Text("Portal Sign-In", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 16.sp)
                     Spacer(Modifier.height(12.dp))
 
+<<<<<<< HEAD
                     // Role Selection Tabs
                     Row(
                         modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp),
@@ -435,6 +456,67 @@ private fun Portal(
                                                     }
                                                     Text("FILL", color = Color(0xFF34D399), fontSize = 10.sp, fontWeight = FontWeight.ExtraBold)
                                                 }
+=======
+                    // Quick Pune Hospital Auto-Fill Selector
+                    Card(
+                        colors = CardDefaults.cardColors(containerColor = Color(0xFF070C16)),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF1E293B)),
+                        shape = RoundedCornerShape(8.dp),
+                        modifier = Modifier.fillMaxWidth().padding(bottom = 14.dp)
+                    ) {
+                        Column(Modifier.padding(10.dp)) {
+                            Text(
+                                "⚡ QUICK PUNE HOSPITAL LOGIN (15 CENTERS)",
+                                color = Color(0xFF38BDF8),
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.ExtraBold
+                            )
+                            Spacer(Modifier.height(6.dp))
+                            Button(
+                                onClick = { showHospSheet = !showHospSheet },
+                                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1E293B)),
+                                modifier = Modifier.fillMaxWidth(),
+                                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp)
+                            ) {
+                                Text(
+                                    selectedHospName ?: "Select Hospital to Auto-Fill Credentials ▼",
+                                    fontSize = 11.sp,
+                                    color = Color.White,
+                                    maxLines = 1
+                                )
+                            }
+
+                            if (showHospSheet) {
+                                Spacer(Modifier.height(8.dp))
+                                Column(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .heightIn(max = 220.dp)
+                                        .verticalScroll(rememberScrollState())
+                                ) {
+                                    PUNE_HOSPITALS.forEach { h ->
+                                        Surface(
+                                            onClick = {
+                                                username = h.username
+                                                password = h.pass
+                                                selectedHospName = h.name
+                                                showHospSheet = false
+                                            },
+                                            color = if (username == h.username) Color(0xFF0369A1) else Color(0xFF0F172A),
+                                            shape = RoundedCornerShape(6.dp),
+                                            modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp)
+                                        ) {
+                                            Row(
+                                                modifier = Modifier.padding(8.dp),
+                                                horizontalArrangement = Arrangement.SpaceBetween,
+                                                verticalAlignment = Alignment.CenterVertically
+                                            ) {
+                                                Column(modifier = Modifier.weight(1f)) {
+                                                    Text(h.name, color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                                    Text("${h.username} · ${h.traumaLevel}", color = Color(0xFF94A3B8), fontSize = 10.sp)
+                                                }
+                                                Text("FILL", color = Color(0xFF38BDF8), fontSize = 10.sp, fontWeight = FontWeight.ExtraBold)
+>>>>>>> c65c78488f66982f29ff94d058197b528026acc0
                                             }
                                         }
                                     }
@@ -485,7 +567,11 @@ private fun Portal(
                     }
                     Spacer(Modifier.height(10.dp))
                     Text(
+<<<<<<< HEAD
                         "Demo credentials: ambulance1 to ambulance7 (Pass: Amb01@RQN26!) | operator | user1",
+=======
+                        "Demo credentials: ambulance1 / operator / user1",
+>>>>>>> c65c78488f66982f29ff94d058197b528026acc0
                         color = Color(0xFF64748B),
                         fontSize = 11.sp
                     )

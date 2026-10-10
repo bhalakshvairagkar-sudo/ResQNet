@@ -1,0 +1,460 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>ResQNet — Ambulance Operations Portal</title>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Archivo:wght@600;700;800;900&family=IBM+Plex+Mono:wght@500;600;700&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <script src="/socket.io/socket.io.js"></script>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background: #040811;
+      color: #e2e8f0;
+      font-family: 'Inter', -apple-system, sans-serif;
+      min-height: 100vh;
+      padding: 16px;
+    }
+    header {
+      max-width: 1000px;
+      margin: 0 auto 16px auto;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      background: #0a1120;
+      border: 1px solid #1e293b;
+      padding: 14px 20px;
+      border-radius: 12px;
+      box-shadow: 0 4px 20px rgba(0,0,0,0.4);
+    }
+    .brand-title {
+      font-family: 'Archivo', sans-serif;
+      font-size: 20px;
+      font-weight: 900;
+      letter-spacing: 0.08em;
+      color: #fff;
+    }
+    .brand-title b { color: #38bdf8; }
+    .brand-sub {
+      font-size: 11px;
+      color: #64748b;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+    .header-actions {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .btn-logout {
+      background: #1e293b;
+      border: 1px solid #334155;
+      color: #cbd5e1;
+      font-size: 11px;
+      font-weight: 700;
+      padding: 7px 14px;
+      border-radius: 6px;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    .btn-logout:hover { background: #334155; color: #fff; }
+
+    main {
+      max-width: 1000px;
+      margin: 0 auto;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+
+    .card {
+      background: #0b1324;
+      border: 1px solid #1e293b;
+      border-radius: 12px;
+      padding: 18px 20px;
+      box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+    }
+    .card-head {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 14px;
+      border-bottom: 1px solid #1e293b;
+      padding-bottom: 10px;
+    }
+    .card-title {
+      font-size: 12px;
+      font-weight: 800;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: #38bdf8;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .telemetry-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 12px;
+    }
+    .telemetry-item {
+      background: #060b16;
+      border: 1px solid #1e293b;
+      border-radius: 8px;
+      padding: 12px;
+    }
+    .telemetry-item .label {
+      font-size: 10px;
+      font-weight: 700;
+      color: #64748b;
+      text-transform: uppercase;
+      margin-bottom: 4px;
+    }
+    .telemetry-item .val {
+      font-size: 13px;
+      font-weight: 700;
+      color: #fff;
+    }
+
+    /* Alert Card */
+    .alert-card {
+      background: #0c1529;
+      border: 2px solid #ef4444;
+      box-shadow: 0 0 30px rgba(239, 68, 68, 0.25);
+      border-radius: 14px;
+      padding: 20px;
+      margin-bottom: 16px;
+      animation: alertPulse 1.8s infinite alternate;
+    }
+    @keyframes alertPulse {
+      from { border-color: #ef4444; box-shadow: 0 0 15px rgba(239, 68, 68, 0.2); }
+      to { border-color: #f87171; box-shadow: 0 0 30px rgba(239, 68, 68, 0.45); }
+    }
+    .alert-card.accepted {
+      border-color: #10b981;
+      box-shadow: 0 0 25px rgba(16, 185, 129, 0.2);
+      animation: none;
+    }
+
+    .waypoint-card {
+      background: #070d1b;
+      border: 1px solid #1e293b;
+      border-radius: 8px;
+      padding: 12px;
+      margin-bottom: 10px;
+    }
+    .waypoint-head {
+      font-size: 11px;
+      font-weight: 800;
+      text-transform: uppercase;
+      margin-bottom: 4px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .btn-maps {
+      width: 100%;
+      background: #ef4444;
+      color: #fff;
+      border: none;
+      padding: 10px 14px;
+      border-radius: 6px;
+      font-size: 12px;
+      font-weight: 800;
+      text-decoration: none;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      margin-top: 8px;
+      transition: background 0.15s;
+    }
+    .btn-maps:hover { background: #dc2626; }
+    .btn-maps.hosp { background: #10b981; }
+    .btn-maps.hosp:hover { background: #059669; }
+
+    .action-row {
+      display: flex;
+      gap: 10px;
+      margin-top: 14px;
+    }
+    .btn-action {
+      flex: 1;
+      padding: 12px;
+      border: none;
+      border-radius: 8px;
+      font-family: 'Archivo', sans-serif;
+      font-size: 13px;
+      font-weight: 800;
+      letter-spacing: 0.05em;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+    }
+    .btn-accept { background: #10b981; color: #040811; }
+    .btn-accept:hover { background: #059669; color: #fff; }
+    .btn-reject { background: #1e293b; color: #ef4444; border: 1px solid #ef444455; }
+    .btn-reject:hover { background: #ef4444; color: #fff; }
+
+    .empty-state {
+      text-align: center;
+      padding: 40px 20px;
+      color: #64748b;
+    }
+    .empty-state i {
+      font-size: 42px;
+      color: #334155;
+      margin-bottom: 12px;
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <div>
+    <div class="brand-title">RES<b>Q</b>NET <span style="font-size:14px;font-weight:600;color:#94a3b8;">| AMBULANCE OPERATIONS</span></div>
+    <div class="brand-sub" id="unitNameHeader">Loading unit profile…</div>
+  </div>
+  <div class="header-actions">
+    <button class="btn-logout" onclick="logout()"><i class="fa-solid fa-right-from-bracket"></i> LOGOUT</button>
+  </div>
+</header>
+
+<main>
+  <!-- Unit Telemetry Card -->
+  <div class="card">
+    <div class="card-head">
+      <span class="card-title"><i class="fa-solid fa-truck-medical"></i> Unit Telemetry & Operational State</span>
+      <span style="font-size:11px;color:#94a3b8;font-family:'IBM Plex Mono',monospace;" id="unitIdBadge">AMB-01</span>
+    </div>
+    <div class="telemetry-grid">
+      <div class="telemetry-item">
+        <div class="label">Operating Status</div>
+        <div class="val" style="color:#4ade80;" id="valStatus">AVAILABLE</div>
+      </div>
+      <div class="telemetry-item">
+        <div class="label">Unit Capability</div>
+        <div class="val" style="color:#38bdf8;" id="valType">ALS Tier-1 Trauma Ready</div>
+      </div>
+      <div class="telemetry-item">
+        <div class="label">Current Unit GPS</div>
+        <div class="val mono" style="font-size:11px;" id="valGps">18.5300, 73.8400</div>
+      </div>
+      <div class="telemetry-item">
+        <div class="label">Active Mission</div>
+        <div class="val" style="color:#f59e0b;" id="valMission">Standby</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Dispatch Alerts Container -->
+  <section id="alertsContainer"></section>
+</main>
+
+<script>
+  const token = localStorage.resqnetToken;
+  const user = JSON.parse(localStorage.resqnetUser || 'null');
+  const H = { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' };
+
+  if (!user || user.role !== 'AMBULANCE') {
+    location.href = '/login.html';
+  }
+
+  const socket = io({ auth: { token } });
+  const esc = x => String(x ?? 'NOT PROVIDED');
+
+  async function loadUnit() {
+    try {
+      const res = await fetch('/api/ambulances/' + (user.resourceId || 'AMB-01'), { headers: H });
+      if (res.ok) {
+        const u = await res.json();
+        document.getElementById('unitNameHeader').textContent = `${u.code || u.id} · ${u.type || 'ALS'} Unit`;
+        document.getElementById('unitIdBadge').textContent = u.id;
+        document.getElementById('valStatus').textContent = u.status || 'AVAILABLE';
+        document.getElementById('valType').textContent = u.type === 'ALS' ? 'ALS Tier-1 Trauma Ready' : 'BLS Emergency Unit';
+        document.getElementById('valGps').textContent = `${Number(u.lat).toFixed(4)}, ${Number(u.lng).toFixed(4)}`;
+        document.getElementById('valMission').textContent = u.currentIncidentId || 'Standby';
+      }
+    } catch (e) {}
+  }
+
+  let activeAlertsMap = new Map();
+
+  async function loadPendingAlerts() {
+    try {
+      const res = await fetch('/api/incidents/alerts/pending', { headers: H });
+      if (res.ok) {
+        const list = await res.json();
+        if (Array.isArray(list)) {
+          list.forEach(a => activeAlertsMap.set(a.incidentId || a.id, a));
+          renderAlerts();
+        }
+      }
+    } catch (e) {}
+  }
+
+  function renderAlerts() {
+    const container = document.getElementById('alertsContainer');
+    const alerts = Array.from(activeAlertsMap.values()).filter(a => a.status !== 'RESOLVED');
+
+    if (alerts.length === 0) {
+      container.innerHTML = `
+        <div class="card empty-state">
+          <i class="fa-solid fa-circle-check" style="color:#10b981;"></i>
+          <h3 style="color:#fff;margin-bottom:6px;">Unit Available & Standing By</h3>
+          <p>Zero active emergency dispatches. Emergency alerts with dual-GPS navigation will appear instantly upon crash trigger.</p>
+        </div>`;
+      return;
+    }
+
+    container.innerHTML = alerts.map(a => {
+      const isAccepted = a.accepted === true || a.status === 'EN_ROUTE';
+      const prof = a.patientProfile || {};
+      const blood = prof.bloodGroup || 'O+ POSITIVE';
+      const patName = prof.fullName || 'Citizen Patient';
+      const allergies = (prof.allergies && prof.allergies.length > 0) ? prof.allergies.join(', ') : 'None Reported';
+      const icePhone = prof.primaryContact?.phone || '+91 98220 12345';
+      const sceneMap = a.mapUrl || `https://www.google.com/maps/dir/?api=1&destination=${a.accidentLatitude || 18.5308},${a.accidentLongitude || 73.8290}`;
+      const hospMap = a.hospitalMapUrl || `https://www.google.com/maps/dir/?api=1&destination=${a.hospitalLatitude || 18.5280},${a.hospitalLongitude || 73.8720}`;
+
+      return `
+        <div class="alert-card ${isAccepted ? 'accepted' : ''}" id="alert-${a.incidentId || a.id}">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+            <div style="font-size:13px;font-weight:900;color:#ef4444;">
+              <i class="fa-solid fa-triangle-exclamation"></i> 🚨 EMERGENCY DISPATCH (PRIORITY 1)
+            </div>
+            <span style="font-size:11px;color:#cbd5e1;font-weight:700;font-family:'IBM Plex Mono',monospace;">Incident ${a.incidentId || a.id}</span>
+          </div>
+
+          <!-- Dual Waypoint 1: Patient Scene -->
+          <div class="waypoint-card">
+            <div class="waypoint-head" style="color:#ef4444;">
+              <i class="fa-solid fa-location-dot"></i> WAYPOINT 1: PATIENT CRASH SCENE
+            </div>
+            <div style="font-size:12px;color:#fff;font-weight:700;">${esc(a.helpMessage || 'High-Impact Road Collision')}</div>
+            <div style="font-size:11px;color:#94a3b8;margin-top:2px;">
+              Scene GPS: <span class="mono">${a.accidentLatitude || 18.5308}, ${a.accidentLongitude || 73.8290}</span> · ETA: <b style="color:#f59e0b;">${a.etaMinutes || 4} MIN</b> (${a.distanceKm || 3.2} km)
+            </div>
+            <a href="${sceneMap}" target="_blank" class="btn-maps">
+              <i class="fa-solid fa-diamond-turn-right"></i> NAVIGATE TO PATIENT SCENE (GOOGLE MAPS)
+            </a>
+          </div>
+
+          <!-- Dual Waypoint 2: Hospital -->
+          <div class="waypoint-card">
+            <div class="waypoint-head" style="color:#10b981;">
+              <i class="fa-solid fa-hospital"></i> WAYPOINT 2: DESTINATION TRAUMA CENTER
+            </div>
+            <div style="font-size:12px;color:#fff;font-weight:700;">${esc(a.destinationHospital || a.assignedHospital || 'Sassoon General Hospital / BJGMC')}</div>
+            <div style="font-size:11px;color:#94a3b8;margin-top:2px;">
+              Level 1 Trauma Bay · Emergency Phone: <a href="tel:${a.hospitalPhone || '+912026128000'}" style="color:#38bdf8;">${a.hospitalPhone || '+91 20 2612 8000'}</a>
+            </div>
+            <a href="${hospMap}" target="_blank" class="btn-maps hosp">
+              <i class="fa-solid fa-hospital-user"></i> NAVIGATE TO HOSPITAL BAY (GOOGLE MAPS)
+            </a>
+          </div>
+
+          <!-- Patient Profile Snapshot -->
+          <div style="background:#060b16;border:1px solid #1e293b;border-radius:8px;padding:10px;margin-top:10px;font-size:11px;">
+            <div style="display:flex;justify-content:space-between;align-items:center;">
+              <span style="font-weight:800;color:#38bdf8;">PATIENT CLINICAL SNAPSHOT: ${esc(patName)}</span>
+              <span style="background:#dc2626;color:#fff;padding:2px 6px;border-radius:4px;font-weight:900;">BLOOD: ${blood}</span>
+            </div>
+            <div style="color:#cbd5e1;margin-top:4px;">⚠️ Allergies: <b style="color:#fca5a5;">${allergies}</b> | ICE: <a href="tel:${icePhone}" style="color:#38bdf8;font-weight:700;">${icePhone}</a></div>
+          </div>
+
+          <!-- Actions -->
+          ${!isAccepted ? `
+            <div class="action-row">
+              <button class="btn-action btn-accept" onclick="acceptDispatch('${a.incidentId || a.id}')">
+                <i class="fa-solid fa-check"></i> ACCEPT DISPATCH & EN ROUTE
+              </button>
+              <button class="btn-action btn-reject" onclick="rejectDispatch('${a.incidentId || a.id}')">
+                <i class="fa-solid fa-xmark"></i> REJECT
+              </button>
+            </div>
+          ` : `
+            <div style="background:#064e3b;border:1px solid #10b981;color:#a7f3d0;padding:10px;border-radius:6px;font-size:12px;font-weight:800;text-align:center;margin-top:12px;">
+              <i class="fa-solid fa-truck-fast"></i> UNIT EN ROUTE TO EMERGENCY · DUAL LIVE GPS ENGAGED
+            </div>
+          `}
+        </div>
+      `;
+    }).join('');
+  }
+
+  async function acceptDispatch(incId) {
+    try {
+      const res = await fetch(`/api/incidents/${incId}/accept`, {
+        method: 'POST',
+        headers: H,
+        body: JSON.stringify({ ambulanceId: user.resourceId })
+      });
+      if (res.ok) {
+        if (activeAlertsMap.has(incId)) {
+          const item = activeAlertsMap.get(incId);
+          item.accepted = true;
+          item.status = 'EN_ROUTE';
+          activeAlertsMap.set(incId, item);
+          renderAlerts();
+        }
+        loadUnit();
+      }
+    } catch (e) {
+      alert('Accept failed: ' + e.message);
+    }
+  }
+
+  async function rejectDispatch(incId) {
+    const reason = prompt('Enter rejection reason (e.g. Unit mechanical delay, heavy traffic blockage):');
+    if (!reason) return;
+    try {
+      const res = await fetch(`/api/incidents/${incId}/reject`, {
+        method: 'POST',
+        headers: H,
+        body: JSON.stringify({ ambulanceId: user.resourceId, reason })
+      });
+      if (res.ok) {
+        activeAlertsMap.delete(incId);
+        renderAlerts();
+        loadUnit();
+      }
+    } catch (e) {
+      alert('Reject failed: ' + e.message);
+    }
+  }
+
+  function logout() {
+    localStorage.clear();
+    location.href = '/login.html';
+  }
+
+  socket.on('ambulance:alert', a => {
+    if (a) {
+      activeAlertsMap.set(a.incidentId || a.id, a);
+      renderAlerts();
+    }
+  });
+  socket.on('incident:new', loadPendingAlerts);
+  socket.on('incident:update', inc => {
+    if (activeAlertsMap.has(inc.incidentId || inc.id)) {
+      const item = activeAlertsMap.get(inc.incidentId || inc.id);
+      Object.assign(item, inc);
+      renderAlerts();
+    }
+  });
+  socket.on('ambulance:location:update', loadUnit);
+
+  loadUnit();
+  loadPendingAlerts();
+  setInterval(loadPendingAlerts, 4000);
+</script>
+</body>
+</html>

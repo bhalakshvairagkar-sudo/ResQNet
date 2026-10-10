@@ -12,6 +12,28 @@
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
 <script src="/js/config.js"></script>
+<<<<<<< HEAD
+=======
+<script>
+  (function() {
+    const key = (window.RESQNET_CONFIG && window.RESQNET_CONFIG.GOOGLE_MAPS_KEY) || localStorage.getItem('GOOGLE_MAPS_API_KEY') || '';
+    const script = document.createElement('script');
+    script.src = `https://maps.googleapis.com/maps/api/js?key=${key}&libraries=geometry,places`;
+    script.async = true;
+    script.defer = true;
+    script.onerror = function() {
+      console.warn('[ResQNet] Google Maps JS API failed to load, defaulting to Leaflet.');
+      window.googleMapsFailed = true;
+      if (typeof window.onGoogleMapsReady === 'function') window.onGoogleMapsReady(false);
+    };
+    script.onload = function() {
+      window.googleMapsLoaded = true;
+      if (typeof window.onGoogleMapsReady === 'function') window.onGoogleMapsReady(true);
+    };
+    document.head.appendChild(script);
+  })();
+</script>
+>>>>>>> c65c78488f66982f29ff94d058197b528026acc0
 </head>
 <body>
 
@@ -25,6 +47,7 @@
     <div class="tagline">CAMERA <b>OPTIONAL</b>. RESPONSE INTELLIGENCE ALWAYS.</div>
   </div>
 
+<<<<<<< HEAD
   <div class="header-right">
     <button class="pill" id="healthBtn" data-testid="system-health-button" aria-haspopup="true" aria-expanded="false">
       <span class="dot live online" id="dotSystem"></span><span id="systemLabel">SYSTEM OPERATIONAL</span>
@@ -113,6 +136,154 @@
       <div class="list" id="incidentList" data-testid="incident-list"></div>
     </div>
 
+=======
+  <div class="nav-links" style="display:flex;gap:6px;margin:0 12px">
+    <a href="/dashboard.html" class="pill on" style="background:#38BDF8;color:#000;border-color:#38BDF8;text-decoration:none"><i class="fa-solid fa-map-location-dot"></i> COMMAND</a>
+    <a href="/analytics.html" class="pill" style="text-decoration:none"><i class="fa-solid fa-chart-pie"></i> ANALYTICS</a>
+    <a href="/download.html" class="pill" style="background:#064e3b;border-color:#10b981;color:#34d399;text-decoration:none"><i class="fa-brands fa-android"></i> ANDROID APP</a>
+  </div>
+
+  <div class="header-right">
+    <button class="pill" id="healthBtn" data-testid="system-health-button" aria-haspopup="true" aria-expanded="false">
+      <span class="dot live online" id="dotSystem"></span><span id="systemLabel">SYSTEM OPERATIONAL</span>
+    </button>
+    <button class="pill demo" id="demoBtn" data-testid="demo-mode-button">
+      <i class="fa-solid fa-bolt"></i> <span id="demoBtnLabel">DEMO MODE</span>
+    </button>
+    <span class="pill ghost clock" id="clock" data-testid="clock">--:--:--</span>
+  </div>
+
+  <div class="popover" id="healthPopover" data-testid="system-health-popover" role="dialog" aria-label="System health">
+    <h4>SYSTEM HEALTH</h4>
+    <div class="health-row"><span>Backend API</span><span class="val"><span class="dot online" id="hBackend"></span><i id="tBackend">ONLINE</i></span></div>
+    <div class="health-row"><span>Socket.IO</span><span class="val"><span class="dot online" id="hSocket"></span><i id="tSocket">ONLINE</i></span></div>
+    <div class="health-row"><span>Database</span><span class="val"><span class="dot online" id="hDb"></span><i id="tDb">ONLINE</i></span></div>
+    <div class="health-row"><span>AI Engine</span><span class="val"><span class="dot online" id="hAi"></span><i id="tAi">ONLINE</i></span></div>
+    <div class="health-row"><span>Routing (OSRM)</span><span class="val"><span class="dot online" id="hRouting"></span><i id="tRouting">ONLINE</i></span></div>
+    <p class="note" id="healthNote">Statuses are reported by <span class="mono">GET /api/health</span> and live probes. Components that do not report are shown as UNKNOWN — never assumed online.</p>
+  </div>
+</header>
+
+<section class="kpis" aria-label="Operational key metrics">
+  <div class="kpi"><div><div class="kpi-label">ACTIVE INCIDENTS</div><div class="kpi-value" id="kpiActive" data-testid="kpi-active">0</div><div class="kpi-tag" id="kpiActiveTag">LIVE DATA</div></div><i class="fa-solid fa-triangle-exclamation" style="color:var(--red)"></i></div>
+  <div class="kpi"><div><div class="kpi-label">CRITICAL</div><div class="kpi-value" id="kpiCritical" data-testid="kpi-critical" style="color:var(--red)">0</div><div class="kpi-tag">SEVERITY ≥ 76</div></div><i class="fa-solid fa-radiation" style="color:var(--red)"></i></div>
+  <div class="kpi"><div><div class="kpi-label">AMBULANCES AVAILABLE</div><div class="kpi-value" id="kpiAmbAvail" data-testid="kpi-amb-available" style="color:var(--green)">5</div><div class="kpi-tag">DEMO FLEET</div></div><i class="fa-solid fa-truck-medical" style="color:var(--green)"></i></div>
+  <div class="kpi"><div><div class="kpi-label">AMBULANCES EN ROUTE</div><div class="kpi-value" id="kpiAmbRoute" data-testid="kpi-amb-enroute" style="color:var(--orange)">0</div><div class="kpi-tag">DEMO FLEET</div></div><i class="fa-solid fa-route" style="color:var(--orange)"></i></div>
+  <div class="kpi"><div><div class="kpi-label">HOSPITALS AVAILABLE</div><div class="kpi-value" id="kpiHosp" data-testid="kpi-hospitals" style="color:var(--blue)">4</div><div class="kpi-tag">DEMO REGISTRY</div></div><i class="fa-solid fa-hospital" style="color:var(--blue)"></i></div>
+  <div class="kpi"><div><div class="kpi-label">AVG RESPONSE ETA</div><div class="kpi-value" id="kpiEta" data-testid="kpi-avg-eta">—</div><div class="kpi-tag" id="kpiEtaTag">NO DISPATCHES</div></div><i class="fa-solid fa-stopwatch" style="color:var(--yellow)"></i></div>
+</section>
+
+<div id="main">
+  <div id="mapWrap">
+    <div id="map" data-testid="map"></div>
+    <div id="mapTileErrorBanner" class="map-tile-banner" style="display:none">
+      <i class="fa-solid fa-triangle-exclamation"></i> <span>MAP TILES UNAVAILABLE — OPERATING IN ACTIVE OVERLAY MODE</span>
+    </div>
+
+    <div class="map-topbar">
+      <!-- CLUSTER 1: MAP PROVIDER SELECTOR -->
+      <div class="ctrl-group">
+        <label for="mapStyleSelect" class="sr-only">Map View Style</label>
+        <select id="mapStyleSelect" class="mselect" data-testid="map-style-select" title="Change Map Provider / Style">
+          <option value="google_dark" selected>🗺️ Google Maps (Dark + Live Traffic)</option>
+          <option value="google_roadmap">🛣️ Google Maps (Roads + Live Traffic)</option>
+          <option value="google_satellite">🛰️ Google Satellite</option>
+          <option value="google_hybrid">🛰️ Google Hybrid (Sat+Roads)</option>
+          <option value="google_terrain">⛰️ Google Terrain</option>
+          <option value="dark">🗺️ Leaflet Dark Matter</option>
+          <option value="standard">🛣️ Leaflet Standard Roads</option>
+          <option value="satellite">🛰️ Leaflet Satellite Esri</option>
+        </select>
+      </div>
+
+      <!-- CLUSTER 2: OPERATIONAL LAYER TOGGLES -->
+      <div class="ctrl-group">
+        <button class="mbtn on" data-layer="incidents" data-testid="layer-incidents" title="Toggle Emergency Incidents"><i class="fa-solid fa-triangle-exclamation"></i> INCIDENTS</button>
+        <button class="mbtn on" data-layer="ambulances" data-testid="layer-ambulances" title="Toggle Ambulance Fleet"><i class="fa-solid fa-truck-medical"></i> FLEET</button>
+        <button class="mbtn on" data-layer="hospitals" data-testid="layer-hospitals" title="Toggle Trauma Hospitals"><i class="fa-solid fa-hospital"></i> HOSPITALS</button>
+        <button class="mbtn on" data-layer="routes" data-testid="layer-routes" title="Toggle 2-Leg OSRM Routes"><i class="fa-solid fa-route"></i> ROUTES</button>
+        <button class="mbtn on" data-layer="cctv" data-testid="layer-cctv" title="Toggle CCTV Cameras & Detection Cones"><i class="fa-solid fa-video"></i> CCTV</button>
+        <button class="mbtn on" data-layer="hotspots" data-testid="layer-hotspots" title="Toggle Crash Blackspots"><i class="fa-solid fa-fire"></i> BLACKSPOTS</button>
+        <button class="mbtn on" data-layer="traffic" data-testid="layer-traffic" title="Toggle Real-Time Traffic Layer"><i class="fa-solid fa-car"></i> TRAFFIC</button>
+      </div>
+
+      <span class="map-spacer"></span>
+
+      <!-- CLUSTER 3: OPERATIONAL CAMERA & VIEW TOOLS -->
+      <div class="ctrl-group">
+        <button class="mbtn" id="fitAllBtn" data-testid="fit-all-button" title="Fit all active map entities"><i class="fa-solid fa-expand"></i> FIT ALL</button>
+        <button class="mbtn" id="focusIncBtn" data-testid="focus-incident-button" title="Focus Selected Incident Response"><i class="fa-solid fa-crosshairs"></i> FOCUS</button>
+        <button class="mbtn" id="fitFleetBtn" data-testid="fit-fleet-button" title="Fit Ambulance Fleet"><i class="fa-solid fa-truck"></i> FLEET</button>
+        <button class="mbtn icon-only" id="fullScreenBtn" data-testid="fullscreen-button" title="Toggle Fullscreen Map"><i class="fa-solid fa-up-right-and-down-left-from-center"></i></button>
+        <button class="mbtn icon-only" id="legendToggleBtn" data-testid="legend-toggle-button" title="Toggle Tactical Legend"><i class="fa-solid fa-list"></i></button>
+      </div>
+    </div>
+
+    <!-- ENHANCED TACTICAL MAP LEGEND -->
+    <div class="legend" id="mapLegend" aria-label="Map Legend">
+      <div class="legend-header">
+        <h5>TACTICAL MAP LEGEND</h5>
+        <button id="closeLegendBtn" class="close-btn" aria-label="Close Legend">&times;</button>
+      </div>
+      <div class="legend-section">
+        <div class="legend-subtitle">INCIDENTS</div>
+        <div><span class="lg lg-pulse" style="background:var(--red)"></span> Critical (Severity ≥ 75)</div>
+        <div><span class="lg" style="background:var(--orange)"></span> High (Severity 50–74)</div>
+        <div><span class="lg" style="background:var(--yellow)"></span> Medium (Severity 25–49)</div>
+        <div><span class="lg" style="background:var(--green)"></span> Low (Severity &lt; 25)</div>
+      </div>
+      <div class="legend-section">
+        <div class="legend-subtitle">FLEET & INFRASTRUCTURE</div>
+        <div><span class="lg sq" style="background:var(--green)"></span> Ambulance Available</div>
+        <div><span class="lg sq" style="background:var(--orange)"></span> Ambulance En-Route</div>
+        <div><span class="lg sq" style="background:var(--blue)"></span> Selected Trauma Hospital</div>
+        <div><span class="lg sq" style="background:var(--text-3)"></span> Alternative Hospital</div>
+        <div><span class="lg dot-cctv"></span> CCTV Camera (AI Optical)</div>
+        <div><span class="lg zone-cctv"></span> CCTV Field of View (FOV)</div>
+        <div><span class="lg zone-hotspot"></span> Crash Blackspot Hotspot</div>
+      </div>
+      <div class="legend-section">
+        <div class="legend-subtitle">ROUTING</div>
+        <div><span class="lg line" style="background:var(--orange)"></span> Primary OSRM Road Route</div>
+        <div><span class="lg line-dash" style="background:var(--blue)"></span> Alternative Route</div>
+        <div><span class="lg line-dash" style="background:var(--red)"></span> ⚠ Degraded Fallback</div>
+      </div>
+    </div>
+  </div>
+
+  <aside id="sidebar">
+    <div class="tabs" role="tablist">
+      <button class="tab active" id="tabIncidents" data-testid="tab-incidents" role="tab">INCIDENTS (<span id="sidebarCount">0</span>)</button>
+      <button class="tab" id="tabFeed" data-testid="tab-feed" role="tab">LIVE ACTIVITY</button>
+    </div>
+
+    <div id="viewIncidents" style="display:flex;flex-direction:column;flex:1;min-height:0">
+      <div class="filters">
+        <div class="search">
+          <i class="fa-solid fa-magnifying-glass"></i>
+          <input id="searchInput" data-testid="search-input" placeholder="Search incident ID, type, source, status…" aria-label="Search incidents" />
+        </div>
+        <div class="chips-label">SEVERITY</div>
+        <div class="chips" id="sevChips">
+          <button class="chip on" data-sev="ALL" data-testid="filter-all">ALL</button>
+          <button class="chip" data-sev="CRITICAL" data-testid="filter-critical">🔴 CRITICAL</button>
+          <button class="chip" data-sev="HIGH" data-testid="filter-high">🟠 HIGH</button>
+          <button class="chip" data-sev="MEDIUM" data-testid="filter-medium">🟡 MEDIUM</button>
+          <button class="chip" data-sev="LOW" data-testid="filter-low">🟢 LOW</button>
+        </div>
+        <div class="chips-label">DETECTION SOURCE</div>
+        <div class="chips" id="srcChips">
+          <button class="chip on" data-src="ALL" data-testid="filter-src-all">ALL</button>
+          <button class="chip" data-src="smartphone" data-testid="filter-src-smartphone">SMARTPHONE</button>
+          <button class="chip" data-src="cctv" data-testid="filter-src-cctv">CCTV</button>
+          <button class="chip" data-src="citizen" data-testid="filter-src-citizen">CITIZEN</button>
+          <button class="chip" data-src="iot" data-testid="filter-src-iot">IOT</button>
+        </div>
+      </div>
+      <div class="list" id="incidentList" data-testid="incident-list"></div>
+    </div>
+
+>>>>>>> c65c78488f66982f29ff94d058197b528026acc0
     <div id="viewFeed" style="display:none;flex:1;min-height:0;flex-direction:column">
       <div class="feed" id="activityFeed" data-testid="activity-feed"></div>
     </div>
@@ -126,8 +297,16 @@
         <span class="sub" id="panelSub" data-testid="panel-subtitle">no incident selected</span>
       </div>
       <div class="panel-acts">
+<<<<<<< HEAD
         <button class="pbtn" id="btnCenter" data-testid="panel-center-button"><i class="fa-solid fa-crosshairs"></i> CENTER INCIDENT</button>
         <button class="pbtn" id="btnRoute" data-testid="panel-route-button"><i class="fa-solid fa-route"></i> SHOW ROUTE</button>
+=======
+        <button class="pbtn" id="btnCenter" data-testid="panel-center-button"><i class="fa-solid fa-crosshairs"></i> FOCUS</button>
+        <button class="pbtn" id="btnRoute" data-testid="panel-route-button"><i class="fa-solid fa-route"></i> ROUTE</button>
+        <button class="pbtn primary" id="btnDispatch" data-testid="panel-dispatch-button" style="color:var(--orange);border-color:var(--orange)"><i class="fa-solid fa-truck-fast"></i> DISPATCH</button>
+        <button class="pbtn" id="btnFailover" data-testid="panel-failover-button" style="color:var(--yellow);border-color:var(--yellow)"><i class="fa-solid fa-arrows-rotate"></i> FAILOVER</button>
+        <button class="pbtn" id="btnResolve" data-testid="panel-resolve-button" style="color:var(--green);border-color:var(--green)"><i class="fa-solid fa-check"></i> RESOLVE</button>
+>>>>>>> c65c78488f66982f29ff94d058197b528026acc0
         <button class="pbtn" id="btnCollapse" data-testid="panel-toggle-button" aria-label="Toggle panel"><i class="fa-solid fa-chevron-up" id="collapseIcon"></i></button>
       </div>
     </div>
@@ -199,6 +378,18 @@
       <button class="x" id="demoClose" data-testid="demo-close" aria-label="Close">✕</button>
     </div>
     <p>Every simulated event below is written to the backend flagged <span class="mono">isDemo</span> and is labelled DEMO across the UI. Routes use real OSRM road geometry; ambulance and hospital fleets are demo assets.</p>
+<<<<<<< HEAD
+=======
+    <div id="testModePanel" class="test-mode-panel" data-testid="test-mode-panel">
+      <div class="flowline"><span class="f"></span> SECURED COMMAND CENTER TEST MODE <span class="f"></span></div>
+      <p class="test-note">DEMO / TEST MODE — updates real demo fleet records and uses the same emergency dispatch pipeline as an incoming incident.</p>
+      <div class="test-grid">
+        <form id="testAmbulanceForm" class="test-form"><h4>TEST AMBULANCE LOCATION</h4><select id="testAmbulanceId"></select><input id="testAmbLat" type="number" step="any" placeholder="Latitude" required><input id="testAmbLng" type="number" step="any" placeholder="Longitude" required><select id="testAmbStatus"><option>AVAILABLE</option><option>UNAVAILABLE</option><option>OFFLINE</option></select><button class="pbtn" type="button" data-center="amb">USE MAP CENTER</button><button class="pbtn primary" type="submit">UPDATE LOCATION</button></form>
+        <form id="testHospitalForm" class="test-form"><h4>TEST HOSPITAL LOCATION</h4><select id="testHospitalId"></select><input id="testHospLat" type="number" step="any" placeholder="Latitude" required><input id="testHospLng" type="number" step="any" placeholder="Longitude" required><select id="testHospStatus"><option value="AVAILABLE">OPERATIONAL</option><option>LIMITED</option><option>OFFLINE</option></select><button class="pbtn" type="button" data-center="hosp">USE MAP CENTER</button><button class="pbtn primary" type="submit">UPDATE LOCATION</button></form>
+        <form id="testIncidentForm" class="test-form test-incident"><h4>CREATE TEST ACCIDENT</h4><input id="testIncLat" type="number" step="any" placeholder="Latitude" required><input id="testIncLng" type="number" step="any" placeholder="Longitude" required><select id="testSeverity"><option value="20">LOW</option><option value="45">MEDIUM</option><option value="65">HIGH</option><option value="90" selected>CRITICAL</option></select><input id="testPatients" type="number" min="1" placeholder="Patient count (optional)"><input id="testGForce" type="number" min="0" step="any" placeholder="Peak G-force (optional)"><select id="testAccidentType"><option>ROAD ACCIDENT</option><option>COLLISION</option><option>OTHER</option></select><textarea id="testHelpMessage" placeholder="Custom help message (optional)"></textarea><button class="pbtn" type="button" data-center="inc">USE MAP CENTER</button><button class="pbtn primary" type="submit">CREATE EMERGENCY</button></form>
+      </div><div id="testModeResult" class="test-result" aria-live="polite"></div>
+    </div>
+>>>>>>> c65c78488f66982f29ff94d058197b528026acc0
     <button class="dbtn" id="demoSmartphone" data-testid="demo-smartphone">
       <div><div class="t"><i class="fa-solid fa-mobile-screen" style="color:var(--blue)"></i> SMARTPHONE CRASH</div><div class="s">No CCTV in the area — IMU + acoustic signature</div></div>
       <i class="fa-solid fa-arrow-right" style="color:var(--text-3)"></i>
@@ -219,6 +410,13 @@
   </div>
 </div>
 
+<<<<<<< HEAD
+=======
+<style>
+.test-mode-panel{border-top:1px solid var(--border);margin-top:14px;padding-top:4px}.test-note{font-size:9.5px!important;margin:6px 0 10px!important;color:var(--orange)!important}.test-grid{display:grid;grid-template-columns:1fr 1fr;gap:9px}.test-form{display:flex;flex-wrap:wrap;gap:6px;padding:9px;background:var(--bg-inset);border:1px solid var(--border);border-radius:7px}.test-form h4{width:100%;font-size:9px;letter-spacing:.11em;color:var(--blue);margin:0 0 2px}.test-form input,.test-form select,.test-form textarea{min-width:0;flex:1 1 42%;box-sizing:border-box;background:var(--bg-card);border:1px solid var(--border-bright);border-radius:4px;color:var(--text);padding:6px;font:10px var(--font-mono)}.test-form textarea{flex-basis:100%;resize:vertical;min-height:38px}.test-form button{flex:1 1 42%;justify-content:center}.test-incident{grid-column:1/-1}.test-result{font:10px var(--font-mono);color:var(--green);margin:8px 0 2px;min-height:13px}@media(max-width:650px){.test-grid{grid-template-columns:1fr}}
+</style>
+
+>>>>>>> c65c78488f66982f29ff94d058197b528026acc0
 <script src="/js/app.js"></script>
 </body>
 </html>

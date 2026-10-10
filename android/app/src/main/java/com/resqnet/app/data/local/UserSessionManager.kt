@@ -61,10 +61,17 @@ object UserSessionManager {
         allergies: String? = null,
         chronicConditions: String? = null,
         medications: String? = null,
+<<<<<<< HEAD
         specialNotes: String? = null,
         isOnboarded: Boolean = false
     ) {
         val editor = getPrefs(context).edit()
+=======
+        specialNotes: String? = null
+    ) {
+        getPrefs(context).edit()
+            .putBoolean(KEY_ONBOARDING_COMPLETED, true)
+>>>>>>> c65c78488f66982f29ff94d058197b528026acc0
             .putString(KEY_AUTH_TOKEN, token)
             .putString(KEY_USERNAME, username)
             .putString(KEY_ROLE, role)
@@ -77,10 +84,14 @@ object UserSessionManager {
             .putString(KEY_CONDITIONS, chronicConditions)
             .putString(KEY_MEDICATIONS, medications)
             .putString(KEY_SPECIAL_NOTES, specialNotes)
+<<<<<<< HEAD
         if (isOnboarded) {
             editor.putBoolean(KEY_ONBOARDING_COMPLETED, true)
         }
         editor.apply()
+=======
+            .apply()
+>>>>>>> c65c78488f66982f29ff94d058197b528026acc0
     }
 
     fun getAuthToken(context: Context): String? {
