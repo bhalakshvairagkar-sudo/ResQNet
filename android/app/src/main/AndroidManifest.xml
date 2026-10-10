@@ -33,23 +33,23 @@
         android:roundIcon="@mipmap/ic_launcher_round"
         android:label="ResQNet"
         android:supportsRtl="true"
+        android:usesCleartextTraffic="true"
         android:theme="@style/Theme.ResQNet">
 
-        <!-- 1. App Entry Router: Determines 1st-time (Image 2) vs Returning User (Image 1) -->
+        <!-- 1. Main Live Sensor Cadence & Crash Detection Shield (Direct Native App) -->
         <activity
-            android:name=".ui.SplashActivity"
-            android:exported="true"
-            android:theme="@android:style/Theme.NoDisplay">
+            android:name=".ui.MainActivity"
+            android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
 
-        <!-- 2. Main Live Sensor Cadence & Crash Detection Shield (Image 1 - as original) -->
+        <!-- Splash Activity (Optional Entry Point) -->
         <activity
-            android:name=".ui.MainActivity"
-            android:exported="true" />
+            android:name=".ui.SplashActivity"
+            android:exported="false" />
 
         <!-- 3. Citizen Registration & Medical Details Form (Image 2 - 1st time for new user) -->
         <activity

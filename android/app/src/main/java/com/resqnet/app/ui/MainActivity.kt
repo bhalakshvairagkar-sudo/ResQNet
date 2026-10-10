@@ -79,12 +79,23 @@ class MainActivity : ComponentActivity(), SensorEventListener {
     private lateinit var locationManager: AppLocationManager
     private lateinit var networkMonitor: NetworkMonitor
 
+    private fun hasLocationPermission(): Boolean {
+        return androidx.core.content.ContextCompat.checkSelfPermission(
+            this, Manifest.permission.ACCESS_FINE_LOCATION
+        ) == android.content.pm.PackageManager.PERMISSION_GRANTED ||
+        androidx.core.content.ContextCompat.checkSelfPermission(
+            this, Manifest.permission.ACCESS_COARSE_LOCATION
+        ) == android.content.pm.PackageManager.PERMISSION_GRANTED
+    }
+
     private val permissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
     ) { permissions ->
         val fineLocationGranted = permissions[Manifest.permission.ACCESS_FINE_LOCATION] ?: false
-        if (fineLocationGranted) {
-            Toast.makeText(this, "GPS Location Access Granted", Toast.LENGTH_SHORT).show()
+        val coarseLocationGranted = permissions[Manifest.permission.ACCESS_COARSE_LOCATION] ?: false
+        if (fineLocationGranted || coarseLocationGranted) {
+            Toast.makeText(this, "GPS Location Access Granted - Shield Armed", Toast.LENGTH_SHORT).show()
+            startCrashShieldService()
         }
     }
 
@@ -103,7 +114,9 @@ class MainActivity : ComponentActivity(), SensorEventListener {
         isGyroAvailable = (gyroscope != null)
 
         requestRequiredPermissions()
-        startCrashShieldService()
+        if (hasLocationPermission()) {
+            startCrashShieldService()
+        }
 
         refreshPendingCount()
         lifecycleScope.launch {
@@ -188,7 +201,6 @@ class MainActivity : ComponentActivity(), SensorEventListener {
                         startActivity(intent)
                     },
                     onOpenOperationsPortal = { startActivity(Intent(this, RolePortalActivity::class.java)) },
-<<<<<<< HEAD
                     onOpenAmbulancePortal = {
                         startActivity(Intent(this, RolePortalActivity::class.java).apply {
                             putExtra(RolePortalActivity.EXTRA_INITIAL_ROLE, "AMBULANCE")
@@ -211,8 +223,6 @@ class MainActivity : ComponentActivity(), SensorEventListener {
                         }
                         startActivity(intent)
                     },
-=======
->>>>>>> c65c78488f66982f29ff94d058197b528026acc0
                     onOpenUrl = { url ->
                         try {
                             startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
@@ -311,18 +321,27 @@ class MainActivity : ComponentActivity(), SensorEventListener {
     override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) {}
 
     private fun startCrashShieldService() {
-        val intent = Intent(this, CrashDetectionService::class.java)
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            startForegroundService(intent)
-        } else {
-            startService(intent)
+        try {
+            val intent = Intent(this, CrashDetectionService::class.java)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                startForegroundService(intent)
+            } else {
+                startService(intent)
+            }
+            isShieldActive = true
+        } catch (e: Exception) {
+            android.util.Log.e("ResQNet", "Could not start CrashDetectionService: ${e.message}", e)
+            isShieldActive = false
         }
-        isShieldActive = true
     }
 
     private fun stopCrashShieldService() {
-        stopService(Intent(this, CrashDetectionService::class.java))
-        isShieldActive = false
+        try {
+            stopService(Intent(this, CrashDetectionService::class.java))
+            isShieldActive = false
+        } catch (e: Exception) {
+            android.util.Log.e("ResQNet", "Could not stop CrashDetectionService: ${e.message}", e)
+        }
     }
 
     private fun simulateCrashSpike() {
@@ -398,13 +417,10 @@ fun ResQNetAppUI(
     onUpdateBackendUrl: (String) -> Unit,
     onOpenCitizenWebPortal: () -> Unit,
     onOpenOperationsPortal: () -> Unit,
-<<<<<<< HEAD
     onOpenAmbulancePortal: () -> Unit,
     onOpenHospitalPortal: () -> Unit,
     onOpenCommandCenter: () -> Unit,
     onOpenMedicalProfile: () -> Unit,
-=======
->>>>>>> c65c78488f66982f29ff94d058197b528026acc0
     onOpenUrl: (String) -> Unit,
     onFlushRetries: () -> Unit
 ) {
@@ -711,7 +727,6 @@ fun ResQNetAppUI(
                 ) {
                     // Ambulance Portal Button
                     Button(
-<<<<<<< HEAD
                         onClick = onOpenAmbulancePortal,
                         modifier = Modifier.weight(1f).height(44.dp),
                         colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF0284C7)),
@@ -721,22 +736,10 @@ fun ResQNetAppUI(
                         Icon(Icons.Default.DirectionsCar, contentDescription = null, tint = Color.White, modifier = Modifier.size(16.dp))
                         Spacer(modifier = Modifier.width(4.dp))
                         Text("AMBULANCE", fontSize = 11.sp, fontWeight = FontWeight.ExtraBold, color = Color.White)
-=======
-                        onClick = { onOpenUrl("${ApiClient.getBaseUrl()}ambulance.html") },
-                        modifier = Modifier.weight(1f).height(42.dp),
-                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1E293B)),
-                        shape = RoundedCornerShape(8.dp),
-                        contentPadding = PaddingValues(horizontal = 4.dp, vertical = 2.dp)
-                    ) {
-                        Icon(Icons.Default.DirectionsCar, contentDescription = null, tint = Color(0xFF38BDF8), modifier = Modifier.size(16.dp))
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text("AMBULANCE", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = Color.White)
->>>>>>> c65c78488f66982f29ff94d058197b528026acc0
                     }
 
                     // Hospital Portal Button
                     Button(
-<<<<<<< HEAD
                         onClick = onOpenHospitalPortal,
                         modifier = Modifier.weight(1f).height(44.dp),
                         colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF059669)),
@@ -746,17 +749,6 @@ fun ResQNetAppUI(
                         Icon(Icons.Default.LocalHospital, contentDescription = null, tint = Color.White, modifier = Modifier.size(16.dp))
                         Spacer(modifier = Modifier.width(4.dp))
                         Text("HOSPITAL", fontSize = 11.sp, fontWeight = FontWeight.ExtraBold, color = Color.White)
-=======
-                        onClick = { onOpenUrl("${ApiClient.getBaseUrl()}hospital.html") },
-                        modifier = Modifier.weight(1f).height(42.dp),
-                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1E293B)),
-                        shape = RoundedCornerShape(8.dp),
-                        contentPadding = PaddingValues(horizontal = 4.dp, vertical = 2.dp)
-                    ) {
-                        Icon(Icons.Default.LocalHospital, contentDescription = null, tint = Color(0xFF10B981), modifier = Modifier.size(16.dp))
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text("HOSPITAL", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = Color.White)
->>>>>>> c65c78488f66982f29ff94d058197b528026acc0
                     }
                 }
 
@@ -764,11 +756,7 @@ fun ResQNetAppUI(
 
                 // Central Command Center
                 OutlinedButton(
-<<<<<<< HEAD
                     onClick = onOpenCommandCenter,
-=======
-                    onClick = { onOpenUrl("${ApiClient.getBaseUrl()}dashboard.html") },
->>>>>>> c65c78488f66982f29ff94d058197b528026acc0
                     modifier = Modifier.fillMaxWidth().height(42.dp),
                     shape = RoundedCornerShape(8.dp),
                     colors = ButtonDefaults.outlinedButtonColors(contentColor = Color(0xFF38BDF8))
@@ -780,7 +768,6 @@ fun ResQNetAppUI(
 
                 Spacer(modifier = Modifier.height(8.dp))
 
-<<<<<<< HEAD
                 // Citizen Medical Profile & Intake Vault
                 OutlinedButton(
                     onClick = onOpenMedicalProfile,
@@ -795,8 +782,6 @@ fun ResQNetAppUI(
 
                 Spacer(modifier = Modifier.height(8.dp))
 
-=======
->>>>>>> c65c78488f66982f29ff94d058197b528026acc0
                 // Native In-App Portal Sign-In
                 Button(
                     onClick = onOpenOperationsPortal,
