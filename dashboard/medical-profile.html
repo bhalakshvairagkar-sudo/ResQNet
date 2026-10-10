@@ -1,0 +1,356 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>ResQNet — Citizen Emergency Medical Intake Vault</title>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Archivo:wght@600;700;800;900&family=IBM+Plex+Mono:wght@500;600;700&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background: radial-gradient(circle at 50% 10%, #0d1a30 0%, #03060c 100%);
+      color: #e2e8f0;
+      font-family: 'Inter', -apple-system, sans-serif;
+      min-height: 100vh;
+      padding: 24px 16px;
+      display: flex;
+      justify-content: center;
+      align-items: flex-start;
+    }
+    .form-container {
+      width: 100%;
+      max-width: 680px;
+      background: #0b1325;
+      border: 1px solid #1e293b;
+      border-radius: 16px;
+      padding: 32px 28px;
+      box-shadow: 0 12px 40px rgba(0,0,0,0.6);
+    }
+    .header-banner {
+      border-bottom: 2px solid #38bdf8;
+      padding-bottom: 16px;
+      margin-bottom: 24px;
+    }
+    .brand-logo {
+      font-family: 'Archivo', sans-serif;
+      font-size: 24px;
+      font-weight: 900;
+      letter-spacing: 0.1em;
+      color: #fff;
+    }
+    .brand-logo b { color: #38bdf8; }
+    .form-title {
+      font-size: 18px;
+      font-weight: 800;
+      color: #fff;
+      margin-top: 8px;
+    }
+    .form-desc {
+      font-size: 12px;
+      color: #94a3b8;
+      margin-top: 4px;
+      line-height: 1.5;
+    }
+
+    .section-title {
+      font-size: 12px;
+      font-weight: 800;
+      color: #38bdf8;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      margin: 20px 0 12px 0;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .form-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 14px;
+    }
+    @media (max-width: 580px) {
+      .form-grid { grid-template-columns: 1fr; }
+    }
+
+    .form-group {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      margin-bottom: 14px;
+    }
+    .form-label {
+      font-size: 11px;
+      font-weight: 700;
+      color: #cbd5e1;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+    .form-input {
+      background: #060b16;
+      border: 1px solid #334155;
+      border-radius: 8px;
+      padding: 10px 14px;
+      color: #fff;
+      font-size: 13px;
+      font-family: inherit;
+      outline: none;
+      transition: border-color 0.15s;
+    }
+    .form-input:focus {
+      border-color: #38bdf8;
+      box-shadow: 0 0 0 2px rgba(56, 189, 248, 0.2);
+    }
+    select.form-input { cursor: pointer; }
+    textarea.form-input { resize: vertical; min-height: 70px; }
+
+    .btn-save {
+      width: 100%;
+      background: #38bdf8;
+      color: #040811;
+      border: none;
+      padding: 14px;
+      border-radius: 8px;
+      font-family: 'Archivo', sans-serif;
+      font-size: 14px;
+      font-weight: 800;
+      letter-spacing: 0.05em;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      margin-top: 20px;
+      transition: all 0.15s;
+    }
+    .btn-save:hover { background: #0284c7; color: #fff; }
+
+    .msg-box {
+      padding: 12px;
+      border-radius: 8px;
+      font-size: 12px;
+      margin-bottom: 16px;
+      display: none;
+    }
+    .msg-box.success { background: #064e3b; border: 1px solid #10b981; color: #a7f3d0; }
+    .msg-box.error { background: #450a0a; border: 1px solid #ef4444; color: #fca5a5; }
+  </style>
+</head>
+<body>
+
+<div class="form-container">
+  <div class="header-banner">
+    <div class="brand-logo">RES<b>Q</b>NET</div>
+    <div class="form-title"><i class="fa-solid fa-file-medical"></i> Citizen Emergency Medical Intake Vault</div>
+    <div class="form-desc">
+      This clinical data is securely transmitted directly to responding <b>Ambulance Paramedics</b> and the designated <b>Level-1 Trauma Center</b> during emergency dispatches.
+    </div>
+  </div>
+
+  <div id="msgBox" class="msg-box"></div>
+
+  <form id="profileForm">
+    <!-- Demographics -->
+    <div class="section-title"><i class="fa-solid fa-user"></i> 1. Patient Demographics</div>
+    <div class="form-grid">
+      <div class="form-group">
+        <label class="form-label">Full Legal Name *</label>
+        <input class="form-input" name="fullName" placeholder="e.g. Aditya Deshmukh" required>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Date of Birth</label>
+        <input class="form-input" name="dateOfBirth" type="date" value="1996-08-14">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Gender</label>
+        <select class="form-input" name="gender">
+          <option value="Male">Male</option>
+          <option value="Female">Female</option>
+          <option value="Other">Other / Prefer not to say</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Blood Group *</label>
+        <select class="form-input" name="bloodGroup" required>
+          <option value="O+ POSITIVE">O+ Positive</option>
+          <option value="O- NEGATIVE">O- Negative</option>
+          <option value="A+ POSITIVE">A+ Positive</option>
+          <option value="A- NEGATIVE">A- Negative</option>
+          <option value="B+ POSITIVE">B+ Positive</option>
+          <option value="B- NEGATIVE">B- Negative</option>
+          <option value="AB+ POSITIVE">AB+ Positive</option>
+          <option value="AB- NEGATIVE">AB- Negative</option>
+        </select>
+      </div>
+    </div>
+
+    <!-- Emergency Next-of-Kin Contact (ICE) -->
+    <div class="section-title"><i class="fa-solid fa-phone"></i> 2. Emergency Contact (In Case of Emergency - ICE)</div>
+    <div class="form-grid">
+      <div class="form-group">
+        <label class="form-label">Next-of-Kin Full Name *</label>
+        <input class="form-input" name="iceName" placeholder="e.g. Suresh Deshmukh" required>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Contact Phone Number *</label>
+        <input class="form-input" name="icePhone" type="tel" placeholder="+91 98220 12345" required>
+      </div>
+      <div class="form-group" style="grid-column: span 2;">
+        <label class="form-label">Relationship to Patient</label>
+        <input class="form-input" name="iceRelation" placeholder="e.g. Father, Spouse, Sibling">
+      </div>
+    </div>
+
+    <!-- Clinical Details -->
+    <div class="section-title"><i class="fa-solid fa-heart-pulse"></i> 3. Clinical & Medical History</div>
+    <div class="form-group">
+      <label class="form-label">Known Drug / Food Allergies (Comma separated)</label>
+      <input class="form-input" name="allergies" placeholder="e.g. Penicillin, Sulfa Drugs, Peanuts (or None)">
+    </div>
+    <div class="form-group">
+      <label class="form-label">Pre-Existing Chronic Conditions</label>
+      <input class="form-input" name="chronicConditions" placeholder="e.g. Asthma (Mild), Diabetes Type 2, Hypertension">
+    </div>
+    <div class="form-group">
+      <label class="form-label">Current Active Prescriptions / Medications</label>
+      <input class="form-input" name="currentMedications" placeholder="e.g. Salbutamol Inhaler (PRN), Metformin 500mg">
+    </div>
+    <div class="form-group">
+      <label class="form-label">Special Clinical Instructions / Trauma Notes</label>
+      <textarea class="form-input" name="specialNotes" placeholder="e.g. Organ donor registered. No prior surgical complications."></textarea>
+    </div>
+
+    <button type="submit" class="btn-save" id="btnSubmit">
+      <i class="fa-solid fa-cloud-arrow-up"></i> SAVE MEDICAL INTAKE VAULT & CONTINUE
+    </button>
+  </form>
+</div>
+
+<script>
+  const token = localStorage.resqnetToken;
+  const user = JSON.parse(localStorage.resqnetUser || 'null');
+  const H = { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' };
+
+  if (!user) {
+    location.href = '/login.html';
+  }
+
+  function showMsg(txt, type) {
+    const el = document.getElementById('msgBox');
+    el.textContent = txt;
+    el.className = 'msg-box ' + type;
+    el.style.display = 'block';
+  }
+
+  // Pre-fill existing profile if present
+  async function loadExistingProfile() {
+    try {
+      const res = await fetch('/api/auth/medical-profile', { headers: H });
+      if (res.ok) {
+        const p = await res.json();
+        if (p) {
+          const f = document.getElementById('profileForm');
+          if (p.fullName) f.fullName.value = p.fullName;
+          if (p.dateOfBirth) f.dateOfBirth.value = p.dateOfBirth;
+          if (p.gender) f.gender.value = p.gender;
+          if (p.bloodGroup) f.bloodGroup.value = p.bloodGroup;
+          if (p.allergies) f.allergies.value = Array.isArray(p.allergies) ? p.allergies.join(', ') : p.allergies;
+          if (p.chronicConditions) f.chronicConditions.value = Array.isArray(p.chronicConditions) ? p.chronicConditions.join(', ') : p.chronicConditions;
+          if (p.currentMedications) f.currentMedications.value = p.currentMedications;
+          if (p.primaryContact?.name) f.iceName.value = p.primaryContact.name;
+          if (p.primaryContact?.phone) f.icePhone.value = p.primaryContact.phone;
+          if (p.primaryContact?.relation) f.iceRelation.value = p.primaryContact.relation;
+          if (p.specialNotes) f.specialNotes.value = p.specialNotes;
+        }
+      }
+    } catch (e) {}
+  }
+
+  document.getElementById('profileForm').onsubmit = async (e) => {
+    e.preventDefault();
+    const btn = document.getElementById('btnSubmit');
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> SAVING INTAKE VAULT...';
+
+    const fd = new FormData(e.target);
+    const allergiesRaw = fd.get('allergies') || '';
+    const conditionsRaw = fd.get('chronicConditions') || '';
+
+    const payload = {
+      fullName: fd.get('fullName'),
+      dateOfBirth: fd.get('dateOfBirth'),
+      gender: fd.get('gender'),
+      bloodGroup: fd.get('bloodGroup'),
+      allergies: allergiesRaw.split(',').map(s => s.trim()).filter(Boolean),
+      chronicConditions: conditionsRaw.split(',').map(s => s.trim()).filter(Boolean),
+      currentMedications: fd.get('currentMedications'),
+      primaryContact: {
+        name: fd.get('iceName'),
+        phone: fd.get('icePhone'),
+        relation: fd.get('iceRelation') || 'Primary Contact'
+      },
+      organDonor: true,
+      specialNotes: fd.get('specialNotes'),
+      isComplete: true
+    };
+
+    try {
+      const res = await fetch('/api/auth/medical-profile', {
+        method: 'POST',
+        headers: H,
+        body: JSON.stringify(payload)
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        showMsg(data.error || 'Failed to save medical intake profile', 'error');
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fa-solid fa-cloud-arrow-up"></i> SAVE MEDICAL INTAKE VAULT & CONTINUE';
+        return;
+      }
+
+      showMsg('✓ Medical profile saved successfully! Forwarding to Portal...', 'success');
+      
+      // Update local storage user session
+      if (user) {
+        user.medicalProfile = payload;
+        user.hasCompletedMedicalProfile = true;
+        localStorage.resqnetUser = JSON.stringify(user);
+      }
+
+      // Seamless Android Native App Bridge Synchronization
+      if (window.AndroidBridge && typeof window.AndroidBridge.onMedicalProfileSaved === 'function') {
+        try {
+          window.AndroidBridge.onMedicalProfileSaved(
+            payload.fullName,
+            payload.bloodGroup,
+            payload.primaryContact.name,
+            payload.primaryContact.phone,
+            payload.allergies.join(', '),
+            payload.chronicConditions.join(', '),
+            payload.currentMedications,
+            payload.specialNotes
+          );
+        } catch (e) {
+          console.warn('AndroidBridge call error:', e);
+        }
+      }
+
+      setTimeout(() => {
+        if (user && user.role === 'HOSPITAL') location.href = '/hospital.html';
+        else if (user && user.role === 'AMBULANCE') location.href = '/ambulance.html';
+        else if (user && user.role === 'COMMAND_CENTER') location.href = '/dashboard.html';
+        else location.href = '/sos.html';
+      }, 1000);
+    } catch (err) {
+      showMsg('Network error: ' + err.message, 'error');
+      btn.disabled = false;
+      btn.innerHTML = '<i class="fa-solid fa-cloud-arrow-up"></i> SAVE MEDICAL INTAKE VAULT & CONTINUE';
+    }
+  };
+
+  loadExistingProfile();
+</script>
+</body>
+</html>

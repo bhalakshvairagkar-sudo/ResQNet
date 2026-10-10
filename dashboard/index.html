@@ -1,1748 +1,224 @@
 <!DOCTYPE html>
-<html lang="en" class="h-full bg-slate-950 text-slate-100">
+<html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ResQNet AI Emergency Operations Hub</title>
-    
-    <!-- Tailwind CSS -->
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script>
-        tailwind.config = {
-            theme: {
-                extend: {
-                    colors: {
-                        brand: {
-                            50: '#f0f6ff',
-                            400: '#60a5fa',
-                            500: '#3b82f6',
-                            600: '#2563eb',
-                            900: '#1e3a8a',
-                        },
-                        dark: {
-                            950: '#060911',
-                            900: '#0c1220',
-                            850: '#121a2d',
-                            800: '#1a263e',
-                            700: '#273754',
-                            600: '#384b6e'
-                        },
-                        critical: '#ef4444',
-                        high: '#f97316',
-                        medium: '#eab308',
-                        low: '#22c55e'
-                    },
-                    fontFamily: {
-                        sans: ['Inter', 'system-ui', 'sans-serif'],
-                        mono: ['JetBrains Mono', 'monospace']
-                    }
-                }
-            }
-        }
-    </script>
-    
-    <!-- Google Fonts -->
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
-    
-    <!-- Leaflet JS & CSS -->
-    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-
-    <!-- Lucide Icons -->
-    <script src="https://unpkg.com/lucide@latest"></script>
-
-    <!-- Socket.IO Client -->
-    <script src="https://cdn.socket.io/4.8.1/socket.io.min.js"></script>
-
-    <style>
-        /* Custom scrollbars */
-        ::-webkit-scrollbar { width: 5px; height: 5px; }
-        ::-webkit-scrollbar-track { background: #0c1220; }
-        ::-webkit-scrollbar-thumb { background: #273754; border-radius: 4px; }
-        ::-webkit-scrollbar-thumb:hover { background: #3b82f6; }
-
-        /* Custom Pulse & Glow Animations */
-        @keyframes pulse-red {
-            0% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.8); }
-            70% { box-shadow: 0 0 0 16px rgba(239, 68, 68, 0); }
-            100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); }
-        }
-        .marker-pulse-critical {
-            animation: pulse-red 1.5s infinite;
-            border-radius: 50%;
-        }
-
-        @keyframes scanline {
-            0% { transform: translateY(-100%); }
-            100% { transform: translateY(100%); }
-        }
-        .scanline-overlay {
-            position: relative;
-            overflow: hidden;
-        }
-        .scanline-overlay::after {
-            content: "";
-            position: absolute;
-            top: 0; left: 0; right: 0; bottom: 0;
-            background: linear-gradient(to bottom, rgba(255,255,255,0), rgba(59,130,246,0.05) 50%, rgba(255,255,255,0));
-            animation: scanline 4s linear infinite;
-            pointer-events: none;
-        }
-
-        /* Leaflet Map Styling */
-        .leaflet-container {
-            background-color: #060911 !important;
-            font-family: 'Inter', sans-serif;
-        }
-        .leaflet-popup-content-wrapper {
-            background: #0c1220 !important;
-            color: #f1f5f9 !important;
-            border: 1px solid #273754;
-            border-radius: 8px;
-            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.7);
-        }
-        .leaflet-popup-tip { background: #0c1220 !important; }
-        
-        .map-tiles-dark {
-            filter: brightness(0.65) invert(1) contrast(2.5) hue-rotate(200deg) saturate(0.3) brightness(0.7);
-        }
-
-        /* Toast notification styling */
-        #toastContainer {
-            position: fixed;
-            bottom: 24px;
-            right: 24px;
-            z-index: 9999;
-            display: flex;
-            flex-direction: column;
-            gap: 8px;
-            pointer-events: none;
-        }
-        .toast-msg {
-            pointer-events: auto;
-            transition: all 0.3s ease;
-        }
-    </style>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>ResQNet — Emergency Command Center</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="/css/resqnet.css" />
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+<script src="/js/config.js"></script>
 </head>
-<body class="h-screen flex flex-col overflow-hidden bg-dark-950 font-sans text-slate-200 antialiased selection:bg-brand-500 selection:text-white">
+<body>
 
-    <!-- Toast Notification Container -->
-    <div id="toastContainer"></div>
+<header>
+  <div class="brand">
+    <div class="brand-mark" aria-hidden="true"><i class="fa-solid fa-truck-medical"></i></div>
+    <div>
+      <h1>RES<b>Q</b>NET</h1>
+      <small>COMMAND CENTER</small>
+    </div>
+    <div class="tagline">CAMERA <b>OPTIONAL</b>. RESPONSE INTELLIGENCE ALWAYS.</div>
+  </div>
 
-    <!-- HEADER -->
-    <header class="h-16 bg-dark-900 border-b border-dark-800 px-4 flex items-center justify-between shrink-0 z-30 shadow-2xl">
-        <div class="flex items-center gap-6">
-            <div class="flex items-center gap-3">
-                <div class="p-2 bg-brand-600/20 border border-brand-500/40 rounded-xl text-brand-500 shadow-lg shadow-brand-500/10">
-                    <i data-lucide="shield-alert" class="w-6 h-6"></i>
-                </div>
-                <div>
-                    <div class="flex items-center gap-2">
-                        <h1 class="font-bold tracking-wider text-base text-white font-mono">RESQNET</h1>
-                        <span class="text-[10px] bg-brand-900/80 text-brand-400 px-2 py-0.5 rounded border border-brand-500/40 font-mono font-semibold uppercase tracking-wider">AI Ops Hub v3.4</span>
-                        <!-- Status Banner to explicitly indicate connection state -->
-                        <span id="liveStatusBanner" class="text-[10px] bg-emerald-500/10 text-emerald-400 px-2 py-0.5 rounded border border-emerald-500/30 font-mono font-semibold uppercase tracking-wider flex items-center gap-1">
-                            <span id="liveStatusDot" class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span> <span id="liveStatusLabel">CONNECTING...</span>
-                        </span>
-                    </div>
-                    <p class="text-[11px] text-slate-400 tracking-wide font-medium">REAL-TIME MULTI-SENSOR INCIDENT DISPATCH INTELLIGENCE</p>
-                </div>
-            </div>
+  <div class="header-right">
+    <button class="pill" id="healthBtn" data-testid="system-health-button" aria-haspopup="true" aria-expanded="false">
+      <span class="dot live online" id="dotSystem"></span><span id="systemLabel">SYSTEM OPERATIONAL</span>
+    </button>
+    <button class="pill demo" id="demoBtn" data-testid="demo-mode-button">
+      <i class="fa-solid fa-bolt"></i> <span id="demoBtnLabel">DEMO MODE</span>
+    </button>
+    <span class="pill ghost clock" id="clock" data-testid="clock">--:--:--</span>
+  </div>
 
-            <!-- View Switcher Tabs -->
-            <nav class="hidden lg:flex items-center gap-1 bg-dark-950 p-1 rounded-xl border border-dark-800 text-xs font-mono">
-                <button onclick="switchTab('ops')" id="nav-tab-ops" class="nav-tab-btn active px-3 py-1.5 rounded-lg bg-brand-600 text-white font-semibold flex items-center gap-1.5 transition">
-                    <i data-lucide="map" class="w-3.5 h-3.5"></i> Live Operations
-                </button>
-                <button onclick="switchTab('cctv')" id="nav-tab-cctv" class="nav-tab-btn px-3 py-1.5 rounded-lg text-slate-400 hover:text-slate-200 hover:bg-dark-850 flex items-center gap-1.5 transition">
-                    <i data-lucide="video" class="w-3.5 h-3.5"></i> CCTV Vision Stream
-                </button>
-                <button onclick="switchTab('fleet')" id="nav-tab-fleet" class="nav-tab-btn px-3 py-1.5 rounded-lg text-slate-400 hover:text-slate-200 hover:bg-dark-850 flex items-center gap-1.5 transition">
-                    <i data-lucide="truck" class="w-3.5 h-3.5"></i> Fleet & Hospitals
-                </button>
-                <button onclick="switchTab('analytics')" id="nav-tab-analytics" class="nav-tab-btn px-3 py-1.5 rounded-lg text-slate-400 hover:text-slate-200 hover:bg-dark-850 flex items-center gap-1.5 transition">
-                    <i data-lucide="bar-chart-3" class="w-3.5 h-3.5"></i> Analytics
-                </button>
-                <button onclick="switchTab('sos')" id="nav-tab-sos" class="nav-tab-btn px-3 py-1.5 rounded-lg text-slate-400 hover:text-slate-200 hover:bg-dark-850 flex items-center gap-1.5 transition">
-                    <i data-lucide="phone-call" class="w-3.5 h-3.5"></i> SOS Voice Intake
-                </button>
-            </nav>
-        </div>
+  <div class="popover" id="healthPopover" data-testid="system-health-popover" role="dialog" aria-label="System health">
+    <h4>SYSTEM HEALTH</h4>
+    <div class="health-row"><span>Backend API</span><span class="val"><span class="dot online" id="hBackend"></span><i id="tBackend">ONLINE</i></span></div>
+    <div class="health-row"><span>Socket.IO</span><span class="val"><span class="dot online" id="hSocket"></span><i id="tSocket">ONLINE</i></span></div>
+    <div class="health-row"><span>Database</span><span class="val"><span class="dot online" id="hDb"></span><i id="tDb">ONLINE</i></span></div>
+    <div class="health-row"><span>AI Engine</span><span class="val"><span class="dot online" id="hAi"></span><i id="tAi">ONLINE</i></span></div>
+    <div class="health-row"><span>Routing (OSRM)</span><span class="val"><span class="dot online" id="hRouting"></span><i id="tRouting">ONLINE</i></span></div>
+    <p class="note" id="healthNote">Statuses are reported by <span class="mono">GET /api/health</span> and live probes. Components that do not report are shown as UNKNOWN — never assumed online.</p>
+  </div>
+</header>
 
-        <!-- System Controls & Actions -->
-        <div class="flex items-center gap-3">
-            <!-- Server Config Setting Modal Trigger -->
-            <button onclick="openServerConfigModal()" title="Configure Backend & Socket Server URL" class="p-2 rounded-lg bg-dark-850 border border-dark-700 hover:border-slate-500 transition text-slate-300">
-                <i data-lucide="settings" class="w-4 h-4 text-brand-400"></i>
-            </button>
+<section class="kpis" aria-label="Operational key metrics">
+  <div class="kpi"><div><div class="kpi-label">ACTIVE INCIDENTS</div><div class="kpi-value" id="kpiActive" data-testid="kpi-active">0</div><div class="kpi-tag" id="kpiActiveTag">LIVE DATA</div></div><i class="fa-solid fa-triangle-exclamation" style="color:var(--red)"></i></div>
+  <div class="kpi"><div><div class="kpi-label">CRITICAL</div><div class="kpi-value" id="kpiCritical" data-testid="kpi-critical" style="color:var(--red)">0</div><div class="kpi-tag">SEVERITY ≥ 76</div></div><i class="fa-solid fa-radiation" style="color:var(--red)"></i></div>
+  <div class="kpi"><div><div class="kpi-label">AMBULANCES AVAILABLE</div><div class="kpi-value" id="kpiAmbAvail" data-testid="kpi-amb-available" style="color:var(--green)">5</div><div class="kpi-tag">DEMO FLEET</div></div><i class="fa-solid fa-truck-medical" style="color:var(--green)"></i></div>
+  <div class="kpi"><div><div class="kpi-label">AMBULANCES EN ROUTE</div><div class="kpi-value" id="kpiAmbRoute" data-testid="kpi-amb-enroute" style="color:var(--orange)">0</div><div class="kpi-tag">DEMO FLEET</div></div><i class="fa-solid fa-route" style="color:var(--orange)"></i></div>
+  <div class="kpi"><div><div class="kpi-label">HOSPITALS AVAILABLE</div><div class="kpi-value" id="kpiHosp" data-testid="kpi-hospitals" style="color:var(--blue)">4</div><div class="kpi-tag">DEMO REGISTRY</div></div><i class="fa-solid fa-hospital" style="color:var(--blue)"></i></div>
+  <div class="kpi"><div><div class="kpi-label">AVG RESPONSE ETA</div><div class="kpi-value" id="kpiEta" data-testid="kpi-avg-eta">—</div><div class="kpi-tag" id="kpiEtaTag">NO DISPATCHES</div></div><i class="fa-solid fa-stopwatch" style="color:var(--yellow)"></i></div>
+</section>
 
-            <!-- Audio Alerts Toggle -->
-            <button id="audioToggleBtn" onclick="toggleAudio()" title="Toggle Siren & Alert Audio Chimes" class="p-2 rounded-lg bg-dark-850 border border-dark-700 hover:border-slate-500 transition text-slate-300">
-                <i data-lucide="volume-2" id="audioIcon" class="w-4 h-4 text-emerald-400"></i>
-            </button>
+<div id="main">
+  <div id="mapWrap">
+    <div id="map" data-testid="map"></div>
 
-            <!-- Create Manual SOS Modal Trigger -->
-            <button onclick="openNewIncidentModal()" class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-600/20 hover:bg-emerald-600/30 border border-emerald-500/40 text-emerald-400 text-xs font-semibold uppercase tracking-wider font-mono transition">
-                <i data-lucide="plus-circle" class="w-3.5 h-3.5"></i>
-                <span>New Alert</span>
-            </button>
-
-            <!-- System Health Toggle -->
-            <div class="relative">
-                <button id="sysHealthBtn" onclick="toggleHealthPopover()" class="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-dark-850 border border-dark-700 hover:border-slate-600 transition text-xs font-medium">
-                    <span id="sysStatusDot" class="w-2 h-2 rounded-full bg-amber-400 animate-pulse"></span>
-                    <span id="sysStatusText" class="text-amber-300 font-mono">INITIALIZING</span>
-                    <i data-lucide="chevron-down" class="w-3.5 h-3.5 text-slate-400"></i>
-                </button>
-
-                <div id="healthPopover" class="hidden absolute right-0 mt-2 w-80 bg-dark-900 border border-dark-700 rounded-xl shadow-2xl p-4 z-50 text-xs">
-                    <div class="flex justify-between items-center pb-2 border-b border-dark-800 mb-3">
-                        <span class="font-semibold text-slate-200 font-mono">LIVE SYSTEM TELEMETRY</span>
-                        <span class="text-[10px] text-slate-500 font-mono" id="healthTimestamp">--:--:--</span>
-                    </div>
-                    <div class="space-y-2.5 font-mono text-[11px]">
-                        <div class="flex justify-between items-center">
-                            <span class="text-slate-400">ResQNet API Backend</span>
-                            <span id="status-backend" class="text-amber-400 font-semibold bg-amber-500/10 px-1.5 py-0.5 rounded border border-amber-500/20">CHECKING...</span>
-                        </div>
-                        <div class="flex justify-between items-center">
-                            <span class="text-slate-400">Socket.IO Stream Hub</span>
-                            <span id="status-socket" class="text-amber-400 font-semibold bg-amber-500/10 px-1.5 py-0.5 rounded border border-amber-500/20">CONNECTING</span>
-                        </div>
-                        <div class="flex justify-between items-center">
-                            <span class="text-slate-400">Android G-Sensor Stream</span>
-                            <span id="status-android" class="text-emerald-400 font-semibold bg-emerald-500/10 px-1.5 py-0.5 rounded border border-emerald-500/20">LISTENING</span>
-                        </div>
-                        <div class="flex justify-between items-center">
-                            <span class="text-slate-400">MongoDB Operational Store</span>
-                            <span id="status-mongodb" class="text-emerald-400 font-semibold bg-emerald-500/10 px-1.5 py-0.5 rounded border border-emerald-500/20">CONNECTED</span>
-                        </div>
-                        <div class="flex justify-between items-center">
-                            <span class="text-slate-400">YOLO Optical Detection</span>
-                            <span id="status-yolo" class="text-emerald-400 font-semibold bg-emerald-500/10 px-1.5 py-0.5 rounded border border-emerald-500/20">AI READY</span>
-                        </div>
-                        <div class="flex justify-between items-center">
-                            <span class="text-slate-400">Ambulance Telemetry</span>
-                            <span id="status-ambulance" class="text-emerald-400 font-semibold bg-emerald-500/10 px-1.5 py-0.5 rounded border border-emerald-500/20">REAL-TIME SYNC</span>
-                        </div>
-                        <div class="flex justify-between items-center">
-                            <span class="text-slate-400">OSRM Routing API</span>
-                            <span id="status-osrm" class="text-emerald-400 font-semibold bg-emerald-500/10 px-1.5 py-0.5 rounded border border-emerald-500/20">ONLINE</span>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Demo Mode Toggle -->
-            <button id="demoModeBtn" onclick="toggleDemoMode()" class="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-amber-500/10 border border-amber-500/30 text-amber-400 hover:bg-amber-500/20 transition text-xs font-semibold uppercase tracking-wider font-mono">
-                <i data-lucide="zap" class="w-3.5 h-3.5"></i>
-                <span id="demoBtnLabel">SIMULATOR</span>
-            </button>
-        </div>
-    </header>
-
-    <!-- KPI COMMAND RIBBON -->
-    <section class="h-14 bg-dark-900/90 border-b border-dark-800 px-4 grid grid-cols-2 md:grid-cols-6 gap-2 items-center shrink-0 shadow-md">
-        <div class="bg-dark-850/80 border border-dark-800 rounded-lg px-3 py-1.5 flex items-center justify-between">
-            <div>
-                <p class="text-[10px] uppercase font-mono tracking-wider text-slate-400">ACTIVE INCIDENTS</p>
-                <p id="kpiActive" class="text-base font-bold text-white font-mono">0</p>
-            </div>
-            <i data-lucide="alert-triangle" class="w-4 h-4 text-brand-500"></i>
-        </div>
-
-        <div class="bg-dark-850/80 border border-dark-800 rounded-lg px-3 py-1.5 flex items-center justify-between">
-            <div>
-                <p class="text-[10px] uppercase font-mono tracking-wider text-slate-400">CRITICAL LEV-1</p>
-                <p id="kpiCritical" class="text-base font-bold text-critical font-mono">0</p>
-            </div>
-            <i data-lucide="siren" class="w-4 h-4 text-critical animate-pulse"></i>
-        </div>
-
-        <div class="bg-dark-850/80 border border-dark-800 rounded-lg px-3 py-1.5 flex items-center justify-between">
-            <div>
-                <p class="text-[10px] uppercase font-mono tracking-wider text-slate-400">AVAIL. AMBULANCES</p>
-                <p id="kpiAmbulances" class="text-base font-bold text-emerald-400 font-mono">3 / 4</p>
-            </div>
-            <i data-lucide="truck" class="w-4 h-4 text-emerald-400"></i>
-        </div>
-
-        <div class="bg-dark-850/80 border border-dark-800 rounded-lg px-3 py-1.5 flex items-center justify-between">
-            <div>
-                <p class="text-[10px] uppercase font-mono tracking-wider text-slate-400">EN ROUTE UNITS</p>
-                <p id="kpiEnRoute" class="text-base font-bold text-amber-400 font-mono">0</p>
-            </div>
-            <i data-lucide="navigation" class="w-4 h-4 text-amber-400"></i>
-        </div>
-
-        <div class="bg-dark-850/80 border border-dark-800 rounded-lg px-3 py-1.5 flex items-center justify-between">
-            <div>
-                <p class="text-[10px] uppercase font-mono tracking-wider text-slate-400">TRAUMA HOSPITALS</p>
-                <p id="kpiHospitals" class="text-base font-bold text-sky-400 font-mono">3 Ready</p>
-            </div>
-            <i data-lucide="building-2" class="w-4 h-4 text-sky-400"></i>
-        </div>
-
-        <div class="bg-dark-850/80 border border-dark-800 rounded-lg px-3 py-1.5 flex items-center justify-between">
-            <div>
-                <p class="text-[10px] uppercase font-mono tracking-wider text-slate-400">DISPATCH AVG ETA</p>
-                <p id="kpiAvgEta" class="text-base font-bold text-slate-200 font-mono">-- <span class="text-xs text-slate-400 font-normal">min</span></p>
-            </div>
-            <i data-lucide="timer" class="w-4 h-4 text-indigo-400"></i>
-        </div>
-    </section>
-
-    <!-- MAIN OPERATIONAL WORKSPACE -->
-    <div class="flex-1 flex overflow-hidden">
-        
-        <!-- TAB 1: LIVE OPERATIONS WORKSPACE -->
-        <div id="tabView-ops" class="tab-view flex-1 flex flex-col md:flex-row overflow-hidden w-full">
-            
-            <!-- MAIN VIEWPORT (MAP + BOTTOM COMMAND PANEL) -->
-            <main class="flex-1 flex flex-col relative overflow-hidden border-r border-dark-800">
-
-                <!-- MAP CONTAINER -->
-                <div class="relative flex-1 bg-dark-950">
-                    <div id="map" class="w-full h-full z-10"></div>
-
-                    <!-- MAP CONTROL OVERLAYS -->
-                    <div class="absolute top-4 left-4 z-20 flex flex-col gap-2">
-                        <!-- Severity Filters -->
-                        <div class="bg-dark-900/90 border border-dark-700 backdrop-blur rounded-xl p-2 shadow-2xl flex items-center gap-1 text-xs">
-                            <span class="text-[10px] font-mono text-slate-400 px-1 uppercase">Severity:</span>
-                            <button onclick="setFilter('ALL')" id="filter-ALL" class="filter-btn active px-2.5 py-1 rounded-lg bg-brand-600 text-white font-medium">All</button>
-                            <button onclick="setFilter('CRITICAL')" id="filter-CRITICAL" class="filter-btn px-2.5 py-1 rounded-lg hover:bg-dark-800 text-critical font-medium">Critical</button>
-                            <button onclick="setFilter('HIGH')" id="filter-HIGH" class="filter-btn px-2.5 py-1 rounded-lg hover:bg-dark-800 text-high font-medium">High</button>
-                            <button onclick="setFilter('MEDIUM')" id="filter-MEDIUM" class="filter-btn px-2.5 py-1 rounded-lg hover:bg-dark-800 text-medium font-medium">Medium</button>
-                        </div>
-
-                        <!-- Source Filters -->
-                        <div class="bg-dark-900/90 border border-dark-700 backdrop-blur rounded-xl p-2 shadow-2xl flex items-center gap-1.5 text-xs">
-                            <span class="text-[10px] font-mono text-slate-400 px-1 uppercase">Source:</span>
-                            <button onclick="toggleSourceFilter('smartphone')" id="srcFilter-smartphone" class="px-2 py-1 rounded-md bg-brand-600/30 border border-brand-500/50 text-white flex items-center gap-1 font-mono text-[11px] transition">📱 Phone G-Sensor</button>
-                            <button onclick="toggleSourceFilter('cctv')" id="srcFilter-cctv" class="px-2 py-1 rounded-md bg-brand-600/30 border border-brand-500/50 text-white flex items-center gap-1 font-mono text-[11px] transition">📷 CCTV Vision</button>
-                            <button onclick="toggleSourceFilter('citizen')" id="srcFilter-citizen" class="px-2 py-1 rounded-md bg-brand-600/30 border border-brand-500/50 text-white flex items-center gap-1 font-mono text-[11px] transition">👤 Citizen SOS</button>
-                        </div>
-                    </div>
-
-                    <!-- Map Utility Actions -->
-                    <div class="absolute top-4 right-4 z-20 flex gap-2">
-                        <button onclick="fitAllBounds()" class="bg-dark-900/90 hover:bg-dark-800 border border-dark-700 text-slate-200 px-3 py-1.5 rounded-lg shadow-xl text-xs flex items-center gap-1.5 font-medium transition">
-                            <i data-lucide="maximize-2" class="w-3.5 h-3.5"></i> Fit Map
-                        </button>
-                        <button onclick="recenterIncident()" class="bg-dark-900/90 hover:bg-dark-800 border border-dark-700 text-slate-200 px-3 py-1.5 rounded-lg shadow-xl text-xs flex items-center gap-1.5 font-medium transition">
-                            <i data-lucide="crosshair" class="w-3.5 h-3.5 text-brand-400"></i> Focus Incident
-                        </button>
-                    </div>
-
-                    <!-- Map Legend Overlay -->
-                    <div class="absolute bottom-4 left-4 z-20 bg-dark-900/90 border border-dark-700 backdrop-blur rounded-xl p-3 text-[11px] shadow-2xl space-y-1.5 font-mono">
-                        <div class="text-[10px] uppercase font-bold text-slate-400 mb-1 tracking-wider">Operational Legend</div>
-                        <div class="flex items-center gap-2"><span class="w-2.5 h-2.5 rounded-full bg-critical inline-block shadow-sm animate-pulse"></span> Critical Crash (G-Force Trigger)</div>
-                        <div class="flex items-center gap-2"><span class="w-2.5 h-2.5 rounded-full bg-high inline-block"></span> High Severity Optical Detection</div>
-                        <div class="flex items-center gap-2"><span class="w-2.5 h-2.5 rounded-full bg-medium inline-block"></span> Citizen SOS Report</div>
-                        <div class="flex items-center gap-2"><i data-lucide="truck" class="w-3.5 h-3.5 text-amber-400"></i> Emergency Ambulance</div>
-                        <div class="flex items-center gap-2"><i data-lucide="building-2" class="w-3.5 h-3.5 text-sky-400"></i> Designated Trauma Center</div>
-                    </div>
-
-                    <!-- Floating Interactive Demo Panel (Visible when Demo Controls Active) -->
-                    <div id="demoControlPanel" class="absolute top-16 left-1/2 -translate-x-1/2 z-30 bg-dark-900/95 border border-amber-500/50 rounded-2xl p-3 shadow-2xl backdrop-blur flex items-center gap-3">
-                        <div class="flex items-center gap-1.5 pr-3 border-r border-dark-700">
-                            <i data-lucide="zap" class="w-4 h-4 text-amber-400 animate-pulse"></i>
-                            <span class="text-xs font-bold text-amber-400 uppercase tracking-wider font-mono">Live Ingest Simulator</span>
-                        </div>
-                        <div class="flex items-center gap-2">
-                            <button onclick="triggerBackendEmergency('smartphone')" class="px-3 py-1.5 bg-brand-600/90 hover:bg-brand-600 text-white rounded-lg text-xs font-medium flex items-center gap-1.5 transition">
-                                📱 Phone G-Impact
-                            </button>
-                            <button onclick="triggerBackendEmergency('cctv')" class="px-3 py-1.5 bg-purple-600/90 hover:bg-purple-600 text-white rounded-lg text-xs font-medium flex items-center gap-1.5 transition">
-                                📷 CCTV Optical
-                            </button>
-                            <button onclick="triggerBackendEmergency('citizen')" class="px-3 py-1.5 bg-teal-600/90 hover:bg-teal-600 text-white rounded-lg text-xs font-medium flex items-center gap-1.5 transition">
-                                👤 Voice SOS
-                            </button>
-                            <button onclick="triggerAmbulanceFailoverAction()" title="Simulate assigned ambulance becoming unavailable" class="px-3 py-1.5 bg-rose-600/80 hover:bg-rose-600 text-white rounded-lg text-xs font-medium flex items-center gap-1.5 transition border border-rose-500/30">
-                                ⚠️ Failover
-                            </button>
-                            <button onclick="reloadBackendState()" class="px-2.5 py-1.5 bg-dark-800 hover:bg-dark-700 text-slate-300 rounded-lg text-xs font-medium border border-dark-700 transition">
-                                ↺ Sync State
-                            </button>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- SELECTED INCIDENT COMMAND PANEL -->
-                <div id="commandPanel" class="h-64 bg-dark-900 border-t border-dark-800 p-4 flex gap-4 shrink-0 overflow-x-auto">
-                    
-                    <!-- Panel Column 1: Core Incident Overview -->
-                    <div class="w-72 border-r border-dark-800 pr-4 flex flex-col justify-between shrink-0">
-                        <div>
-                            <div class="flex items-center justify-between mb-1.5">
-                                <span id="panelIncidentId" class="font-mono text-xs font-bold text-brand-400">SELECT INCIDENT</span>
-                                <span id="panelSeverityBadge" class="px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-dark-800 text-slate-400">STANDBY</span>
-                            </div>
-                            <h3 id="panelTitle" class="text-sm font-bold text-white mb-1 line-clamp-1">No Active Incident Selected</h3>
-                            <div class="flex items-center gap-2 mb-2">
-                                <p id="panelLocation" class="text-xs text-slate-400 font-mono">Location: --, --</p>
-                            </div>
-                            <div id="panelStateBadge" class="inline-block px-2 py-0.5 rounded text-[10px] font-bold font-mono bg-dark-800 text-slate-300 border border-dark-700">
-                                STATUS: STANDBY
-                            </div>
-                        </div>
-
-                        <!-- AI Confidence & Severity Visualizers -->
-                        <div class="space-y-2">
-                            <div>
-                                <div class="flex justify-between text-[11px] mb-1">
-                                    <span class="text-slate-400 flex items-center gap-1 font-mono">
-                                        Multi-Sensor Confidence
-                                        <span title="Calculated probability that this alert represents a genuine severe emergency." class="cursor-help text-slate-500">ⓘ</span>
-                                    </span>
-                                    <span id="panelConfidenceVal" class="font-mono font-bold text-brand-400">--%</span>
-                                </div>
-                                <div class="w-full bg-dark-800 h-2 rounded-full overflow-hidden">
-                                    <div id="panelConfidenceBar" class="bg-brand-500 h-full w-0 transition-all duration-500"></div>
-                                </div>
-                            </div>
-
-                            <div>
-                                <div class="flex justify-between text-[11px] mb-1">
-                                    <span class="text-slate-400 font-mono">Calculated Severity Index</span>
-                                    <span id="panelSeverityVal" class="font-mono font-bold text-critical">-- / 100</span>
-                                </div>
-                                <div class="w-full bg-dark-800 h-2 rounded-full overflow-hidden">
-                                    <div id="panelSeverityBar" class="bg-critical h-full w-0 transition-all duration-500"></div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- Panel Column 2: Multi-Sensor Fusion Pipeline -->
-                    <div class="w-64 border-r border-dark-800 pr-4 flex flex-col shrink-0">
-                        <div class="flex justify-between items-center mb-2">
-                            <span class="text-[11px] font-bold font-mono uppercase text-slate-400">DETECTION SOURCES</span>
-                            <span id="detectionLiveBadge" class="text-[9px] bg-emerald-500/10 text-emerald-400 px-1.5 py-0.5 rounded border border-emerald-500/20 font-mono">LIVE AI FUSION</span>
-                        </div>
-                        <div id="panelSourcesList" class="space-y-2 flex-1 overflow-y-auto">
-                            <div class="text-xs text-slate-500 italic py-2">Select an incident to inspect multi-modal sensor triggers.</div>
-                        </div>
-                    </div>
-
-                    <!-- Panel Column 3: Dispatch Workflow Timeline State Machine -->
-                    <div class="w-72 border-r border-dark-800 pr-4 flex flex-col shrink-0">
-                        <span class="text-[11px] font-bold font-mono uppercase text-slate-400 mb-2">STATE MACHINE TIMELINE</span>
-                        <div id="panelTimeline" class="space-y-1.5 flex-1 overflow-y-auto font-mono text-[11px]">
-                            <div class="text-xs text-slate-500 italic">Awaiting incident selection...</div>
-                        </div>
-                    </div>
-
-                    <!-- Panel Column 4: Dynamic Dispatch & Hospital Selection -->
-                    <div class="flex-1 min-w-[280px] flex flex-col justify-between">
-                        <div>
-                            <div class="flex justify-between items-center mb-2">
-                                <span class="text-[11px] font-bold font-mono uppercase text-slate-400">OPTIMIZED SELECTION ENGINE</span>
-                                <span id="osrmStatusBadge" class="text-[10px] text-brand-400 font-mono flex items-center gap-1">OSRM ROUTE READY</span>
-                            </div>
-                            <div class="grid grid-cols-2 gap-2 text-xs font-mono mb-2">
-                                <div class="bg-dark-850 p-2 rounded-lg border border-dark-800">
-                                    <span class="text-[10px] text-slate-500 block">DYNAMIC AMBULANCE</span>
-                                    <span id="panelAmbulance" class="font-bold text-amber-400">--</span>
-                                    <span id="panelAmbulanceEta" class="text-[10px] text-slate-400 block mt-0.5">ETA: --</span>
-                                    <span id="panelAmbulanceReason" class="text-[9px] text-slate-500 block truncate mt-0.5">--</span>
-                                </div>
-                                <div class="bg-dark-850 p-2 rounded-lg border border-dark-800">
-                                    <span class="text-[10px] text-slate-500 block">TRAUMA CENTER</span>
-                                    <span id="panelHospital" class="font-bold text-sky-400">--</span>
-                                    <span id="panelHospitalAlert" class="text-[10px] text-emerald-400 font-bold block mt-0.5">STATUS: --</span>
-                                    <span id="panelHospitalReason" class="text-[9px] text-slate-500 block truncate mt-0.5">--</span>
-                                </div>
-                            </div>
-                        </div>
-
-                        <!-- Action Buttons Bar -->
-                        <div class="flex items-center gap-2">
-                            <button id="dispatchActionBtn" onclick="actionDispatchSelected()" class="flex-1 py-1.5 bg-brand-600 hover:bg-brand-500 text-white rounded-lg text-xs font-bold font-mono transition flex items-center justify-center gap-1.5">
-                                <i data-lucide="send" class="w-3.5 h-3.5"></i> Confirm & Dispatch Unit
-                            </button>
-                            <button onclick="actionRerouteSelected()" class="px-3 py-1.5 bg-dark-800 hover:bg-dark-700 text-slate-300 rounded-lg text-xs font-bold font-mono border border-dark-700 transition" title="Recalculate route geometry">
-                                ↺ Reroute
-                            </button>
-                            <button onclick="actionResolveSelected()" class="px-3 py-1.5 bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-400 border border-emerald-500/30 rounded-lg text-xs font-bold font-mono transition">
-                                ✓ Resolve
-                            </button>
-                        </div>
-                    </div>
-
-                </div>
-
-            </main>
-
-            <!-- RIGHT SIDEBAR (INCIDENT FEED + LIVE LOGS) -->
-            <aside class="w-full md:w-80 lg:w-96 bg-dark-900 border-l border-dark-800 flex flex-col shrink-0 z-20">
-                
-                <!-- Sidebar Search & Header -->
-                <div class="p-3 border-b border-dark-800 space-y-2">
-                    <div class="flex items-center justify-between">
-                        <span class="text-xs font-bold font-mono tracking-wider text-slate-300 uppercase flex items-center gap-1.5">
-                            <i data-lucide="list" class="w-4 h-4 text-brand-500"></i> Live Incident Queue
-                        </span>
-                        <span id="incidentCountBadge" class="text-xs font-mono bg-dark-850 text-slate-300 px-2 py-0.5 rounded-full border border-dark-700">0</span>
-                    </div>
-                    <div class="relative">
-                        <i data-lucide="search" class="w-3.5 h-3.5 absolute left-2.5 top-2.5 text-slate-500"></i>
-                        <input type="text" id="incidentSearch" oninput="handleSearch(this.value)" placeholder="Search ID, title, source..." class="w-full bg-dark-950 border border-dark-700 rounded-lg pl-8 pr-3 py-1.5 text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-brand-500 font-mono">
-                    </div>
-                </div>
-
-                <!-- Incident Cards Container -->
-                <div id="incidentList" class="flex-1 overflow-y-auto p-3 space-y-2">
-                    <!-- Dynamic Incident Cards -->
-                </div>
-
-                <!-- Bottom Sub-Section: Live Activity Stream -->
-                <div class="h-44 border-t border-dark-800 flex flex-col bg-dark-950">
-                    <div class="p-2 px-3 border-b border-dark-800 flex justify-between items-center bg-dark-900/60">
-                        <span class="text-[11px] font-bold font-mono text-slate-400 uppercase flex items-center gap-1.5">
-                            <i data-lucide="activity" class="w-3.5 h-3.5 text-emerald-400"></i> Real-Time Telemetry Log
-                        </span>
-                        <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-                    </div>
-                    <div id="activityFeed" class="flex-1 overflow-y-auto p-2 font-mono text-[10px] space-y-1">
-                        <!-- Live log items -->
-                    </div>
-                </div>
-
-            </aside>
-
-        </div>
-
-        <!-- TAB 2: CCTV VISION MATRIX -->
-        <div id="tabView-cctv" class="tab-view hidden flex-1 p-6 overflow-y-auto bg-dark-950 space-y-6 w-full">
-            <div class="flex items-center justify-between border-b border-dark-800 pb-4">
-                <div>
-                    <h2 class="text-lg font-bold text-white flex items-center gap-2">
-                        <i data-lucide="video" class="w-5 h-5 text-purple-400"></i> CCTV Vision Stream AI Analytics
-                    </h2>
-                    <p class="text-xs text-slate-400">Optical vehicle crash recognition and telemetry pipeline.</p>
-                </div>
-                <span class="px-3 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 font-mono text-xs font-semibold">
-                    ● YOLO OPTICAL ENGINE READY
-                </span>
-            </div>
-
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div class="bg-dark-900 border border-dark-700 rounded-xl overflow-hidden shadow-2xl relative scanline-overlay">
-                    <div class="p-3 bg-dark-850 border-b border-dark-800 flex justify-between items-center text-xs font-mono">
-                        <span class="font-bold text-white flex items-center gap-2">
-                            <span class="w-2 h-2 rounded-full bg-critical animate-pulse"></span> CAM-04: Pune Bypass Express
-                        </span>
-                        <span class="text-critical font-bold">VEHICLE COLLISION DETECTED (94%)</span>
-                    </div>
-                    <div class="relative h-64 bg-slate-900 flex items-center justify-center">
-                        <img src="https://images.unsplash.com/photo-1542282088-72c9c27ed0cd?auto=format&fit=crop&w=800&q=80" class="w-full h-full object-cover opacity-70" alt="Traffic Feed" />
-                        <div class="absolute inset-10 border-2 border-critical rounded flex items-start p-2 bg-critical/10 backdrop-blur-[1px]">
-                            <span class="bg-critical text-white px-1.5 py-0.5 font-mono text-[10px] font-bold rounded">AI DETECT: VEHICLE IMPACT 94.2%</span>
-                        </div>
-                    </div>
-                </div>
-
-                <div class="bg-dark-900 border border-dark-700 rounded-xl overflow-hidden shadow-2xl relative scanline-overlay">
-                    <div class="p-3 bg-dark-850 border-b border-dark-800 flex justify-between items-center text-xs font-mono">
-                        <span class="font-bold text-white flex items-center gap-2">
-                            <span class="w-2 h-2 rounded-full bg-emerald-500"></span> CAM-11: Shivaji Nagar Junction
-                        </span>
-                        <span class="text-emerald-400">CLEAR (98.5%)</span>
-                    </div>
-                    <div class="relative h-64 bg-slate-900 flex items-center justify-center">
-                        <img src="https://images.unsplash.com/photo-1506521781263-d8422e82f27a?auto=format&fit=crop&w=800&q=80" class="w-full h-full object-cover opacity-70" alt="Traffic Feed" />
-                        <div class="absolute bottom-4 left-4 bg-dark-900/80 p-2 rounded text-[10px] font-mono text-slate-300 border border-dark-700">
-                            Flow Rate: 42 vehicles/min | Temp: 28°C
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <!-- TAB 3: FLEET & HOSPITALS -->
-        <div id="tabView-fleet" class="tab-view hidden flex-1 p-6 overflow-y-auto bg-dark-950 space-y-6 w-full">
-            <div class="flex items-center justify-between border-b border-dark-800 pb-4">
-                <div>
-                    <h2 class="text-lg font-bold text-white flex items-center gap-2">
-                        <i data-lucide="truck" class="w-5 h-5 text-amber-400"></i> Fleet & Trauma Hospital Capacity Matrix
-                    </h2>
-                    <p class="text-xs text-slate-400">Live fleet telemetry and Level-1 trauma center readiness.</p>
-                </div>
-                <span class="px-3 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 font-mono text-xs font-semibold">
-                    ● LIVE FLEET SYNC
-                </span>
-            </div>
-
-            <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                <div class="bg-dark-900 border border-dark-700 rounded-xl p-4 space-y-3">
-                    <h3 class="text-sm font-bold text-slate-200 font-mono uppercase border-b border-dark-800 pb-2">Active Emergency Fleet</h3>
-                    <div id="fleetAmbulanceList" class="space-y-2 font-mono text-xs"></div>
-                </div>
-
-                <div class="bg-dark-900 border border-dark-700 rounded-xl p-4 space-y-3">
-                    <h3 class="text-sm font-bold text-slate-200 font-mono uppercase border-b border-dark-800 pb-2">Designated Trauma Centers</h3>
-                    <div id="fleetHospitalList" class="space-y-2 font-mono text-xs"></div>
-                </div>
-            </div>
-        </div>
-
-        <!-- TAB 4: ANALYTICS -->
-        <div id="tabView-analytics" class="tab-view hidden flex-1 p-6 overflow-y-auto bg-dark-950 space-y-6 w-full">
-            <div class="border-b border-dark-800 pb-4 flex items-center justify-between">
-                <div>
-                    <h2 class="text-lg font-bold text-white flex items-center gap-2">
-                        <i data-lucide="bar-chart-3" class="w-5 h-5 text-indigo-400"></i> System Operational Metrics
-                    </h2>
-                    <p class="text-xs text-slate-400">Real-time dispatch stats, AI confidence scoring, and OSRM routing metrics.</p>
-                </div>
-                <span class="px-3 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 font-mono text-xs font-semibold">
-                    ● REAL-TIME TELEMETRY
-                </span>
-            </div>
-
-            <div class="grid grid-cols-1 md:grid-cols-3 gap-4 font-mono">
-                <div class="bg-dark-900 p-4 border border-dark-700 rounded-xl">
-                    <span class="text-xs text-slate-400 block uppercase">OSRM Routing Engine</span>
-                    <span id="analyticsOsrmStatus" class="text-2xl font-bold text-emerald-400 mt-1 block">ONLINE</span>
-                    <span class="text-[10px] text-slate-500 mt-1 block">Active street road network matrix</span>
-                </div>
-                <div class="bg-dark-900 p-4 border border-dark-700 rounded-xl">
-                    <span class="text-xs text-slate-400 block uppercase">Incidents Ingested</span>
-                    <span id="analyticsTotalIncidents" class="text-2xl font-bold text-brand-400 mt-1 block">0</span>
-                    <span class="text-[10px] text-slate-500 mt-1 block">Live DB Ingestions</span>
-                </div>
-                <div class="bg-dark-900 p-4 border border-dark-700 rounded-xl">
-                    <span class="text-xs text-slate-400 block uppercase">Average Response Time</span>
-                    <span id="analyticsAvgEta" class="text-2xl font-bold text-purple-400 mt-1 block">4.5 min</span>
-                    <span class="text-[10px] text-slate-500 mt-1 block">Optimized ALS dispatch allocation</span>
-                </div>
-            </div>
-        </div>
-
-        <!-- TAB 5: SOS VOICE INTAKE SIMULATOR -->
-        <div id="tabView-sos" class="tab-view hidden flex-1 p-6 overflow-y-auto bg-dark-950 space-y-6 w-full">
-            <div class="border-b border-dark-800 pb-4 flex justify-between items-center">
-                <div>
-                    <h2 class="text-lg font-bold text-white flex items-center gap-2">
-                        <i data-lucide="phone-call" class="w-5 h-5 text-emerald-400"></i> SOS Emergency Call Speech Intake AI
-                    </h2>
-                    <p class="text-xs text-slate-400">Live speech transcript entity extraction and automated GPS dispatch pipeline.</p>
-                </div>
-                <button onclick="simulateCallIntake()" class="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg font-mono text-xs font-bold transition flex items-center gap-2">
-                    <i data-lucide="phone-incoming" class="w-4 h-4"></i> Simulate Voice Call Intake
-                </button>
-            </div>
-
-            <div class="bg-dark-900 border border-dark-700 rounded-xl p-4 font-mono space-y-3">
-                <div class="flex justify-between items-center border-b border-dark-800 pb-2">
-                    <span class="text-xs font-bold text-slate-300">VOICE TRANSCRIPT & AI EXTRACTION PIPELINE</span>
-                    <span id="sosCallStatus" class="text-[10px] text-slate-500">LINE INACTIVE</span>
-                </div>
-                <div id="sosTranscriptBox" class="h-48 overflow-y-auto bg-dark-950 p-3 rounded-lg border border-dark-800 text-xs text-slate-300 space-y-2">
-                    <div class="text-slate-500 italic">Click "Simulate Voice Call Intake" to test live speech AI ingestion into the backend.</div>
-                </div>
-            </div>
-        </div>
-
+    <div class="map-topbar">
+      <button class="mbtn on" data-layer="incidents" data-testid="layer-incidents"><i class="fa-solid fa-triangle-exclamation"></i> INCIDENTS</button>
+      <button class="mbtn on" data-layer="ambulances" data-testid="layer-ambulances"><i class="fa-solid fa-truck-medical"></i> AMBULANCES</button>
+      <button class="mbtn on" data-layer="hospitals" data-testid="layer-hospitals"><i class="fa-solid fa-hospital"></i> HOSPITALS</button>
+      <button class="mbtn on" data-layer="routes" data-testid="layer-routes"><i class="fa-solid fa-route"></i> ROUTES</button>
+      <span class="map-spacer"></span>
+      <button class="mbtn" id="fitAllBtn" data-testid="fit-all-button"><i class="fa-solid fa-expand"></i> FIT ALL</button>
+      <button class="mbtn" id="centerIncBtn" data-testid="center-incident-button"><i class="fa-solid fa-location-crosshairs"></i> CENTER INCIDENT</button>
     </div>
 
-    <!-- SERVER CONFIGURATION MODAL -->
-    <div id="serverConfigModal" class="hidden fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
-        <div class="bg-dark-900 border border-dark-700 rounded-2xl w-full max-w-md p-5 shadow-2xl space-y-4 font-mono">
-            <div class="flex justify-between items-center border-b border-dark-800 pb-3">
-                <h3 class="text-sm font-bold text-white flex items-center gap-2">
-                    <i data-lucide="settings" class="w-4 h-4 text-brand-400"></i> Backend Connection Settings
-                </h3>
-                <button onclick="closeServerConfigModal()" class="text-slate-400 hover:text-white"><i data-lucide="x" class="w-4 h-4"></i></button>
-            </div>
+    <div class="legend" aria-hidden="true">
+      <h5>LEGEND</h5>
+      <div><span class="lg" style="background:var(--red)"></span> Critical incident</div>
+      <div><span class="lg" style="background:var(--orange)"></span> High</div>
+      <div><span class="lg" style="background:var(--yellow)"></span> Medium</div>
+      <div><span class="lg" style="background:var(--green)"></span> Low</div>
+      <div><span class="lg sq" style="background:var(--blue)"></span> Ambulance</div>
+      <div><span class="lg sq" style="background:var(--green)"></span> Hospital</div>
+      <div><span class="lg line" style="background:var(--orange)"></span> Emergency route</div>
+    </div>
+  </div>
 
-            <div class="space-y-3 text-xs">
-                <div>
-                    <label class="block text-slate-400 mb-1">BACKEND API & SOCKET URL</label>
-                    <input type="text" id="cfgBackendUrl" value="http://localhost:5000" class="w-full bg-dark-950 border border-dark-700 rounded-lg p-2 text-slate-200 focus:outline-none focus:border-brand-500">
-                    <p class="text-[10px] text-slate-500 mt-1">If connecting from a hosted environment, enter your public backend URL or Ngrok endpoint.</p>
-                </div>
-                <button onclick="saveServerConfig()" class="w-full py-2 bg-brand-600 hover:bg-brand-500 text-white font-bold rounded-lg transition mt-2">
-                    Save & Reconnect
-                </button>
-            </div>
-        </div>
+  <aside id="sidebar">
+    <div class="tabs" role="tablist">
+      <button class="tab active" id="tabIncidents" data-testid="tab-incidents" role="tab">INCIDENTS (<span id="sidebarCount">0</span>)</button>
+      <button class="tab" id="tabFeed" data-testid="tab-feed" role="tab">LIVE ACTIVITY</button>
     </div>
 
-    <!-- NEW INCIDENT MODAL -->
-    <div id="newIncidentModal" class="hidden fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
-        <div class="bg-dark-900 border border-dark-700 rounded-2xl w-full max-w-md p-5 shadow-2xl space-y-4 font-mono">
-            <div class="flex justify-between items-center border-b border-dark-800 pb-3">
-                <h3 class="text-sm font-bold text-white flex items-center gap-2">
-                    <i data-lucide="alert-circle" class="w-4 h-4 text-emerald-400"></i> Ingest Live Emergency Alert
-                </h3>
-                <button onclick="closeNewIncidentModal()" class="text-slate-400 hover:text-white"><i data-lucide="x" class="w-4 h-4"></i></button>
-            </div>
-
-            <form onsubmit="handleManualIncidentSubmit(event)" class="space-y-3 text-xs">
-                <div>
-                    <label class="block text-slate-400 mb-1">INCIDENT TITLE / DESCRIPTION</label>
-                    <input type="text" id="manualTitle" required placeholder="e.g. Multi-Vehicle Rollover Collision" class="w-full bg-dark-950 border border-dark-700 rounded-lg p-2 text-slate-200 focus:outline-none focus:border-brand-500">
-                </div>
-                <div class="grid grid-cols-2 gap-2">
-                    <div>
-                        <label class="block text-slate-400 mb-1">LATITUDE</label>
-                        <input type="number" step="any" id="manualLat" required value="18.5204" class="w-full bg-dark-950 border border-dark-700 rounded-lg p-2 text-slate-200">
-                    </div>
-                    <div>
-                        <label class="block text-slate-400 mb-1">LONGITUDE</label>
-                        <input type="number" step="any" id="manualLng" required value="73.8567" class="w-full bg-dark-950 border border-dark-700 rounded-lg p-2 text-slate-200">
-                    </div>
-                </div>
-                <div>
-                    <label class="block text-slate-400 mb-1">SEVERITY LEVEL (1-100)</label>
-                    <input type="range" id="manualSeverity" min="10" max="100" value="88" oninput="document.getElementById('sevValDisp').innerText = this.value" class="w-full">
-                    <span id="sevValDisp" class="text-right block font-bold text-critical">88</span>
-                </div>
-                <button type="submit" class="w-full py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-lg transition mt-2">
-                    Transmit to AI Backend
-                </button>
-            </form>
+    <div id="viewIncidents" style="display:flex;flex-direction:column;flex:1;min-height:0">
+      <div class="filters">
+        <div class="search">
+          <i class="fa-solid fa-magnifying-glass"></i>
+          <input id="searchInput" data-testid="search-input" placeholder="Search incident ID, type, source, status…" aria-label="Search incidents" />
         </div>
+        <div class="chips-label">SEVERITY</div>
+        <div class="chips" id="sevChips">
+          <button class="chip on" data-sev="ALL" data-testid="filter-all">ALL</button>
+          <button class="chip" data-sev="CRITICAL" data-testid="filter-critical">🔴 CRITICAL</button>
+          <button class="chip" data-sev="HIGH" data-testid="filter-high">🟠 HIGH</button>
+          <button class="chip" data-sev="MEDIUM" data-testid="filter-medium">🟡 MEDIUM</button>
+          <button class="chip" data-sev="LOW" data-testid="filter-low">🟢 LOW</button>
+        </div>
+        <div class="chips-label">DETECTION SOURCE</div>
+        <div class="chips" id="srcChips">
+          <button class="chip on" data-src="ALL" data-testid="filter-src-all">ALL</button>
+          <button class="chip" data-src="smartphone" data-testid="filter-src-smartphone">SMARTPHONE</button>
+          <button class="chip" data-src="cctv" data-testid="filter-src-cctv">CCTV</button>
+          <button class="chip" data-src="citizen" data-testid="filter-src-citizen">CITIZEN</button>
+          <button class="chip" data-src="iot" data-testid="filter-src-iot">IOT</button>
+        </div>
+      </div>
+      <div class="list" id="incidentList" data-testid="incident-list"></div>
     </div>
 
-    <script>
-        // System Configuration Constants
-        const CONFIG = {
-            DEFAULT_CENTER: [18.5204, 73.8567], // Pune Coordinates
-            DEFAULT_ZOOM: 13,
-            BACKEND_URL: localStorage.getItem('resqnet_backend_url') || 'http://localhost:5000'
-        };
-
-        // Incident State Machine Constants
-        const INCIDENT_STATES = {
-            DETECTED: 'DETECTED',
-            VERIFYING: 'VERIFYING',
-            VERIFIED: 'VERIFIED',
-            DISPATCHING: 'DISPATCHING',
-            AMBULANCE_ASSIGNED: 'AMBULANCE_ASSIGNED',
-            ROUTE_CALCULATED: 'ROUTE_CALCULATED',
-            HOSPITAL_SELECTED: 'HOSPITAL_SELECTED',
-            HOSPITAL_PRE_ALERTED: 'HOSPITAL_PRE_ALERTED',
-            EN_ROUTE: 'EN_ROUTE',
-            ARRIVED: 'ARRIVED',
-            RESOLVED: 'RESOLVED'
-        };
-
-        // Core Operational Application State
-        const state = {
-            incidents: {},
-            ambulances: {
-                'AMB-01': { id: 'AMB-01', code: 'AMB-01', lat: 18.5300, lng: 73.8400, status: 'AVAILABLE', traumaReady: true, eta: 4 },
-                'AMB-02': { id: 'AMB-02', code: 'AMB-02', lat: 18.5100, lng: 73.8600, status: 'AVAILABLE', eta: 5, traumaReady: true },
-                'AMB-03': { id: 'AMB-03', code: 'AMB-03', lat: 18.5400, lng: 73.8700, status: 'AVAILABLE', traumaReady: false, eta: 8 },
-                'AMB-04': { id: 'AMB-04', code: 'AMB-04', lat: 18.4900, lng: 73.8300, status: 'UNAVAILABLE', traumaReady: true, eta: 12 }
-            },
-            hospitals: {
-                'HOSP-01': { id: 'HOSP-01', name: 'Pune Trauma Center', lat: 18.5280, lng: 73.8720, capacity: 'PRE-ALERT READY', trauma: true, status: 'AVAILABLE' },
-                'HOSP-02': { id: 'HOSP-02', name: 'Ruby Hall General', lat: 18.5350, lng: 73.8780, capacity: 'STANDBY', trauma: true, status: 'AVAILABLE' },
-                'HOSP-03': { id: 'HOSP-03', name: 'City Emergency Care', lat: 18.5050, lng: 73.8350, capacity: 'LIMITED', trauma: false, status: 'LIMITED' }
-            },
-            selectedIncidentId: null,
-            activeFilter: 'ALL',
-            sourceFilters: { smartphone: true, cctv: true, citizen: true },
-            searchQuery: '',
-            demoMode: true,
-            audioMuted: false,
-            audioCtx: null,
-            totalSimulatedEvents: 0,
-            isBackendConnected: false
-        };
-
-        let map;
-        let socket = null;
-        const mapMarkers = {
-            incidents: {},
-            ambulances: {},
-            hospitals: {},
-            routes: {}
-        };
-
-        /**
-         * Initialize Socket.IO & Backend Synchronization
-         */
-        function initBackendConnection() {
-            try {
-                if (typeof io !== 'undefined') {
-                    socket = io(CONFIG.BACKEND_URL, {
-                        reconnection: true,
-                        reconnectionAttempts: 10,
-                        reconnectionDelay: 2000,
-                        timeout: 5000
-                    });
-
-                    socket.on('connect', () => {
-                        state.isBackendConnected = true;
-                        setConnectionStatus(true);
-                        addActivity(`Connected to ResQNet Real-Time Hub (${CONFIG.BACKEND_URL})`);
-                        showToast('Connected to ResQNet AI Backend & Android Stream!', 'success');
-                        fetchInitialBackendData();
-                    });
-
-                    socket.on('disconnect', () => {
-                        state.isBackendConnected = false;
-                        setConnectionStatus(false);
-                        addActivity('Backend connection lost. Operating in local fallback mode.');
-                    });
-
-                    // Live Incident Ingest Event (from Android App, CCTV, or SOS)
-                    socket.on('incident:new', (incident) => {
-                        handleIncomingEmergency(incident, true);
-                    });
-
-                    // Live Incident Update Event (State transition, Dispatch, Failover)
-                    socket.on('incident:update', (incident) => {
-                        state.incidents[incident.id] = incident;
-                        renderIncidentMarker(incident);
-                        renderIncidentList();
-                        updateKPIs();
-                        if (state.selectedIncidentId === incident.id) {
-                            renderCommandPanel(incident);
-                        }
-                        addActivity(`Incident [${incident.id}] updated: ${incident.state}`);
-                    });
-
-                    // Live Incident Resolved Event
-                    socket.on('incident:resolved', ({ id }) => {
-                        if (state.incidents[id]) {
-                            delete state.incidents[id];
-                            if (mapMarkers.incidents[id]) {
-                                map.removeLayer(mapMarkers.incidents[id]);
-                                delete mapMarkers.incidents[id];
-                            }
-                            if (state.selectedIncidentId === id) {
-                                state.selectedIncidentId = null;
-                            }
-                            renderIncidentList();
-                            updateKPIs();
-                            addActivity(`Incident [${id}] resolved and cleared.`);
-                        }
-                    });
-
-                    // Real-Time Ambulance GPS Stream
-                    socket.on('ambulance:telemetry', (amb) => {
-                        state.ambulances[amb.id] = amb;
-                        updateAmbulanceMarker(amb);
-                        renderFleetAndHospitalLists();
-                        if (state.selectedIncidentId && state.incidents[state.selectedIncidentId]?.ambulanceId === amb.id) {
-                            const inc = state.incidents[state.selectedIncidentId];
-                            const hosp = state.hospitals[inc.hospitalId];
-                            if (hosp) drawRoute(inc, amb, hosp);
-                        }
-                    });
-
-                    // System Telemetry & Health Updates
-                    socket.on('health:status', (health) => {
-                        updateHealthUI(health);
-                    });
-                }
-            } catch (err) {
-                console.warn('Socket.IO connection failed:', err);
-                setConnectionStatus(false);
-            }
-        }
-
-        async function fetchInitialBackendData() {
-            try {
-                const res = await fetch(`${CONFIG.BACKEND_URL}/api/incidents`);
-                if (res.ok) {
-                    const data = await res.json();
-                    if (data.incidents && data.incidents.length > 0) {
-                        data.incidents.forEach(inc => {
-                            state.incidents[inc.id] = inc;
-                            renderIncidentMarker(inc);
-                        });
-                        renderIncidentList();
-                        updateKPIs();
-                        if (!state.selectedIncidentId && data.incidents.length > 0) {
-                            selectIncident(data.incidents[0].id);
-                        }
-                    }
-                }
-            } catch (e) {
-                console.warn('Error fetching backend incidents:', e);
-            }
-        }
-
-        function setConnectionStatus(online) {
-            const banner = document.getElementById('liveStatusBanner');
-            const dot = document.getElementById('liveStatusDot');
-            const label = document.getElementById('liveStatusLabel');
-            const sysDot = document.getElementById('sysStatusDot');
-            const sysText = document.getElementById('sysStatusText');
-            const statusBackend = document.getElementById('status-backend');
-            const statusSocket = document.getElementById('status-socket');
-
-            if (online) {
-                banner.className = "text-[10px] bg-emerald-500/10 text-emerald-400 px-2 py-0.5 rounded border border-emerald-500/30 font-mono font-semibold uppercase tracking-wider flex items-center gap-1";
-                dot.className = "w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse";
-                label.innerText = "ONLINE / LIVE BACKEND";
-
-                sysDot.className = "w-2 h-2 rounded-full bg-emerald-400 animate-pulse";
-                sysText.className = "text-emerald-300 font-mono";
-                sysText.innerText = "LIVE TELEMETRY";
-
-                statusBackend.innerText = "CONNECTED";
-                statusBackend.className = "text-emerald-400 font-semibold bg-emerald-500/10 px-1.5 py-0.5 rounded border border-emerald-500/20";
-
-                statusSocket.innerText = "CONNECTED (0ms)";
-                statusSocket.className = "text-emerald-400 font-semibold bg-emerald-500/10 px-1.5 py-0.5 rounded border border-emerald-500/20";
-            } else {
-                banner.className = "text-[10px] bg-amber-500/10 text-amber-400 px-2 py-0.5 rounded border border-amber-500/30 font-mono font-semibold uppercase tracking-wider flex items-center gap-1";
-                dot.className = "w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse";
-                label.innerText = "DEMO / STANDALONE";
-
-                sysDot.className = "w-2 h-2 rounded-full bg-amber-400 animate-pulse";
-                sysText.className = "text-amber-300 font-mono";
-                sysText.innerText = "STANDALONE MODE";
-
-                statusBackend.innerText = "OFFLINE (STANDALONE)";
-                statusBackend.className = "text-amber-400 font-semibold bg-amber-500/10 px-1.5 py-0.5 rounded border border-amber-500/20";
-
-                statusSocket.innerText = "OFFLINE";
-                statusSocket.className = "text-rose-400 font-semibold bg-rose-500/10 px-1.5 py-0.5 rounded border border-rose-500/20";
-            }
-        }
-
-        function updateHealthUI(health) {
-            const statusMongo = document.getElementById('status-mongodb');
-            if (statusMongo) {
-                statusMongo.innerText = health.mongodb || 'CONNECTED';
-                statusMongo.className = "text-emerald-400 font-semibold bg-emerald-500/10 px-1.5 py-0.5 rounded border border-emerald-500/20";
-            }
-            const statusAndroid = document.getElementById('status-android');
-            if (statusAndroid) {
-                statusAndroid.innerText = `ACTIVE (${health.connectedClients || 1} PEERS)`;
-                statusAndroid.className = "text-emerald-400 font-semibold bg-emerald-500/10 px-1.5 py-0.5 rounded border border-emerald-500/20";
-            }
-        }
-
-        document.addEventListener('DOMContentLoaded', () => {
-            initLucide();
-            initMap();
-            initStaticMapElements();
-            renderFleetAndHospitalLists();
-            initBackendConnection();
-            setupInitialDemoData();
-            addActivity("ResQNet Frontend Operational Hub v3.4 Ready.");
-        });
-
-        function initLucide() {
-            if (window.lucide) lucide.createIcons();
-        }
-
-        // Custom Toast UI Notification helper
-        function showToast(message, type = 'info') {
-            const container = document.getElementById('toastContainer');
-            if (!container) return;
-
-            const toast = document.createElement('div');
-            const colorClass = type === 'critical' ? 'bg-rose-900/90 border-rose-500 text-rose-200' :
-                             type === 'success' ? 'bg-emerald-900/90 border-emerald-500 text-emerald-200' :
-                             type === 'warning' ? 'bg-amber-900/90 border-amber-500 text-amber-200' :
-                             'bg-dark-850/90 border-brand-500 text-brand-200';
-
-            toast.className = `toast-msg px-4 py-2.5 rounded-xl border backdrop-blur text-xs font-mono shadow-2xl flex items-center justify-between gap-3 ${colorClass}`;
-            toast.innerHTML = `<span>${message}</span><button onclick="this.parentElement.remove()" class="text-slate-400 hover:text-white">&times;</button>`;
-
-            container.appendChild(toast);
-            setTimeout(() => {
-                toast.style.opacity = '0';
-                setTimeout(() => toast.remove(), 300);
-            }, 4000);
-        }
-
-        // Web Audio Synth for Emergency Siren
-        function playAlertSound(type = 'critical') {
-            if (state.audioMuted) return;
-            try {
-                if (!state.audioCtx) {
-                    state.audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-                }
-                const ctx = state.audioCtx;
-                const osc = ctx.createOscillator();
-                const gain = ctx.createGain();
-
-                osc.connect(gain);
-                gain.connect(ctx.destination);
-
-                if (type === 'critical') {
-                    osc.type = 'sawtooth';
-                    osc.frequency.setValueAtTime(880, ctx.currentTime);
-                    osc.frequency.exponentialRampToValueAtTime(440, ctx.currentTime + 0.3);
-                    gain.gain.setValueAtTime(0.15, ctx.currentTime);
-                    gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.3);
-                    osc.start();
-                    osc.stop(ctx.currentTime + 0.3);
-                } else {
-                    osc.type = 'sine';
-                    osc.frequency.setValueAtTime(523.25, ctx.currentTime);
-                    osc.frequency.setValueAtTime(659.25, ctx.currentTime + 0.15);
-                    gain.gain.setValueAtTime(0.1, ctx.currentTime);
-                    gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.3);
-                    osc.start();
-                    osc.stop(ctx.currentTime + 0.3);
-                }
-            } catch (e) {
-                console.warn("Audio play prevented or unsupported", e);
-            }
-        }
-
-        function toggleAudio() {
-            state.audioMuted = !state.audioMuted;
-            const icon = document.getElementById('audioIcon');
-            if (state.audioMuted) {
-                icon.className = "w-4 h-4 text-slate-500";
-            } else {
-                icon.className = "w-4 h-4 text-emerald-400";
-                playAlertSound('dispatch');
-            }
-        }
-
-        function initMap() {
-            map = L.map('map', { zoomControl: false }).setView(CONFIG.DEFAULT_CENTER, CONFIG.DEFAULT_ZOOM);
-            
-            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-                attribution: '&copy; OpenStreetMap contributors',
-                maxZoom: 19,
-                className: 'map-tiles-dark'
-            }).addTo(map);
-
-            L.control.zoom({ position: 'bottomright' }).addTo(map);
-
-            setTimeout(() => {
-                if (map) map.invalidateSize();
-            }, 150);
-        }
-
-        function initStaticMapElements() {
-            // Render Hospitals
-            Object.values(state.hospitals).forEach(hosp => {
-                const icon = L.divIcon({
-                    className: 'custom-hosp-icon',
-                    html: `<div class="w-8 h-8 bg-sky-950 border-2 border-sky-400 rounded-xl flex items-center justify-center text-sky-400 shadow-xl font-bold"><i data-lucide="building-2" class="w-4 h-4"></i></div>`,
-                    iconSize: [32, 32],
-                    iconAnchor: [16, 16]
-                });
-                const marker = L.marker([hosp.lat, hosp.lng], { icon }).addTo(map);
-                marker.bindPopup(`<b>${hosp.name}</b><br>Status: ${hosp.capacity}`);
-                mapMarkers.hospitals[hosp.id] = marker;
-            });
-
-            // Render Ambulances
-            Object.values(state.ambulances).forEach(amb => {
-                updateAmbulanceMarker(amb);
-            });
-            initLucide();
-        }
-
-        function updateAmbulanceMarker(amb) {
-            const isAvail = amb.status === 'AVAILABLE';
-            const colorClass = isAvail ? 'bg-amber-950 border-amber-400 text-amber-400' : 'bg-slate-900 border-slate-600 text-slate-500';
-
-            const icon = L.divIcon({
-                className: 'custom-amb-icon',
-                html: `<div class="w-8 h-8 ${colorClass} border-2 rounded-full flex items-center justify-center shadow-xl font-bold"><i data-lucide="truck" class="w-4 h-4"></i></div>`,
-                iconSize: [32, 32],
-                iconAnchor: [16, 16]
-            });
-
-            if (mapMarkers.ambulances[amb.id]) {
-                mapMarkers.ambulances[amb.id].setLatLng([amb.lat, amb.lng]);
-                mapMarkers.ambulances[amb.id].setIcon(icon);
-            } else {
-                const marker = L.marker([amb.lat, amb.lng], { icon }).addTo(map);
-                marker.bindPopup(`<b>Unit ${amb.code}</b><br>Status: ${amb.status}`);
-                mapMarkers.ambulances[amb.id] = marker;
-            }
-        }
-
-        /**
-         * Core Emergency Event Ingestion Interface
-         */
-        function handleIncomingEmergency(raw, isLiveEvent = false) {
-            state.totalSimulatedEvents++;
-            const id = raw.id || `RNQ-${Math.floor(1000 + Math.random() * 9000)}`;
-            const lat = parseFloat(raw.latitude);
-            const lng = parseFloat(raw.longitude);
-            
-            const validLat = !isNaN(lat) && isFinite(lat) ? lat : (18.51 + Math.random() * 0.03);
-            const validLng = !isNaN(lng) && isFinite(lng) ? lng : (73.85 + Math.random() * 0.03);
-
-            const initialIncident = {
-                id: id,
-                title: raw.title || "Vehicle Collision Detected",
-                severity: raw.severity ?? 85,
-                confidence: raw.confidence ?? 0.94,
-                latitude: validLat,
-                longitude: validLng,
-                sources: raw.sources || [{ type: 'smartphone', confidence: 0.94 }],
-                state: raw.state || INCIDENT_STATES.DETECTED,
-                timeline: raw.timeline || [
-                    { state: INCIDENT_STATES.DETECTED, time: new Date().toLocaleTimeString(), text: 'Multi-Sensor Impact Anomaly Ingested' }
-                ],
-                ambulanceId: raw.ambulanceId || null,
-                ambulanceReason: raw.ambulanceReason || '',
-                hospitalId: raw.hospitalId || null,
-                hospitalReason: raw.hospitalReason || '',
-                timestamp: raw.timestamp || new Date().toLocaleTimeString()
-            };
-
-            state.incidents[id] = initialIncident;
-
-            // Render on map and select
-            renderIncidentMarker(state.incidents[id]);
-            renderIncidentList();
-            updateKPIs();
-
-            if (!state.selectedIncidentId || initialIncident.severity >= 75) {
-                selectIncident(id);
-            }
-
-            playAlertSound(initialIncident.severity >= 75 ? 'critical' : 'dispatch');
-            addActivity(`🚨 ${isLiveEvent ? 'LIVE ALERT' : 'Alert'} [${id}] ${initialIncident.title} (Severity: ${initialIncident.severity}/100)`);
-            if (isLiveEvent) {
-                showToast(`🚨 INCOMING CRASH DETECTED: [${id}] Severity ${initialIncident.severity}/100!`, 'critical');
-            }
-        }
-
-        function renderIncidentMarker(inc) {
-            const colorClass = getSeverityColor(inc.severity);
-            const isCritical = inc.severity >= 75;
-
-            const icon = L.divIcon({
-                className: 'custom-inc-icon',
-                html: `
-                    <div class="relative flex items-center justify-center">
-                        <div class="w-7 h-7 rounded-full border-2 border-white ${colorClass} ${isCritical ? 'marker-pulse-critical' : ''} flex items-center justify-center text-white font-mono font-bold text-[11px] shadow-2xl">
-                            ${inc.severity}
-                        </div>
-                    </div>
-                `,
-                iconSize: [28, 28],
-                iconAnchor: [14, 14]
-            });
-
-            if (mapMarkers.incidents[inc.id]) {
-                mapMarkers.incidents[inc.id].setLatLng([inc.latitude, inc.longitude]);
-            } else {
-                const marker = L.marker([inc.latitude, inc.longitude], { icon }).addTo(map);
-                marker.on('click', () => selectIncident(inc.id));
-                mapMarkers.incidents[inc.id] = marker;
-            }
-        }
-
-        function renderIncidentList() {
-            const listEl = document.getElementById('incidentList');
-            if (!listEl) return;
-            listEl.innerHTML = '';
-
-            const activeSources = state.sourceFilters;
-
-            const filtered = Object.values(state.incidents).filter(inc => {
-                const cat = getSeverityCategory(inc.severity);
-                if (state.activeFilter !== 'ALL' && cat !== state.activeFilter) return false;
-
-                const matchesSource = inc.sources.some(s => activeSources[s.type]);
-                if (!matchesSource) return false;
-
-                if (state.searchQuery) {
-                    const q = state.searchQuery.toLowerCase();
-                    return inc.id.toLowerCase().includes(q) || inc.title.toLowerCase().includes(q);
-                }
-                return true;
-            });
-
-            document.getElementById('incidentCountBadge').innerText = filtered.length;
-
-            if (filtered.length === 0) {
-                listEl.innerHTML = `<div class="p-4 text-center text-slate-500 font-mono text-xs border border-dashed border-dark-800 rounded-lg">No matching incidents.</div>`;
-                return;
-            }
-
-            filtered.sort((a,b) => b.severity - a.severity).forEach(inc => {
-                const isSelected = inc.id === state.selectedIncidentId;
-                const cat = getSeverityCategory(inc.severity);
-                const badgeStyle = getSeverityBadgeClass(cat);
-
-                const card = document.createElement('div');
-                card.className = `p-3 rounded-xl border transition cursor-pointer font-mono ${isSelected ? 'bg-dark-850 border-brand-500 shadow-xl ring-1 ring-brand-500/30' : 'bg-dark-900/90 border-dark-800 hover:border-slate-700'}`;
-                card.onclick = () => selectIncident(inc.id);
-
-                card.innerHTML = `
-                    <div class="flex items-center justify-between mb-1">
-                        <span class="text-xs font-bold text-slate-200">${inc.id}</span>
-                        <span class="px-1.5 py-0.5 text-[9px] rounded font-bold uppercase tracking-wider ${badgeStyle}">${cat}</span>
-                    </div>
-                    <div class="text-xs font-semibold text-white mb-1.5 font-sans line-clamp-1">${inc.title}</div>
-                    <div class="text-[10px] text-amber-400 font-bold mb-1">${inc.state}</div>
-                    <div class="flex items-center justify-between text-[10px] text-slate-400 pt-1.5 border-t border-dark-800/80">
-                        <span>Conf: ${Math.round(inc.confidence * 100)}%</span>
-                        <span>Sev: ${inc.severity}/100</span>
-                    </div>
-                `;
-                listEl.appendChild(card);
-            });
-
-            initLucide();
-        }
-
-        function selectIncident(id) {
-            state.selectedIncidentId = id;
-            const inc = state.incidents[id];
-            if (!inc) return;
-
-            const lat = parseFloat(inc.latitude);
-            const lng = parseFloat(inc.longitude);
-
-            if (map && !isNaN(lat) && !isNaN(lng) && isFinite(lat) && isFinite(lng)) {
-                map.invalidateSize();
-                try {
-                    map.flyTo([lat, lng], 14, { duration: 0.8 });
-                } catch (e) {
-                    map.setView([lat, lng], 14);
-                }
-            }
-
-            renderCommandPanel(inc);
-            renderIncidentList();
-        }
-
-        function renderCommandPanel(inc) {
-            document.getElementById('panelIncidentId').innerText = inc.id;
-            document.getElementById('panelSeverityBadge').innerText = getSeverityCategory(inc.severity);
-            document.getElementById('panelSeverityBadge').className = `px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider ${getSeverityBadgeClass(getSeverityCategory(inc.severity))}`;
-            document.getElementById('panelTitle').innerText = inc.title;
-            document.getElementById('panelLocation').innerText = `Coords: ${inc.latitude.toFixed(4)}, ${inc.longitude.toFixed(4)}`;
-            document.getElementById('panelStateBadge').innerText = `STATE: ${inc.state}`;
-
-            const confPct = Math.round(inc.confidence * 100);
-            document.getElementById('panelConfidenceVal').innerText = `${confPct}%`;
-            document.getElementById('panelConfidenceBar').style.width = `${confPct}%`;
-
-            document.getElementById('panelSeverityVal').innerText = `${inc.severity} / 100`;
-            document.getElementById('panelSeverityBar').style.width = `${inc.severity}%`;
-
-            // Sources List
-            const sourcesListEl = document.getElementById('panelSourcesList');
-            sourcesListEl.innerHTML = inc.sources.map(s => `
-                <div class="flex items-center justify-between p-2 bg-dark-850 rounded-lg border border-dark-800 text-xs font-mono">
-                    <span class="capitalize text-slate-200">${s.type === 'smartphone' ? '📱 G-Sensor Stream' : s.type === 'cctv' ? '📷 Optical Vision' : '👤 Citizen SOS'}</span>
-                    <span class="text-emerald-400 font-bold">${Math.round(s.confidence * 100)}%</span>
-                </div>
-            `).join('');
-
-            // Render Timeline
-            const timelineEl = document.getElementById('panelTimeline');
-            timelineEl.innerHTML = inc.timeline.map((step, idx) => `
-                <div class="flex items-start gap-2 border-l-2 ${idx === inc.timeline.length - 1 ? 'border-brand-500 text-white' : 'border-slate-700 text-slate-400'} pl-2 py-0.5">
-                    <span class="text-slate-500 text-[10px] whitespace-nowrap">${step.time}</span>
-                    <span class="font-medium line-clamp-1">${step.state}: ${step.text}</span>
-                </div>
-            `).join('');
-
-            // Dispatch Details
-            const amb = state.ambulances[inc.ambulanceId];
-            const hosp = state.hospitals[inc.hospitalId];
-
-            document.getElementById('panelAmbulance').innerText = amb ? `Unit ${amb.code}` : 'None Assigned';
-            document.getElementById('panelAmbulanceEta').innerText = amb ? `ETA: ${amb.eta} min` : 'ETA: --';
-            document.getElementById('panelAmbulanceReason').innerText = inc.ambulanceReason || '--';
-
-            document.getElementById('panelHospital').innerText = hosp ? hosp.name : 'None Selected';
-            document.getElementById('panelHospitalAlert').innerText = hosp ? `STATUS: PRE-ALERT TRANSMITTED` : 'STATUS: --';
-            document.getElementById('panelHospitalReason').innerText = inc.hospitalReason || '--';
-
-            if (amb && hosp) {
-                drawRoute(inc, amb, hosp);
-            }
-        }
-
-        async function drawRoute(inc, amb, hosp) {
-            Object.values(mapMarkers.routes).forEach(r => map.removeLayer(r));
-            mapMarkers.routes = {};
-
-            const osrmStatusBadge = document.getElementById('osrmStatusBadge');
-            if (osrmStatusBadge) {
-                osrmStatusBadge.innerHTML = `<i data-lucide="refresh-cw" class="w-3 h-3 animate-spin inline mr-1"></i> CALCULATING OSRM ROUTE...`;
-                osrmStatusBadge.className = "text-[10px] text-amber-400 font-mono flex items-center gap-1";
-                initLucide();
-            }
-
-            const osrmUrl = `https://router.project-osrm.org/route/v1/driving/${amb.lng},${amb.lat};${inc.longitude},${inc.latitude};${hosp.lng},${hosp.lat}?overview=full&geometries=geojson&steps=true`;
-
-            try {
-                const response = await fetch(osrmUrl, { signal: AbortSignal.timeout(3000) });
-                if (!response.ok) throw new Error("OSRM API HTTP Error");
-                const data = await response.json();
-
-                if (data.code === 'Ok' && data.routes && data.routes.length > 0) {
-                    const route = data.routes[0];
-                    const coords = route.geometry.coordinates
-                        .map(c => [parseFloat(c[1]), parseFloat(c[0])])
-                        .filter(c => !isNaN(c[0]) && !isNaN(c[1]) && isFinite(c[0]) && isFinite(c[1]));
-
-                    if (route.legs && route.legs.length >= 2) {
-                        const leg1Min = Math.round(route.legs[0].duration / 60 * 10) / 10;
-                        const leg1Km = (route.legs[0].distance / 1000).toFixed(1);
-                        document.getElementById('panelAmbulanceEta').innerText = `ETA: ${leg1Min} min (${leg1Km} km)`;
-                    }
-
-                    const polylineGlow = L.polyline(coords, { color: '#60a5fa', weight: 10, opacity: 0.3 }).addTo(map);
-                    const polyline = L.polyline(coords, { color: '#3b82f6', weight: 5, opacity: 0.95 }).addTo(map);
-
-                    mapMarkers.routes['activeRouteGlow'] = polylineGlow;
-                    mapMarkers.routes['activeRoute'] = polyline;
-
-                    if (osrmStatusBadge) {
-                        const totalKm = (route.distance / 1000).toFixed(1);
-                        const totalMin = Math.round(route.duration / 60);
-                        osrmStatusBadge.innerHTML = `✓ OSRM ROUTE (${totalKm}km, ${totalMin}m)`;
-                        osrmStatusBadge.className = "text-[10px] text-emerald-400 font-mono font-bold flex items-center gap-1";
-                    }
-
-                    addActivity(`OSRM Driving Route Calculated: ${amb.code} → Crash Site → ${hosp.name}`);
-                    return;
-                }
-            } catch (err) {
-                console.warn("OSRM routing API query fallback:", err);
-            }
-
-            // Fallback direct line
-            const fallbackLatLngs = [
-                [amb.lat, amb.lng],
-                [inc.latitude, inc.longitude],
-                [hosp.lat, hosp.lng]
-            ];
-
-            const fallbackLine = L.polyline(fallbackLatLngs, {
-                color: '#f59e0b',
-                weight: 4,
-                opacity: 0.85,
-                dashArray: '6, 8'
-            }).addTo(map);
-
-            mapMarkers.routes['activeRoute'] = fallbackLine;
-
-            if (osrmStatusBadge) {
-                osrmStatusBadge.innerText = "OSRM DIRECT VECTOR";
-                osrmStatusBadge.className = "text-[10px] text-amber-400 font-mono font-bold";
-            }
-        }
-
-        /**
-         * Dispatch Unit Action (Calls Live Backend REST & Broadcasts via Socket)
-         */
-        async function actionDispatchSelected() {
-            if (!state.selectedIncidentId) {
-                showToast('Please select an incident first.', 'warning');
-                return;
-            }
-
-            const inc = state.incidents[state.selectedIncidentId];
-            if (!inc) return;
-
-            if (!inc.ambulanceId) {
-                showToast('No ambulance available for dispatch!', 'critical');
-                return;
-            }
-
-            try {
-                if (state.isBackendConnected) {
-                    const res = await fetch(`${CONFIG.BACKEND_URL}/api/incidents/${inc.id}/dispatch`, {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ ambulanceId: inc.ambulanceId })
-                    });
-                    if (res.ok) {
-                        showToast(`Dispatch confirmed via Live Backend for ${inc.id}!`, 'success');
-                        return;
-                    }
-                }
-            } catch (e) {
-                console.warn('Backend dispatch fallback:', e);
-            }
-
-            // Standalone Fallback
-            const amb = state.ambulances[inc.ambulanceId];
-            if (amb) {
-                amb.status = 'EN_ROUTE';
-                updateAmbulanceMarker(amb);
-            }
-
-            inc.state = INCIDENT_STATES.EN_ROUTE;
-            inc.timeline.push({ state: INCIDENT_STATES.DISPATCHING, time: new Date().toLocaleTimeString(), text: 'Dispatch Confirmed' });
-            inc.timeline.push({ state: INCIDENT_STATES.EN_ROUTE, time: new Date().toLocaleTimeString(), text: `Unit ${amb ? amb.code : ''} En Route` });
-
-            playAlertSound('dispatch');
-            addActivity(`Unit Dispatch Confirmed for Incident ${inc.id}.`);
-            showToast(`Unit ${amb ? amb.code : ''} dispatched!`, 'success');
-
-            renderFleetAndHospitalLists();
-            updateKPIs();
-            renderIncidentList();
-            renderCommandPanel(inc);
-        }
-
-        async function triggerAmbulanceFailoverAction() {
-            if (!state.selectedIncidentId) {
-                showToast('Select an incident first to simulate failover.', 'warning');
-                return;
-            }
-
-            const id = state.selectedIncidentId;
-            try {
-                if (state.isBackendConnected) {
-                    const res = await fetch(`${CONFIG.BACKEND_URL}/api/incidents/${id}/failover`, { method: 'POST' });
-                    if (res.ok) {
-                        showToast(`Failover processed by Backend for ${id}!`, 'success');
-                        return;
-                    }
-                }
-            } catch (e) {
-                console.warn('Failover fallback:', e);
-            }
-        }
-
-        async function actionResolveSelected() {
-            if (!state.selectedIncidentId) return;
-            const id = state.selectedIncidentId;
-
-            try {
-                if (state.isBackendConnected) {
-                    const res = await fetch(`${CONFIG.BACKEND_URL}/api/incidents/${id}/resolve`, { method: 'POST' });
-                    if (res.ok) {
-                        showToast(`Incident ${id} resolved via backend!`, 'success');
-                        return;
-                    }
-                }
-            } catch (e) {
-                console.warn('Resolve fallback:', e);
-            }
-
-            // Standalone Fallback
-            const inc = state.incidents[id];
-            if (inc && inc.ambulanceId && state.ambulances[inc.ambulanceId]) {
-                state.ambulances[inc.ambulanceId].status = 'AVAILABLE';
-                updateAmbulanceMarker(state.ambulances[inc.ambulanceId]);
-            }
-
-            delete state.incidents[id];
-            if (mapMarkers.incidents[id]) {
-                map.removeLayer(mapMarkers.incidents[id]);
-                delete mapMarkers.incidents[id];
-            }
-            state.selectedIncidentId = null;
-
-            renderFleetAndHospitalLists();
-            renderIncidentList();
-            updateKPIs();
-            addActivity(`Incident ${id} marked RESOLVED.`);
-            showToast(`Incident ${id} resolved.`, 'success');
-        }
-
-        async function triggerBackendEmergency(sourceType) {
-            const baseLat = 18.5204 + (Math.random() - 0.5) * 0.03;
-            const baseLng = 73.8567 + (Math.random() - 0.5) * 0.03;
-
-            const payload = {
-                title: sourceType === 'smartphone' ? 'Smartphone Impact Anomaly (Android)' :
-                       sourceType === 'cctv' ? 'Optical CCTV Vehicle Collision' :
-                       'Citizen Emergency SOS Voice Call',
-                latitude: baseLat,
-                longitude: baseLng,
-                sourceType: sourceType,
-                gForce: sourceType === 'smartphone' ? 4.8 : null,
-                speedDeltaKmh: 45,
-                confidence: 0.95,
-                sources: [{ type: sourceType, confidence: 0.95 }]
-            };
-
-            try {
-                if (state.isBackendConnected) {
-                    const res = await fetch(`${CONFIG.BACKEND_URL}/api/incidents/detect`, {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify(payload)
-                    });
-                    if (res.ok) {
-                        return; // Broadcast will handle rendering via Socket.IO
-                    }
-                }
-            } catch (e) {
-                console.warn('Ingest fallback:', e);
-            }
-
-            handleIncomingEmergency(payload);
-        }
-
-        function reloadBackendState() {
-            fetchInitialBackendData();
-            showToast('Synchronizing state with ResQNet AI Hub...', 'info');
-        }
-
-        function toggleDemoMode() {
-            state.demoMode = !state.demoMode;
-            const panel = document.getElementById('demoControlPanel');
-            panel.classList.toggle('hidden', !state.demoMode);
-        }
-
-        function toggleHealthPopover() {
-            document.getElementById('healthPopover').classList.toggle('hidden');
-            document.getElementById('healthTimestamp').innerText = new Date().toLocaleTimeString();
-        }
-
-        function openNewIncidentModal() {
-            document.getElementById('newIncidentModal').classList.remove('hidden');
-        }
-
-        function closeNewIncidentModal() {
-            document.getElementById('newIncidentModal').classList.add('hidden');
-        }
-
-        function openServerConfigModal() {
-            document.getElementById('cfgBackendUrl').value = CONFIG.BACKEND_URL;
-            document.getElementById('serverConfigModal').classList.remove('hidden');
-        }
-
-        function closeServerConfigModal() {
-            document.getElementById('serverConfigModal').classList.add('hidden');
-        }
-
-        function saveServerConfig() {
-            const url = document.getElementById('cfgBackendUrl').value.trim();
-            if (url) {
-                CONFIG.BACKEND_URL = url;
-                localStorage.setItem('resqnet_backend_url', url);
-                closeServerConfigModal();
-                showToast(`Reconnecting to: ${url}`, 'info');
-                initBackendConnection();
-            }
-        }
-
-        async function handleManualIncidentSubmit(e) {
-            e.preventDefault();
-            const title = document.getElementById('manualTitle').value;
-            const lat = parseFloat(document.getElementById('manualLat').value);
-            const lng = parseFloat(document.getElementById('manualLng').value);
-            const sev = parseInt(document.getElementById('manualSeverity').value);
-
-            const payload = {
-                title,
-                latitude: lat,
-                longitude: lng,
-                severity: sev,
-                confidence: 0.98,
-                sourceType: 'citizen',
-                sources: [{ type: 'citizen', confidence: 0.98 }]
-            };
-
-            closeNewIncidentModal();
-
-            if (state.isBackendConnected) {
-                try {
-                    await fetch(`${CONFIG.BACKEND_URL}/api/incidents/detect`, {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify(payload)
-                    });
-                    return;
-                } catch (err) {
-                    console.warn('Manual submission backend error:', err);
-                }
-            }
-
-            handleIncomingEmergency(payload);
-        }
-
-        function simulateCallIntake() {
-            const box = document.getElementById('sosTranscriptBox');
-            document.getElementById('sosCallStatus').innerText = "● LIVE INCOMING CALL (SPEECH AI)";
-            document.getElementById('sosCallStatus').className = "text-[10px] text-emerald-400 font-bold animate-pulse";
-
-            box.innerHTML = `
-                <div class="text-amber-400">[00:01] Caller: "Emergency! Two cars collided near the expressway exit!"</div>
-                <div class="text-brand-400">[00:03] Speech AI Parser: Extracting entity... Location = Expressway Exit | Severity = High</div>
-                <div class="text-emerald-400 font-bold">[00:05] Transmitting to ResQNet AI Ingestion Engine...</div>
-            `;
-
-            setTimeout(() => {
-                triggerBackendEmergency('citizen');
-            }, 1000);
-        }
-
-        function setFilter(cat) {
-            state.activeFilter = cat;
-            document.querySelectorAll('.filter-btn').forEach(b => {
-                b.classList.remove('bg-brand-600', 'text-white');
-            });
-            document.getElementById(`filter-${cat}`).classList.add('bg-brand-600', 'text-white');
-            renderIncidentList();
-        }
-
-        function toggleSourceFilter(src) {
-            state.sourceFilters[src] = !state.sourceFilters[src];
-            const btn = document.getElementById(`srcFilter-${src}`);
-            if (state.sourceFilters[src]) {
-                btn.className = "px-2 py-1 rounded-md bg-brand-600/30 border border-brand-500/50 text-white flex items-center gap-1 font-mono text-[11px] transition";
-            } else {
-                btn.className = "px-2 py-1 rounded-md bg-dark-800 border border-slate-700 text-slate-500 flex items-center gap-1 font-mono text-[11px] transition";
-            }
-            renderIncidentList();
-        }
-
-        function handleSearch(q) {
-            state.searchQuery = q;
-            renderIncidentList();
-        }
-
-        function fitAllBounds() {
-            const points = Object.values(state.incidents)
-                .map(i => [parseFloat(i.latitude), parseFloat(i.longitude)])
-                .filter(p => !isNaN(p[0]) && !isNaN(p[1]) && isFinite(p[0]) && isFinite(p[1]));
-            if (points.length > 0 && map) {
-                map.invalidateSize();
-                try {
-                    map.fitBounds(points, { padding: [50, 50] });
-                } catch (e) {
-                    console.warn("fitBounds fallback:", e);
-                }
-            }
-        }
-
-        function recenterIncident() {
-            if (state.selectedIncidentId && state.incidents[state.selectedIncidentId]) {
-                const inc = state.incidents[state.selectedIncidentId];
-                const lat = parseFloat(inc.latitude);
-                const lng = parseFloat(inc.longitude);
-                if (map && !isNaN(lat) && !isNaN(lng) && isFinite(lat) && isFinite(lng)) {
-                    map.invalidateSize();
-                    map.flyTo([lat, lng], 15);
-                }
-            }
-        }
-
-        function renderFleetAndHospitalLists() {
-            const fleetEl = document.getElementById('fleetAmbulanceList');
-            if (fleetEl) {
-                fleetEl.innerHTML = Object.values(state.ambulances).map(a => `
-                    <div class="p-3 bg-dark-850 rounded-lg border border-dark-800 flex justify-between items-center">
-                        <div>
-                            <span class="font-bold text-white">${a.code} (${a.traumaReady ? 'Trauma ALS' : 'BLS'})</span>
-                            <span class="text-[10px] text-slate-400 block">Status: ${a.status} | Base ETA: ${a.eta}m</span>
-                        </div>
-                        <span class="px-2 py-1 ${a.status === 'AVAILABLE' ? 'bg-emerald-500/20 text-emerald-400' : a.status === 'EN_ROUTE' ? 'bg-amber-500/20 text-amber-400' : 'bg-rose-500/20 text-rose-400'} rounded text-[10px] font-bold">${a.status}</span>
-                    </div>
-                `).join('');
-            }
-
-            const hospEl = document.getElementById('fleetHospitalList');
-            if (hospEl) {
-                hospEl.innerHTML = Object.values(state.hospitals).map(h => `
-                    <div class="p-3 bg-dark-850 rounded-lg border border-dark-800 flex justify-between items-center">
-                        <div>
-                            <span class="font-bold text-white">${h.name}</span>
-                            <span class="text-[10px] text-slate-400 block">Level-1 Trauma: ${h.trauma ? 'YES' : 'NO'} | Status: ${h.capacity}</span>
-                        </div>
-                        <span class="px-2 py-1 bg-sky-500/20 text-sky-400 rounded text-[10px] font-bold">PRE-ALERT READY</span>
-                    </div>
-                `).join('');
-            }
-        }
-
-        function getSeverityCategory(sev) {
-            if (sev >= 75) return 'CRITICAL';
-            if (sev >= 50) return 'HIGH';
-            if (sev >= 25) return 'MEDIUM';
-            return 'LOW';
-        }
-
-        function getSeverityColor(sev) {
-            if (sev >= 75) return 'bg-critical';
-            if (sev >= 50) return 'bg-high';
-            if (sev >= 25) return 'bg-medium';
-            return 'bg-emerald-500';
-        }
-
-        function getSeverityBadgeClass(cat) {
-            switch(cat) {
-                case 'CRITICAL': return 'bg-critical/20 text-critical border border-critical/30';
-                case 'HIGH': return 'bg-high/20 text-high border border-high/30';
-                case 'MEDIUM': return 'bg-medium/20 text-medium border border-medium/30';
-                default: return 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30';
-            }
-        }
-
-        function updateKPIs() {
-            const incs = Object.values(state.incidents);
-            document.getElementById('kpiActive').innerText = incs.length;
-            document.getElementById('kpiCritical').innerText = incs.filter(i => i.severity >= 75).length;
-            
-            const availCount = Object.values(state.ambulances).filter(a => a.status === 'AVAILABLE').length;
-            document.getElementById('kpiAmbulances').innerText = `${availCount} / ${Object.keys(state.ambulances).length}`;
-            
-            const enRouteCount = Object.values(state.ambulances).filter(a => a.status === 'EN_ROUTE').length;
-            document.getElementById('kpiEnRoute').innerText = enRouteCount;
-
-            const totalIncidentsEl = document.getElementById('analyticsTotalIncidents');
-            if (totalIncidentsEl) totalIncidentsEl.innerText = state.totalSimulatedEvents;
-        }
-
-        function addActivity(msg) {
-            const feed = document.getElementById('activityFeed');
-            if (!feed) return;
-            const item = document.createElement('div');
-            item.className = "flex items-start gap-2 text-slate-400 py-0.5 border-b border-dark-900";
-            item.innerHTML = `<span class="text-slate-600 font-mono">${new Date().toLocaleTimeString()}</span> <span class="text-slate-300 flex-1">${msg}</span>`;
-            feed.insertBefore(item, feed.firstChild);
-        }
-
-        function switchTab(tabId) {
-            document.querySelectorAll('.tab-view').forEach(el => el.classList.add('hidden'));
-            document.querySelectorAll('.nav-tab-btn').forEach(btn => {
-                btn.classList.remove('active', 'bg-brand-600', 'text-white');
-                btn.classList.add('text-slate-400');
-            });
-
-            const targetView = document.getElementById(`tabView-${tabId}`);
-            const targetBtn = document.getElementById(`nav-tab-${tabId}`);
-
-            if (targetView) targetView.classList.remove('hidden');
-            if (targetBtn) {
-                targetBtn.classList.add('active', 'bg-brand-600', 'text-white');
-                targetBtn.classList.remove('text-slate-400');
-            }
-
-            if (tabId === 'ops') {
-                setTimeout(() => map.invalidateSize(), 100);
-            }
-        }
-
-        function setupInitialDemoData() {
-            handleIncomingEmergency({
-                id: 'RNQ-9042',
-                title: 'High-Impact Highway Collision',
-                severity: 92,
-                confidence: 0.96,
-                latitude: 18.5204,
-                longitude: 73.8567,
-                sources: [
-                    { type: 'smartphone', confidence: 0.95 },
-                    { type: 'cctv', confidence: 0.91 }
-                ]
-            });
-        }
-    </script>
+    <div id="viewFeed" style="display:none;flex:1;min-height:0;flex-direction:column">
+      <div class="feed" id="activityFeed" data-testid="activity-feed"></div>
+    </div>
+  </aside>
+
+  <section id="panel" class="collapsed" data-testid="details-panel" aria-label="Selected incident intelligence">
+    <div class="panel-bar">
+      <div class="panel-title">
+        <i class="fa-solid fa-microchip" style="color:var(--blue)"></i>
+        <span>SELECTED INCIDENT</span>
+        <span class="sub" id="panelSub" data-testid="panel-subtitle">no incident selected</span>
+      </div>
+      <div class="panel-acts">
+        <button class="pbtn" id="btnCenter" data-testid="panel-center-button"><i class="fa-solid fa-crosshairs"></i> CENTER INCIDENT</button>
+        <button class="pbtn" id="btnRoute" data-testid="panel-route-button"><i class="fa-solid fa-route"></i> SHOW ROUTE</button>
+        <button class="pbtn" id="btnCollapse" data-testid="panel-toggle-button" aria-label="Toggle panel"><i class="fa-solid fa-chevron-up" id="collapseIcon"></i></button>
+      </div>
+    </div>
+    <div class="grid" id="panelGrid" data-testid="panel-grid">
+      <div class="panel-empty" id="panelEmpty">
+        <div>
+          <b>RESQNET MONITORING ACTIVE</b>
+          Select an incident to open its full response chain:<br />
+          verification → severity → ambulance optimisation → route → hospital pre-alert.
+        </div>
+      </div>
+      <div class="col" id="colWorkflow" style="display:none">
+        <div class="col-t"><span>RESPONSE PIPELINE</span></div>
+        <div class="stepper" id="stepper"></div>
+        <div class="meter">
+          <div class="row"><span>AI CONFIDENCE <i class="fa-solid fa-circle-question help" id="confHelp" tabindex="0" title="Confidence represents the system's estimated confidence that the detected event represents a genuine emergency. It is not a medically validated probability."></i></span><b id="confVal" data-testid="confidence-value">N/A</b></div>
+          <div class="bar"><i id="confBar" style="background:var(--green)"></i></div>
+        </div>
+        <div class="meter">
+          <div class="row"><span>SEVERITY INDEX</span><b id="sevVal" data-testid="severity-value">NOT ASSESSED</b></div>
+          <div class="bar"><i id="sevBar" style="background:var(--red)"></i></div>
+          <div class="kv" style="margin-top:6px"><span>Classification</span><b id="sevClass">—</b></div>
+        </div>
+        <div class="kv"><span>Patients</span><b id="patVal">—</b></div>
+        <div class="kv"><span>Location</span><b id="locVal">—</b></div>
+        <div class="kv"><span>Status</span><b id="statVal">—</b></div>
+      </div>
+
+      <div class="col" id="colSources" style="display:none">
+        <div class="col-t"><span>DETECTION SOURCES</span></div>
+        <div id="sourcesBox" style="display:flex;flex-direction:column;gap:6px"></div>
+        <div class="fused"><span class="lbl">FUSED CONFIDENCE</span><b id="fusedVal">N/A</b></div>
+        <div class="hint" style="margin-top:auto"><b>Camera optional.</b> Every detection channel enters the identical downstream response pipeline — CCTV strengthens detection when present, it is never required.</div>
+      </div>
+
+      <div class="col" id="colDispatch" style="display:none">
+        <div class="col-t"><span>AMBULANCE OPTIMISATION</span><span class="badge-demo">DEMO FLEET</span></div>
+        <div id="ambBox" style="display:flex;flex-direction:column;gap:6px"></div>
+        <div class="hint" id="ambReason">Selection score = feasible ETA (road distance via OSRM) weighted by demo traffic factor and trauma capability. Not an ML model.</div>
+        <div class="col-t" style="margin-top:4px"><span>EMERGENCY ROUTE</span><span id="routeBadge" class="badge-demo">PENDING</span></div>
+        <div class="kv"><span>Distance</span><b id="routeDist">—</b></div>
+        <div class="kv"><span>ETA</span><b id="routeEta">—</b></div>
+        <div class="kv"><span>Geometry</span><b id="routeGeom">—</b></div>
+      </div>
+
+      <div class="col" id="colHospital" style="display:none">
+        <div class="col-t"><span>HOSPITAL PRE-ALERT</span></div>
+        <div id="hospBox" style="display:flex;flex-direction:column;gap:6px"></div>
+        <div class="col-t" style="margin-top:4px"><span>RESPONSE PERFORMANCE</span></div>
+        <div id="perfBox" style="display:flex;flex-direction:column;gap:4px"></div>
+      </div>
+
+      <div class="col" id="colTimeline" style="display:none">
+        <div class="col-t"><span>INCIDENT TIMELINE</span></div>
+        <div class="timeline" id="timelineBox"></div>
+      </div>
+    </div>
+  </section>
+</div>
+
+<div id="toasts" data-testid="toasts" aria-live="polite"></div>
+
+<div id="demoModal" data-testid="demo-modal">
+  <div class="modal">
+    <div class="modal-h">
+      <div>
+        <h3><i class="fa-solid fa-bolt" style="color:var(--orange)"></i> DEMO SIMULATION SUITE</h3>
+      </div>
+      <button class="x" id="demoClose" data-testid="demo-close" aria-label="Close">✕</button>
+    </div>
+    <p>Every simulated event below is written to the backend flagged <span class="mono">isDemo</span> and is labelled DEMO across the UI. Routes use real OSRM road geometry; ambulance and hospital fleets are demo assets.</p>
+    <button class="dbtn" id="demoSmartphone" data-testid="demo-smartphone">
+      <div><div class="t"><i class="fa-solid fa-mobile-screen" style="color:var(--blue)"></i> SMARTPHONE CRASH</div><div class="s">No CCTV in the area — IMU + acoustic signature</div></div>
+      <i class="fa-solid fa-arrow-right" style="color:var(--text-3)"></i>
+    </button>
+    <button class="dbtn" id="demoCctv" data-testid="demo-cctv">
+      <div><div class="t"><i class="fa-solid fa-video" style="color:var(--violet)"></i> CCTV DETECTION</div><div class="s">YOLO accident event on a monitored junction</div></div>
+      <i class="fa-solid fa-arrow-right" style="color:var(--text-3)"></i>
+    </button>
+    <button class="dbtn" id="demoCitizen" data-testid="demo-citizen">
+      <div><div class="t"><i class="fa-solid fa-user-shield" style="color:var(--orange)"></i> CITIZEN REPORT</div><div class="s">Human SOS with location and patient count</div></div>
+      <i class="fa-solid fa-arrow-right" style="color:var(--text-3)"></i>
+    </button>
+    <div class="flowline"><span class="f"></span> SAME DOWNSTREAM PIPELINE <span class="f"></span></div>
+    <button class="dbtn" id="demoReset" data-testid="demo-reset" style="margin-top:10px">
+      <div><div class="t"><i class="fa-solid fa-rotate-left" style="color:var(--red)"></i> RESET DEMO</div><div class="s">Clears demo incidents, routes, markers, feed and fleet</div></div>
+      <i class="fa-solid fa-arrow-right" style="color:var(--text-3)"></i>
+    </button>
+  </div>
+</div>
+
+<script src="/js/app.js"></script>
 </body>
 </html>

@@ -1,0 +1,429 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>ResQNet — Secure Portal Authentication</title>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Archivo:wght@600;700;800;900&family=IBM+Plex+Mono:wght@600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: radial-gradient(circle at 50% 20%, #0d1829 0%, #03060a 100%);
+      color: #e2e8f0;
+      font-family: 'Inter', -apple-system, sans-serif;
+      padding: 16px;
+    }
+    .auth-card {
+      width: 100%;
+      max-width: 440px;
+      background: #0b1220;
+      border: 1px solid #1e293b;
+      border-radius: 16px;
+      padding: 30px 28px;
+      box-shadow: 0 10px 40px rgba(0,0,0,0.6);
+    }
+    .brand-header {
+      text-align: center;
+      margin-bottom: 22px;
+    }
+    .brand-logo {
+      font-family: 'Archivo', sans-serif;
+      font-size: 26px;
+      font-weight: 900;
+      letter-spacing: 0.12em;
+      color: #fff;
+    }
+    .brand-logo b { color: #38bdf8; }
+    .brand-sub {
+      font-size: 11px;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: #64748b;
+      font-weight: 700;
+      margin-top: 4px;
+    }
+
+    /* Tabs */
+    .tabs-nav {
+      display: flex;
+      background: #060911;
+      border: 1px solid #1e293b;
+      border-radius: 8px;
+      padding: 4px;
+      margin-bottom: 20px;
+      gap: 4px;
+    }
+    .tab-btn {
+      flex: 1;
+      padding: 9px 0;
+      text-align: center;
+      background: transparent;
+      border: none;
+      color: #94a3b8;
+      font-size: 12px;
+      font-weight: 700;
+      border-radius: 6px;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    .tab-btn.active {
+      background: #38bdf8;
+      color: #040810;
+      box-shadow: 0 2px 8px rgba(56, 189, 248, 0.3);
+    }
+
+    /* Form Fields */
+    .field-group {
+      margin-bottom: 14px;
+    }
+    .field-label {
+      font-size: 11px;
+      font-weight: 700;
+      color: #94a3b8;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-bottom: 6px;
+      display: block;
+    }
+    .input-box {
+      width: 100%;
+      background: #060a12;
+      border: 1px solid #334155;
+      border-radius: 8px;
+      padding: 11px 14px;
+      color: #fff;
+      font-size: 13px;
+      outline: none;
+      transition: border-color 0.15s;
+      font-family: inherit;
+    }
+    .input-box:focus {
+      border-color: #38bdf8;
+      box-shadow: 0 0 0 2px rgba(56, 189, 248, 0.2);
+    }
+    select.input-box {
+      cursor: pointer;
+    }
+
+    .btn-submit {
+      width: 100%;
+      background: #38bdf8;
+      color: #040810;
+      border: none;
+      padding: 13px;
+      border-radius: 8px;
+      font-family: 'Archivo', sans-serif;
+      font-size: 14px;
+      font-weight: 800;
+      letter-spacing: 0.5px;
+      cursor: pointer;
+      margin-top: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      transition: background 0.15s;
+    }
+    .btn-submit:hover { background: #0284c7; color: #fff; }
+
+    .err-box {
+      background: rgba(239, 68, 68, 0.12);
+      border: 1px solid #ef444455;
+      color: #f87171;
+      padding: 10px 12px;
+      border-radius: 6px;
+      font-size: 12px;
+      margin-bottom: 14px;
+      display: none;
+    }
+
+    .demo-info {
+      margin-top: 20px;
+      padding: 12px;
+      background: #070c16;
+      border: 1px dashed #334155;
+      border-radius: 8px;
+      font-size: 11px;
+      color: #64748b;
+      line-height: 1.5;
+    }
+    .demo-info b { color: #94a3b8; }
+  </style>
+</head>
+<body>
+
+<div class="auth-card">
+  <div class="brand-header">
+    <div class="brand-logo">RES<b>Q</b>NET</div>
+    <div class="brand-sub">Emergency Tactical & Clinical Network</div>
+  </div>
+
+  <!-- Tab Toggle -->
+  <div class="tabs-nav">
+    <button class="tab-btn active" id="tabLoginBtn" onclick="setTab('login')">
+      <i class="fa-solid fa-right-to-bracket"></i> SIGN IN
+    </button>
+    <button class="tab-btn" id="tabRegisterBtn" onclick="setTab('register')">
+      <i class="fa-solid fa-user-plus"></i> CREATE ACCOUNT
+    </button>
+  </div>
+
+  <div id="errBox" class="err-box"></div>
+
+  <!-- Sign In Form -->
+  <form id="formLogin">
+    <div class="field-group">
+      <label class="field-label">Username</label>
+      <input class="input-box" name="username" placeholder="Enter your username" required autofocus>
+    </div>
+    <div class="field-group">
+      <label class="field-label">Password</label>
+      <input class="input-box" name="password" type="password" placeholder="Enter your password" required>
+    </div>
+    <button type="submit" class="btn-submit" id="btnLogin">
+      <i class="fa-solid fa-arrow-right"></i> SIGN IN TO RESQNET
+    </button>
+  </form>
+
+  <!-- Create Account Form -->
+  <form id="formRegister" style="display:none;">
+    <div class="field-group">
+      <label class="field-label">Full Name</label>
+      <input class="input-box" name="fullName" placeholder="e.g. Dr. Aryan Sharma" required>
+    </div>
+    <div class="field-group">
+      <label class="field-label">Choose Username</label>
+      <input class="input-box" name="username" placeholder="Choose unique username (e.g. aryan26)" required>
+    </div>
+    <div class="field-group">
+      <label class="field-label">Create Password</label>
+      <input class="input-box" name="password" type="password" placeholder="Min 4 characters" required>
+    </div>
+    <div class="field-group">
+      <label class="field-label">Mobile Phone Number</label>
+      <input class="input-box" name="phone" type="tel" placeholder="+91 98765 43210" required>
+    </div>
+    <div class="field-group">
+      <label class="field-label">Account Role</label>
+      <select class="input-box" name="role" required>
+        <option value="USER">Citizen / General User (with Medical Vault)</option>
+        <option value="AMBULANCE">Ambulance Paramedic / Fleet Driver</option>
+        <option value="HOSPITAL">Hospital Emergency Department Staff</option>
+        <option value="COMMAND_CENTER">Command Center Dispatch Operator</option>
+      </select>
+    </div>
+    <button type="submit" class="btn-submit" id="btnReg">
+      <i class="fa-solid fa-id-card-clip"></i> REGISTER & FILL MEDICAL INTAKE
+    </button>
+  </form>
+
+  <div class="demo-info" style="margin-top:16px;">
+    <div style="font-weight:800;color:#38bdf8;margin-bottom:6px;display:flex;align-items:center;gap:6px;">
+      <i class="fa-solid fa-hospital"></i> QUICK PUNE HOSPITAL LOGIN (15 FACILITIES)
+    </div>
+    <select id="quickHospSelect" class="input-box" style="padding:7px 10px;font-size:11px;margin-bottom:8px;background:#030712;color:#f8fafc;border-color:#334155;" onchange="fillHospCredentials(this.value)">
+      <option value="">-- Select a Pune Hospital to Auto-Fill --</option>
+      <option value="sassoon_trauma01|Sassoon@RQN26!">1. Sassoon General Hospital / BJGMC (Level-1 Trauma)</option>
+      <option value="rubyhall_emergency01|Ruby@RQN26#">2. Ruby Hall Clinic – Sassoon Road (Level-1 Trauma)</option>
+      <option value="jehangir_trauma01|Jehangir@RQN26!">3. Jehangir Hospital (Tertiary / Emergency)</option>
+      <option value="ranka_emergency01|Ranka@RQN26#">4. Ranka Hospital (Orthopaedic & Trauma)</option>
+      <option value="noble_trauma01|Noble@RQN26!">5. Noble Hospital, Hadapsar (24x7 Emergency)</option>
+      <option value="sancheti_trauma01|Sancheti@RQN26#">6. Sancheti Hospital (Trauma & Orthopaedic)</option>
+      <option value="dmh_emergency01|DMH@RQN26!p7">7. Deenanath Mangeshkar Hospital (Major Tertiary)</option>
+      <option value="sahyadri_emergency01|Sahyadri@RQN26#">8. Sahyadri Super Speciality – Nagar Road</option>
+      <option value="aims_emergency01|AIMS@RQN26!">9. AIMS Hospital, Aundh (Emergency Dept)</option>
+      <option value="bharati_trauma01|Bharati@RQN26#">10. Bharati Hospital & Research Centre</option>
+      <option value="lokmanya_trauma01|Lokmanya@RQN26!">11. Lokmanya Hospital, Pune (Orthopaedic / ER)</option>
+      <option value="zplus_accident01|ZPlus@RQN26#">12. Z Plus Accident Hospital, Hadapsar (24x7 Trauma)</option>
+      <option value="metro_trauma01|Metro@RQN26!">13. Metro Superspeciality & Trauma, Wagholi</option>
+      <option value="global_emergency01|Global@RQN26#">14. Global Multispeciality Hospital, Dighi</option>
+      <option value="ycm_emergency01|YCM@RQN26!">15. YCM Hospital, Pimpri (Major Public Hospital)</option>
+    </select>
+
+    <div style="font-weight:800;color:#ef4444;margin-top:10px;margin-bottom:6px;display:flex;align-items:center;gap:6px;">
+      <i class="fa-solid fa-truck-medical"></i> QUICK PUNE AMBULANCE FLEET LOGIN (7 UNITS)
+    </div>
+    <select id="quickAmbSelect" class="input-box" style="padding:7px 10px;font-size:11px;margin-bottom:8px;background:#030712;color:#f8fafc;border-color:#334155;" onchange="fillAmbCredentials(this.value)">
+      <option value="">-- Select an Ambulance Unit to Auto-Fill --</option>
+      <option value="ambulance1|Amb01@RQN26!">AMB-01: Shivajinagar Hub (ALS Tier-1) — ambulance1</option>
+      <option value="ambulance2|Amb02@RQN26!">AMB-02: Swargate Central (ALS Tier-1) — ambulance2</option>
+      <option value="ambulance3|Amb03@RQN26!">AMB-03: Pune Station Base (BLS Standard) — ambulance3</option>
+      <option value="ambulance4|Amb04@RQN26!">AMB-04: Kothrud Depot (ALS Tier-1) — ambulance4</option>
+      <option value="ambulance5|Amb05@RQN26!">AMB-05: Aundh Smart Point (ALS Tier-1) — ambulance5</option>
+      <option value="ambulance6|Amb06@RQN26!">AMB-06: Hadapsar Rapid Hub (ALS Tier-1) — ambulance6</option>
+      <option value="ambulance7|Amb07@RQN26!">AMB-07: Hinjewadi IT Depot (ALS Tier-1) — ambulance7</option>
+    </select>
+
+    <div style="font-size:10px;color:#94a3b8;line-height:1.4;">
+      <b>Other Portal Logins:</b><br>
+      • Command Center Dispatch: <code>operator</code> / <code>configurable-demo-password</code><br>
+      • Field Ambulance Fleet: <code>ambulance1</code> to <code>ambulance7</code> / Pass: <code>Amb01@RQN26!</code> ... <code>Amb07@RQN26!</code>
+    </div>
+  </div>
+</div>
+
+<script>
+  function fillHospCredentials(val) {
+    if (!val) return;
+    const [u, p] = val.split('|');
+    setTab('login');
+    const uInput = document.querySelector('#formLogin input[name="username"]');
+    const pInput = document.querySelector('#formLogin input[name="password"]');
+    if (uInput) uInput.value = u;
+    if (pInput) pInput.value = p;
+  }
+  function fillAmbCredentials(val) {
+    if (!val) return;
+    const [u, p] = val.split('|');
+    setTab('login');
+    const uInput = document.querySelector('#formLogin input[name="username"]');
+    const pInput = document.querySelector('#formLogin input[name="password"]');
+    if (uInput) uInput.value = u;
+    if (pInput) pInput.value = p;
+  }
+  function setTab(mode) {
+    const isLogin = mode === 'login';
+    document.getElementById('tabLoginBtn').classList.toggle('active', isLogin);
+    document.getElementById('tabRegisterBtn').classList.toggle('active', !isLogin);
+    document.getElementById('formLogin').style.display = isLogin ? 'block' : 'none';
+    document.getElementById('formRegister').style.display = isLogin ? 'none' : 'block';
+    hideError();
+  }
+
+  function showError(msg) {
+    const el = document.getElementById('errBox');
+    el.textContent = msg;
+    el.style.display = 'block';
+  }
+
+  function hideError() {
+    document.getElementById('errBox').style.display = 'none';
+  }
+
+  // 1. Sign In Handler
+  document.getElementById('formLogin').onsubmit = async (e) => {
+    e.preventDefault();
+    hideError();
+    const btn = document.getElementById('btnLogin');
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> AUTHENTICATING...';
+
+    const formData = new FormData(e.target);
+    try {
+      const res = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(Object.fromEntries(formData))
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        showError(data.error || 'Invalid credentials');
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fa-solid fa-arrow-right"></i> SIGN IN TO RESQNET';
+        return;
+      }
+
+      localStorage.resqnetToken = data.token;
+      localStorage.resqnetUser = JSON.stringify(data.user);
+
+      if (window.AndroidBridge && typeof window.AndroidBridge.onAccountRegistered === 'function') {
+        try {
+          window.AndroidBridge.onAccountRegistered(
+            data.token,
+            data.user.username,
+            data.user.role,
+            data.user.fullName || data.user.name,
+            data.user.phone,
+            data.user.medicalProfile?.bloodGroup || '',
+            data.user.medicalProfile?.primaryContact?.name || ''
+          );
+        } catch (e) {}
+      }
+
+      // Check if citizen hasn't completed medical profile
+      if (data.user.role === 'USER' && !data.user.hasCompletedMedicalProfile) {
+        location.href = '/medical-profile.html';
+      } else if (data.user.role === 'AMBULANCE') {
+        location.href = '/ambulance.html';
+      } else if (data.user.role === 'HOSPITAL') {
+        location.href = '/hospital.html';
+      } else if (data.user.role === 'COMMAND_CENTER') {
+        location.href = '/dashboard.html';
+      } else {
+        location.href = '/sos.html';
+      }
+    } catch (err) {
+      showError('Network error: ' + err.message);
+      btn.disabled = false;
+      btn.innerHTML = '<i class="fa-solid fa-arrow-right"></i> SIGN IN TO RESQNET';
+    }
+  };
+
+  // 2. Registration Handler
+  document.getElementById('formRegister').onsubmit = async (e) => {
+    e.preventDefault();
+    hideError();
+    const btn = document.getElementById('btnReg');
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> CREATING ACCOUNT...';
+
+    const formData = new FormData(e.target);
+    const payload = Object.fromEntries(formData);
+
+    try {
+      const res = await fetch('/api/auth/register', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        showError(data.error || 'Registration failed');
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fa-solid fa-id-card-clip"></i> REGISTER & FILL MEDICAL INTAKE';
+        return;
+      }
+
+      localStorage.resqnetToken = data.token;
+      localStorage.resqnetUser = JSON.stringify(data.user);
+
+      if (window.AndroidBridge && typeof window.AndroidBridge.onAccountRegistered === 'function') {
+        try {
+          window.AndroidBridge.onAccountRegistered(
+            data.token,
+            data.user.username,
+            data.user.role,
+            data.user.fullName || data.user.name,
+            data.user.phone,
+            data.user.medicalProfile?.bloodGroup || '',
+            data.user.medicalProfile?.primaryContact?.name || ''
+          );
+        } catch (e) {}
+      }
+
+      // Directly prompt new user with Google Form Medical Intake!
+      location.href = '/medical-profile.html';
+    } catch (err) {
+      showError('Network error: ' + err.message);
+      btn.disabled = false;
+      btn.innerHTML = '<i class="fa-solid fa-id-card-clip"></i> REGISTER & FILL MEDICAL INTAKE';
+    }
+  };
+
+  // Auto-switch to register tab if mode=register query param or #register hash is present
+  try {
+    const urlParams = new URLSearchParams(window.location.search);
+    if (urlParams.get('mode') === 'register' || window.location.hash === '#register') {
+      setTab('register');
+    }
+  } catch (e) {}
+</script>
+</body>
+</html>
+
