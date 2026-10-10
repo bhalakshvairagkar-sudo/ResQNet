@@ -257,7 +257,6 @@ class MainActivity : ComponentActivity(), SensorEventListener {
             needed.add(Manifest.permission.POST_NOTIFICATIONS)
         }
         permissionLauncher.launch(needed.toTypedArray())
-        requestBatteryOptimizationExemption()
     }
 
     private fun requestBatteryOptimizationExemption() {
